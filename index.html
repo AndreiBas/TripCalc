@@ -375,7 +375,7 @@
                         <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 6px; flex-wrap: wrap; gap: 10px;">
                             <label class="checkbox-item" style="flex: none; color: var(--primary);">
                                 <input type="checkbox" id="master-participant-checkbox" checked onchange="toggleAllCheckboxes(this.checked)">
-                                <strong style="font-size: 0.9rem;">Who participates?</strong>
+                                <strong id="participant-count-display" style="font-size: 0.9rem;">Who participates?</strong>
                             </label>
                             
                             <div style="display:flex; gap: 6px; align-items: center;">
@@ -544,10 +544,8 @@
             updateUI();
         }
 
-        // FIXED: resetTrip now correctly clears all state variables AND forces UI update
         function resetTrip() {
             if(confirm("Start a new trip? This wipes your current progress! Make sure you saved your file first.")) {
-                // Completely purge state
                 tripName = "My Trip"; 
                 participants = []; 
                 participantGroups = {}; 
@@ -556,22 +554,18 @@
                 currentExchangeRate = 1; 
                 currentSort = 'date-desc';
                 
-                // Reset UI inputs
                 document.getElementById('global-currency').value = "";
                 document.getElementById('ledger-sort').value = "date-desc";
                 document.getElementById('trip-name').value = tripName;
                 
                 activeCategoryFilters = new Set(Object.keys(CATEGORIES)); 
-                cancelEdit(); // Make sure we aren't stuck in edit mode
+                cancelEdit(); 
                 
-                // Clear local storage memory
                 localStorage.removeItem('tripSplitterLatest');
                 
-                // Force a full clean re-render
                 updateCurrencySelectors();
                 updateUI();
                 
-                // Manually clear next payer badge
                 document.getElementById('next-payer-container').innerHTML = '';
             }
         }
@@ -946,13 +940,30 @@
             document.querySelectorAll('#participant-list-inputs .part-checkbox').forEach(cb => { cb.checked = state; });
             const master = document.getElementById('master-participant-checkbox');
             if (master) master.checked = state;
+            
+            const countDisplay = document.getElementById('participant-count-display');
+            const checkboxes = document.querySelectorAll('#participant-list-inputs .part-checkbox');
+            if (countDisplay && checkboxes.length > 0) {
+                const checkedCount = state ? checkboxes.length : 0;
+                countDisplay.innerText = `Who participates? (${checkedCount}/${checkboxes.length} selected)`;
+            }
+            
             calculateRemainingPercentage();
         }
         
         function checkMasterCheckboxState() {
             const master = document.getElementById('master-participant-checkbox');
-            if (!master) return;
             const checkboxes = document.querySelectorAll('#participant-list-inputs .part-checkbox');
+            
+            const countDisplay = document.getElementById('participant-count-display');
+            if (countDisplay && checkboxes.length > 0) {
+                const checkedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
+                countDisplay.innerText = `Who participates? (${checkedCount}/${checkboxes.length} selected)`;
+            } else if (countDisplay) {
+                countDisplay.innerText = `Who participates?`;
+            }
+
+            if (!master) return;
             if (checkboxes.length === 0) { master.checked = false; return; }
             const allChecked = Array.from(checkboxes).every(cb => cb.checked);
             const someChecked = Array.from(checkboxes).some(cb => cb.checked);
@@ -1195,6 +1206,12 @@
             document.getElementById('activity-card').classList.remove('edit-mode');
             updatePayerColor(); updateSplitTypeUI();
             document.querySelectorAll('.part-personal').forEach(input => input.value = ''); 
+            
+            // Reset Master Checkbox display
+            const checkboxes = document.querySelectorAll('#participant-list-inputs .part-checkbox');
+            checkboxes.forEach(cb => cb.checked = true);
+            checkMasterCheckboxState();
+            
             updateUI();
         }
 
@@ -1414,7 +1431,7 @@
                         <strong style="font-size: 1.15rem; color: #0f172a;">${e.desc}</strong>
                         ${e.ignored ? '<span style="color: var(--danger); font-size: 0.8rem; font-weight: bold; margin-left: 5px;">[IGNORED]</span>' : ''}<br>
                         <span style="font-size:0.9rem; color:var(--secondary)">
-                            ${formattedDate} • Paid by <span style="color:${payerColor}; font-weight:800;">${e.payer}</span><br>
+                            ${formattedDate} • Paid by <span style="color:${payerColor}; font-weight:800;">${e.payer}</span> • 👥 <strong>${e.involved.length}</strong> involved<br>
                             <div style="margin-top: 6px; padding-left: 8px; border-left: 2px solid ${catInfo.color}50; font-size: 0.85rem; line-height: 1.5;">
                                 <strong>For:</strong> ${breakdownHtml}
                             </div>
@@ -1498,7 +1515,7 @@
                             const catActCount = stats.catActivitySets[cat].size; const catAvg = catActCount > 0 ? formatMoney(amt / catActCount) : '0.00';
                             
                             catBreakdownHtml += `
-                                <div style="display:flex; justify-content:space-between; align-items: center; background: ${catBg}; border: 1px solid ${catColor}40; padding: 8px 12px; border-radius: 8px;">
+                                <div title="📊 ${cat} Insights:&#10;• Total Activities: ${catActCount}&#10;• Total Spent: ${formatMoney(amt)}&#10;• Avg / Activity: ${catAvg}" style="display:flex; justify-content:space-between; align-items: center; background: ${catBg}; border: 1px solid ${catColor}40; padding: 8px 12px; border-radius: 8px; cursor: help; transition: transform 0.2s;">
                                     <span style="color: ${catColor}; font-weight: 800; font-size: 0.9rem;">${icon} ${cat}</span> 
                                     <div style="text-align: right; line-height: 1.3;">
                                         <span style="color: var(--text); font-weight: 800; font-size: 1rem;">${formatMoney(amt)}</span><br>
