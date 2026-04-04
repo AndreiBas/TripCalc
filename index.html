@@ -298,6 +298,8 @@
                 </div>
 
                 <div class="header-controls">
+                    <button class="danger outline small" onclick="resetTrip()">🆕 New</button>
+                    
                     <button class="secondary small" onclick="exportTrip()">💾 Save Local</button>
                     <button class="warning small" onclick="exportSecureTrip()" title="Save with Password Encryption">🔐 Secure</button>
                     <button class="secondary small" onclick="document.getElementById('file-import').click()">📂 Load Local</button>
@@ -327,7 +329,6 @@
                         <div style="display:flex; gap: 5px;">
                             <button class="outline small" onclick="saveGroupTemplate()">Save Setup Memory</button>
                             <button class="outline small" onclick="loadGroupTemplate()">Load Setup Memory</button>
-                            <button class="danger outline small" onclick="resetTrip()">🆕 New Trip</button>
                         </div>
                     </div>
                 </div>
@@ -513,33 +514,42 @@
             });
         }
 
-        // --- NEW: SUPABASE CLOUD INTEGRATION ---
+        // --- SUPABASE CLOUD INTEGRATION (Single Password Approach) ---
         function getSupabase() {
             if (supabaseClient) return supabaseClient;
             
-            let url = localStorage.getItem('tripSplitter_supabaseUrl');
-            let key = localStorage.getItem('tripSplitter_supabaseKey');
+            let storedAccessCode = localStorage.getItem('tripSplitter_cloudAccess');
             
-            if (!url || !key) {
-                url = prompt("☁️ Setup Cloud Sync ☁️\n\nEnter your Supabase Project URL:\n(e.g., https://xyz.supabase.co)");
-                if (!url) return null;
+            if (!storedAccessCode) {
+                const inputCode = prompt("☁️ Setup Cloud Sync ☁️\n\nEnter your Base64 encoded Cloud Access Code:");
+                if (!inputCode) return null;
                 
-                key = prompt("Enter your Supabase Anon Public Key:");
-                if (!key) return null;
-                
-                localStorage.setItem('tripSplitter_supabaseUrl', url.trim());
-                localStorage.setItem('tripSplitter_supabaseKey', key.trim());
+                try {
+                    const decoded = window.atob(inputCode.trim());
+                    const parts = decoded.split('|');
+                    if (parts.length === 2 && parts[0].startsWith('http')) {
+                        localStorage.setItem('tripSplitter_cloudAccess', inputCode.trim());
+                        storedAccessCode = inputCode.trim();
+                    } else {
+                        alert("Invalid Access Code format.");
+                        return null;
+                    }
+                } catch(e) {
+                    alert("Invalid Access Code. Ensure it is properly Base64 encoded.");
+                    return null;
+                }
             }
             
-            // Initialize from CDN script
-            supabaseClient = supabase.createClient(url.trim(), key.trim());
+            // Decode and initialize
+            const decodedConfig = window.atob(storedAccessCode);
+            const [url, key] = decodedConfig.split('|');
+            supabaseClient = supabase.createClient(url, key);
             return supabaseClient;
         }
 
         function resetSupabaseConfig() {
-            if(confirm("Clear your saved Supabase URL and Key from this browser?")) {
-                localStorage.removeItem('tripSplitter_supabaseUrl');
-                localStorage.removeItem('tripSplitter_supabaseKey');
+            if(confirm("Clear your Cloud Access Code from this browser? You will need to re-enter it to sync to the cloud.")) {
+                localStorage.removeItem('tripSplitter_cloudAccess');
                 supabaseClient = null;
                 alert("Cloud configuration cleared.");
             }
