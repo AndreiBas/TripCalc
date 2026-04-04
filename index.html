@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Trip Splitter Pro Max</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         :root {
             --primary: #2563eb;
@@ -172,6 +173,8 @@
         button.danger:hover { background-color: var(--danger-hover); }
         button.warning { background-color: #f59e0b; box-shadow: 0 2px 4px rgba(245, 158, 11, 0.2); color: white;}
         button.warning:hover { background-color: #d97706; }
+        button.cloud { background-color: #0ea5e9; box-shadow: 0 2px 4px rgba(14, 165, 233, 0.2); color: white;}
+        button.cloud:hover { background-color: #0284c7; }
         button.small { padding: 4px 10px; font-size: 0.8rem; flex: none; box-shadow: none;}
         button.outline { background: transparent; color: var(--secondary); border: 1px solid var(--border); box-shadow: none;}
         button.outline:hover { background: #f8fafc; color: var(--text); border-color: #cbd5e1;}
@@ -295,11 +298,13 @@
                 </div>
 
                 <div class="header-controls">
-                    <button class="danger outline small" onclick="resetTrip()">🆕 New</button>
-                    <button class="secondary small" onclick="exportTrip()">💾 Save</button>
-                    <button class="warning small" onclick="exportSecureTrip()" title="Save with Password Encryption">🔐 Secure Save</button>
-                    <button class="secondary small" onclick="document.getElementById('file-import').click()">📂 Load</button>
+                    <button class="secondary small" onclick="exportTrip()">💾 Save Local</button>
+                    <button class="warning small" onclick="exportSecureTrip()" title="Save with Password Encryption">🔐 Secure</button>
+                    <button class="secondary small" onclick="document.getElementById('file-import').click()">📂 Load Local</button>
                     <input type="file" id="file-import" accept=".json, .tsplit" style="display:none;" onchange="importTrip(event)">
+                    
+                    <button id="cloud-save-btn" class="cloud small" onclick="saveToSupabase()" title="Save to Supabase">☁️ Save Cloud</button>
+                    <button id="cloud-load-btn" class="cloud small" onclick="loadFromSupabase()" title="Load from Supabase">☁️ Load Cloud</button>
                 </div>
             </div>
 
@@ -315,10 +320,14 @@
                     </div>
                     <div id="participant-list" style="margin-bottom: 10px;"></div>
                     <div style="display:flex; justify-content: space-between; align-items: center;">
-                        <span style="font-size: 0.8rem; color: var(--secondary);"><em>Click names to rename. Click 👥 to bundle into families.</em></span>
+                        <div style="display:flex; gap: 10px; align-items: center;">
+                            <span style="font-size: 0.8rem; color: var(--secondary);"><em>Click names to rename. Click 👥 to bundle into families.</em></span>
+                            <span style="font-size: 0.75rem; color: var(--danger); cursor: pointer; font-weight: bold;" onclick="resetSupabaseConfig()">⚙️ Reset Cloud Sync</span>
+                        </div>
                         <div style="display:flex; gap: 5px;">
                             <button class="outline small" onclick="saveGroupTemplate()">Save Setup Memory</button>
                             <button class="outline small" onclick="loadGroupTemplate()">Load Setup Memory</button>
+                            <button class="danger outline small" onclick="resetTrip()">🆕 New Trip</button>
                         </div>
                     </div>
                 </div>
@@ -452,6 +461,9 @@
         let currentExchangeRate = 1; 
         let currentSort = 'date-desc';
 
+        // --- SUPABASE CLIENT STATE ---
+        let supabaseClient = null;
+
         const CATEGORIES = {
             'Food': { icon: '🍔', color: '#d97706', bg: '#fef3c7' },       
             'Transport': { icon: '🚕', color: '#2563eb', bg: '#dbeafe' },  
@@ -461,7 +473,6 @@
         };
 
         const COLORS = ['#2563eb', '#dc2626', '#16a34a', '#d97706', '#9333ea', '#db2777', '#0d9488', '#4f46e5', '#ea580c', '#0284c7'];
-        
         const CURRENCY_SYMBOLS = { USD: '$', EUR: '€', GBP: '£', CAD: 'C$', AUD: 'A$', JPY: '¥', MXN: 'M$' };
 
         let activeCategoryFilters = new Set(Object.keys(CATEGORIES));
@@ -502,11 +513,114 @@
             });
         }
 
-        // --- CRYPTOGRAPHY LOGIC (Web Crypto API) ---
+        // --- NEW: SUPABASE CLOUD INTEGRATION ---
+        function getSupabase() {
+            if (supabaseClient) return supabaseClient;
+            
+            let url = localStorage.getItem('tripSplitter_supabaseUrl');
+            let key = localStorage.getItem('tripSplitter_supabaseKey');
+            
+            if (!url || !key) {
+                url = prompt("☁️ Setup Cloud Sync ☁️\n\nEnter your Supabase Project URL:\n(e.g., https://xyz.supabase.co)");
+                if (!url) return null;
+                
+                key = prompt("Enter your Supabase Anon Public Key:");
+                if (!key) return null;
+                
+                localStorage.setItem('tripSplitter_supabaseUrl', url.trim());
+                localStorage.setItem('tripSplitter_supabaseKey', key.trim());
+            }
+            
+            // Initialize from CDN script
+            supabaseClient = supabase.createClient(url.trim(), key.trim());
+            return supabaseClient;
+        }
+
+        function resetSupabaseConfig() {
+            if(confirm("Clear your saved Supabase URL and Key from this browser?")) {
+                localStorage.removeItem('tripSplitter_supabaseUrl');
+                localStorage.removeItem('tripSplitter_supabaseKey');
+                supabaseClient = null;
+                alert("Cloud configuration cleared.");
+            }
+        }
+
+        async function saveToSupabase() {
+            const client = getSupabase();
+            if (!client) return;
+
+            const payload = { 
+                tripName, participants, participantGroups, expenses, 
+                secondaryCurrency, currentExchangeRate, currentSort 
+            };
+
+            const btn = document.getElementById('cloud-save-btn');
+            btn.innerText = "⏳ Saving...";
+
+            const { data, error } = await client
+                .from('trip_sync')
+                .upsert({ id: 'current_trip', trip_data: payload });
+
+            if (error) {
+                console.error("Supabase Save Error:", error);
+                alert("Error saving to cloud: " + error.message);
+            } else {
+                alert("✅ Trip saved to the cloud successfully!");
+            }
+            
+            btn.innerText = "☁️ Save Cloud";
+        }
+
+        async function loadFromSupabase() {
+            const client = getSupabase();
+            if (!client) return;
+
+            const btn = document.getElementById('cloud-load-btn');
+            btn.innerText = "⏳ Loading...";
+
+            const { data, error } = await client
+                .from('trip_sync')
+                .select('trip_data')
+                .eq('id', 'current_trip')
+                .single();
+
+            if (error) {
+                console.error("Supabase Load Error:", error);
+                alert("Error loading from cloud (Ensure table 'trip_sync' exists): " + error.message);
+            } else if (data && data.trip_data) {
+                const parsedData = data.trip_data;
+                
+                tripName = parsedData.tripName || "Imported Trip"; 
+                participants = parsedData.participants || []; 
+                participantGroups = parsedData.participantGroups || {};
+                expenses = parsedData.expenses || [];
+                secondaryCurrency = parsedData.secondaryCurrency || "";
+                currentExchangeRate = parsedData.currentExchangeRate || 1;
+                currentSort = parsedData.currentSort || 'date-desc';
+                
+                activeCategoryFilters = new Set(Object.keys(CATEGORIES)); 
+                repairLegacyData();
+                
+                document.getElementById('trip-name').value = tripName;
+                document.getElementById('global-currency').value = secondaryCurrency;
+                document.getElementById('ledger-sort').value = currentSort;
+                
+                saveState(); 
+                updateCurrencySelectors();
+                updateUI(); 
+                cancelEdit();
+                alert("✅ Trip loaded from cloud!");
+            } else {
+                alert("No trip data found in the cloud.");
+            }
+            
+            btn.innerText = "☁️ Load Cloud";
+        }
+
+        // --- CRYPTOGRAPHY LOGIC ---
         const enc = new TextEncoder();
         const dec = new TextDecoder();
 
-        // Convert buffer to base64 safely
         function bufferToBase64(buffer) {
             let binary = '';
             let bytes = new Uint8Array(buffer);
@@ -516,7 +630,6 @@
             return window.btoa(binary);
         }
 
-        // Convert base64 to buffer
         function base64ToBuffer(base64) {
             let binary_string = window.atob(base64);
             let len = binary_string.length;
@@ -577,8 +690,7 @@
             }
         }
 
-
-        // --- FILE SAVING & LOADING ---
+        // --- LOCAL FILE SAVING & LOADING ---
         function saveState() {
             localStorage.setItem('tripSplitterLatest', JSON.stringify({ 
                 tripName, participants, participantGroups, expenses, 
@@ -613,22 +725,6 @@
             updateUI();
         }
 
-        function resetTrip() {
-            if(confirm("Start a new trip? This wipes your current progress! Make sure you saved your file first.")) {
-                tripName = "My Trip"; participants = []; participantGroups = {}; expenses = [];
-                secondaryCurrency = ""; currentExchangeRate = 1; currentSort = 'date-desc';
-                document.getElementById('global-currency').value = "";
-                document.getElementById('ledger-sort').value = "date-desc";
-                activeCategoryFilters = new Set(Object.keys(CATEGORIES)); 
-                document.getElementById('trip-name').value = tripName;
-                cancelEdit();
-                localStorage.removeItem('tripSplitterLatest');
-                updateCurrencySelectors();
-                updateUI();
-            }
-        }
-
-        // Standard Unencrypted Save
         function exportTrip() {
             const payload = JSON.stringify({ 
                 tripName, participants, participantGroups, expenses, 
@@ -641,10 +737,9 @@
             dl.click();
         }
 
-        // NEW: Secure Encrypted Save
         async function exportSecureTrip() {
             const password = prompt("⚠️ Secure Save ⚠️\nEnter a password to encrypt this trip file.\n\nWARNING: If you forget this password, your data cannot be recovered.");
-            if (!password) return; // User cancelled or left blank
+            if (!password) return; 
 
             const payload = JSON.stringify({ 
                 tripName, participants, participantGroups, expenses, 
@@ -658,7 +753,6 @@
                 const dataStr = "data:text/plain;charset=utf-8," + encodeURIComponent(securePayload);
                 const dl = document.createElement('a');
                 dl.setAttribute("href", dataStr);
-                // Use custom extension
                 dl.setAttribute("download", tripName.replace(/\s+/g, '_') + ".tsplit");
                 dl.click();
             } catch (err) {
@@ -667,7 +761,6 @@
             }
         }
 
-        // UPDATED: Async loader to handle both JSON and TSPLIT
         function importTrip(e) {
             const file = e.target.files[0];
             if (!file) return;
@@ -678,13 +771,11 @@
                 
                 try {
                     const rawJson = JSON.parse(event.target.result);
-                    
-                    // Check if it's an encrypted wrapper
                     if (rawJson.ciphertext && rawJson.salt && rawJson.iv) {
                         const password = prompt("🔐 This trip file is locked.\n\nEnter password to decrypt:");
                         if (!password) {
                             document.getElementById('file-import').value = "";
-                            return; // Cancelled
+                            return; 
                         }
                         
                         const decryptedText = await decryptData(password, rawJson);
@@ -695,7 +786,6 @@
                         }
                         parsedData = JSON.parse(decryptedText);
                     } else {
-                        // Standard unencrypted load
                         parsedData = rawJson;
                     }
                 } catch (err) { 
@@ -704,7 +794,6 @@
                     return; 
                 }
 
-                // Apply parsed data
                 if (parsedData) {
                     tripName = parsedData.tripName || "Imported Trip"; 
                     participants = parsedData.participants || []; 
@@ -732,16 +821,14 @@
 
         function updateTripName() { tripName = document.getElementById('trip-name').value; saveState(); }
 
+        // --- CURRENCY SETTINGS ---
         async function fetchExchangeRate(targetCurrency, isSilent = false) {
             if (!targetCurrency || targetCurrency === 'USD') return false;
-
             if (!isSilent) document.getElementById('rate-display').innerText = 'Loading...';
-
             try {
                 const res = await fetch('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json');
                 const data = await res.json();
                 const rate = data.usd[targetCurrency.toLowerCase()];
-
                 if (rate) {
                     currentExchangeRate = rate;
                     document.getElementById('rate-display').innerText = `(1 USD = ${currentExchangeRate.toFixed(3)} ${targetCurrency})`;
@@ -760,29 +847,20 @@
 
         async function handleCurrencyChange() {
             let inputVal = document.getElementById('global-currency').value.trim().toUpperCase();
-
             if (inputVal === "" || inputVal === "USD") {
-                secondaryCurrency = "";
-                currentExchangeRate = 1;
+                secondaryCurrency = ""; currentExchangeRate = 1;
                 document.getElementById('rate-display').innerText = '';
                 document.getElementById('global-currency').value = "";
-                saveState();
-                updateCurrencySelectors();
-                updateUI();
+                saveState(); updateCurrencySelectors(); updateUI();
                 return;
             }
-
             if (inputVal.length !== 3) {
-                document.getElementById('global-currency').value = secondaryCurrency;
-                return;
+                document.getElementById('global-currency').value = secondaryCurrency; return;
             }
-
             const success = await fetchExchangeRate(inputVal, false);
             if (success) {
-                secondaryCurrency = inputVal;
-                saveState();
-                updateCurrencySelectors();
-                updateUI();
+                secondaryCurrency = inputVal; saveState();
+                updateCurrencySelectors(); updateUI();
             } else {
                 document.getElementById('global-currency').value = secondaryCurrency;
                 if (secondaryCurrency) {
@@ -1450,7 +1528,7 @@
                 }
             });
 
-            // 2. Render Activity History List
+            // 2. Render Activity History List (Sorted & Filtered)
             const eList = document.getElementById('expense-list');
             
             let sorted = [...expenses];
