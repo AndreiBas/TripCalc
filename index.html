@@ -1,0 +1,1815 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trip Splitter Pro Max</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --secondary: #64748b;
+            --secondary-hover: #475569;
+            --danger: #ef4444;
+            --danger-hover: #dc2626;
+            --bg: #f0f4f8;
+            --card-bg: #ffffff;
+            --text: #0f172a;
+            --border: #e2e8f0;
+            --green: #16a34a;
+            --red: #dc2626;
+            --radius: 12px;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 12px 20px;
+            line-height: 1.4;
+            box-sizing: border-box;
+        }
+
+        .app-container {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+            width: 100%;
+            max-width: 1800px;
+            margin: 0 auto;
+        }
+
+        .top-bar-area {
+            grid-column: 1 / -1;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 5px;
+        }
+
+        details.participants-dropdown {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 10px 16px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.03);
+        }
+        
+        details.participants-dropdown summary {
+            font-weight: 700; font-size: 1rem; color: var(--primary); cursor: pointer; list-style: none;
+            display: flex; justify-content: space-between; align-items: center; user-select: none;
+        }
+        details.participants-dropdown summary::-webkit-details-marker { display: none; }
+        details.participants-dropdown summary::after { content: '▼'; font-size: 0.8rem; transition: transform 0.2s;}
+        details.participants-dropdown[open] summary::after { transform: rotate(180deg); }
+        details.participants-dropdown[open] { padding-bottom: 16px; }
+
+        .header-top-row {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            align-items: center;
+        }
+
+        @media (min-width: 1024px) {
+            body { height: 100vh; overflow: hidden; display: flex; flex-direction: column; padding-bottom: 0; }
+            .header-top-row { flex-direction: row; justify-content: space-between; align-items: center; }
+            .app-container { grid-template-columns: 400px 1fr; flex: 1; min-height: 0; overflow: hidden; }
+            .col-right { grid-column: 1 / -1; }
+            .col-left, .col-mid, .col-right {
+                height: 100%; overflow-y: auto; padding-right: 10px; padding-bottom: 40px; 
+                scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent;
+            }
+            .col-left::-webkit-scrollbar, .col-mid::-webkit-scrollbar, .col-right::-webkit-scrollbar { width: 6px; }
+            .col-left::-webkit-scrollbar-track, .col-mid::-webkit-scrollbar-track, .col-right::-webkit-scrollbar-track { background: transparent; }
+            .col-left::-webkit-scrollbar-thumb, .col-mid::-webkit-scrollbar-thumb, .col-right::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+            .col-left::-webkit-scrollbar-thumb:hover, .col-mid::-webkit-scrollbar-thumb:hover, .col-right::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+            .trip-name-input { text-align: left; margin-bottom: 0; width: auto; }
+        }
+        
+        @media (min-width: 1400px) {
+            .app-container { grid-template-columns: 400px 1fr 1fr; }
+            .col-left { grid-column: 1; }
+            .col-mid { grid-column: 2; }
+            .col-right { grid-column: 3; }
+        }
+
+        .header-controls { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; align-items: center;}
+
+        .trip-name-input {
+            font-size: 1.5rem; font-weight: 800; color: var(--text);
+            text-align: center; border: 2px dashed transparent; background: transparent;
+            padding: 2px 8px; box-sizing: border-box; transition: all 0.2s; border-radius: 6px;
+        }
+        .trip-name-input:focus, .trip-name-input:hover { border-color: var(--primary); outline: none; background: rgba(37, 99, 235, 0.05); color: var(--primary); }
+
+        .next-payer-badge {
+            background: #fff1f2; border: 1px solid #fecdd3; color: #be123c;
+            padding: 6px 12px; border-radius: 8px; font-size: 0.9rem; font-weight: 700;
+            display: flex; align-items: center; gap: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            white-space: nowrap;
+        }
+
+        .card {
+            background: var(--card-bg); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 16px; margin-bottom: 16px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.02);
+            transition: background-color 0.3s ease, border-color 0.3s ease;
+        }
+        
+        .card.edit-mode {
+            background-color: #f0f9ff;
+            border-color: var(--primary);
+            box-shadow: 0 4px 15px rgba(37, 99, 235, 0.1);
+        }
+
+        #activity-card {
+            display: flex; flex-direction: column;
+            max-height: calc(100vh - 120px); position: relative;
+        }
+        
+        .activity-form-scrollable {
+            overflow-y: auto; padding-right: 5px; scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent;
+        }
+        .activity-form-scrollable::-webkit-scrollbar { width: 4px; }
+        .activity-form-scrollable::-webkit-scrollbar-track { background: transparent; }
+        .activity-form-scrollable::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        
+        .sticky-action-buttons {
+            position: sticky; bottom: 0; background: inherit; padding-top: 12px;
+            border-top: 1px solid var(--border); margin-top: auto; z-index: 10;
+        }
+
+        h2 { margin: 0 0 12px 0; font-size: 1.1rem; font-weight: 700; color: #1e293b; border-bottom: 1px solid var(--border); padding-bottom: 8px;}
+
+        .form-row { display: flex; gap: 10px; margin-bottom: 10px; }
+        
+        input, select { 
+            width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 6px; 
+            font-size: 0.95rem; box-sizing: border-box; transition: border-color 0.2s; box-shadow: inset 0 1px 2px rgba(0,0,0,0.02);
+        }
+        input:focus, select:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); }
+        
+        .amount-currency-group { display: flex; align-items: stretch; width: 100%; }
+        .amount-currency-group input { border-radius: 6px 0 0 6px; border-right: 1px solid #cbd5e1; flex: 1; min-width: 0; padding-right: 8px;}
+        .amount-currency-group select { 
+            border-radius: 0 6px 6px 0; border-left: none; background: #f8fafc; 
+            color: var(--secondary); font-weight: 800; padding: 0 10px; width: auto; flex: none;
+        }
+
+        button {
+            background-color: var(--primary); color: white; border: none; padding: 8px 14px;
+            border-radius: 6px; font-size: 0.9rem; cursor: pointer; font-weight: 600;
+            display: flex; align-items: center; justify-content: center; gap: 6px; flex: 1;
+            transition: all 0.2s; box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
+        }
+        button:hover { background-color: var(--primary-hover); transform: translateY(-1px); box-shadow: 0 4px 6px rgba(37, 99, 235, 0.3); }
+        button:active { transform: translateY(0); }
+        button.secondary { background-color: var(--secondary); box-shadow: 0 2px 4px rgba(100, 116, 139, 0.2); }
+        button.secondary:hover { background-color: var(--secondary-hover); box-shadow: 0 4px 6px rgba(100, 116, 139, 0.3);}
+        button.danger { background-color: var(--danger); box-shadow: 0 2px 4px rgba(239, 68, 68, 0.2); }
+        button.danger:hover { background-color: var(--danger-hover); }
+        button.warning { background-color: #f59e0b; box-shadow: 0 2px 4px rgba(245, 158, 11, 0.2); color: white;}
+        button.warning:hover { background-color: #d97706; }
+        button.small { padding: 4px 10px; font-size: 0.8rem; flex: none; box-shadow: none;}
+        button.outline { background: transparent; color: var(--secondary); border: 1px solid var(--border); box-shadow: none;}
+        button.outline:hover { background: #f8fafc; color: var(--text); border-color: #cbd5e1;}
+
+        .flex-1 { flex: 1; }
+        
+        .tag {
+            display: inline-flex; align-items: center; 
+            padding: 4px 12px; border-radius: 16px; margin: 4px; font-weight: bold; gap: 6px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05); font-size: 0.85rem;
+        }
+        .tag-name { cursor: pointer; border-right: 1px solid currentColor; padding-right: 6px; }
+        .tag-name:hover { text-decoration: underline; }
+        .tag-group-btn { cursor: pointer; font-size: 0.7rem; font-weight: normal; border-right: 1px solid currentColor; padding-right: 6px; opacity: 0.8;}
+        .tag-group-btn:hover { text-decoration: underline; opacity: 1; }
+        .tag-del { cursor: pointer; font-size: 1.1rem; line-height: 1; opacity: 0.7; }
+        .tag-del:hover { opacity: 1; color: var(--danger); }
+
+        .participant-selector { background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 12px; margin-top: 16px; }
+        
+        .participant-row { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px; background: #fff; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.02);}
+        .participant-row input[type="number"] { width: 100px; padding: 6px 8px; margin: 0; font-size: 0.9rem; text-align: right; }
+        .checkbox-item { display: flex; align-items: center; gap: 8px; font-size: 0.95rem; cursor: pointer; font-weight: bold; flex: 1;}
+        .checkbox-item input[type="checkbox"] { width: auto; margin: 0; transform: scale(1.1); cursor: pointer;}
+
+        .ledger-card { padding-top: 0; display: flex; flex-direction: column; min-height: 400px; position: relative; }
+        .sticky-ledger-header {
+            position: sticky; top: 0; background: var(--card-bg); z-index: 10;
+            padding: 16px 0 12px 0; border-bottom: 1px solid var(--border);
+            margin-bottom: 12px; border-radius: var(--radius) var(--radius) 0 0;
+        }
+
+        .expense-item { 
+            display: flex; justify-content: space-between; align-items: flex-start; 
+            padding: 14px; border-radius: 10px; margin-bottom: 10px; gap: 10px; 
+            transition: all 0.3s ease; box-shadow: 0 2px 5px rgba(0,0,0,0.04); 
+            background: var(--card-bg);
+        }
+        .expense-item:last-child { margin-bottom: 0; }
+        .expense-item.ignored { opacity: 0.4; filter: grayscale(0.8); }
+        
+        .expense-item.is-editing {
+            outline: 3px solid var(--primary) !important;
+            background-color: #eff6ff !important;
+            transform: scale(1.02);
+            box-shadow: 0 10px 25px -5px rgba(37, 99, 235, 0.25) !important;
+            z-index: 5; position: relative; animation: pulse-border 2s infinite;
+        }
+        @keyframes pulse-border {
+            0% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(37, 99, 235, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
+        }
+
+        .expense-details { flex: 1; }
+        .expense-amount-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; min-width: 90px; }
+        .expense-amount { font-weight: 800; text-align: right; font-size: 1.15rem; color: #0f172a;}
+        .expense-item.ignored .expense-amount { text-decoration: line-through; color: var(--secondary); }
+        .expense-actions { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end;}
+        
+        .owed { color: var(--green); font-weight: bold; }
+        .owes { color: var(--red); font-weight: bold; }
+        .balance-item { display: flex; justify-content: space-between; padding: 8px 0; font-size: 1rem; border-bottom: 1px solid var(--border);}
+        .balance-item:last-child { border-bottom: none; }
+        
+        .settlement-box { background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-top: 15px;}
+        .settlement-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 1rem;}
+        .settlement-item:last-child { border-bottom: none; }
+        .section-label { font-size: 0.85rem; text-transform: uppercase; color: var(--secondary); font-weight: 800; letter-spacing: 0.5px; margin-bottom: 10px; margin-top: 15px;}
+        
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; margin-bottom: 15px; }
+        .stat-card { background: var(--card-bg); padding: 20px; border-radius: 12px; border: 1px solid var(--border); font-size: 0.95rem; box-shadow: 0 4px 10px rgba(0,0,0,0.03); transition: transform 0.2s;}
+        .stat-card:hover { transform: translateY(-2px); box-shadow: 0 6px 15px rgba(0,0,0,0.05); }
+        .stat-name { font-weight: 800; margin-bottom: 4px; font-size: 1.2rem; }
+        .stat-members { font-size: 0.8rem; color: var(--secondary); font-weight: normal; margin-bottom: 12px; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;}
+        
+        .global-stat-box { background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 12px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);}
+        .global-stat-label { font-size: 0.8rem; color: var(--secondary); text-transform: uppercase; font-weight: 800; letter-spacing: 0.5px;}
+        .global-stat-value { font-size: 1.25rem; font-weight: 800; color: var(--text); }
+        
+        .split-type-select { padding: 4px 8px; font-size: 0.85rem; margin: 0; width: auto; font-weight: bold; color: var(--primary); border-color: var(--primary); background: #eff6ff; box-shadow: none;}
+        
+        .cat-filter-btn { border: none; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 700; cursor: pointer; transition: all 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+        .cat-filter-btn:hover { transform: scale(1.05); }
+
+        .currency-selector {
+            background: #eff6ff; border: 1px solid #bfdbfe; color: var(--primary);
+            padding: 6px 10px; border-radius: 6px; font-weight: bold; font-size: 0.9rem; width: auto;
+            text-transform: uppercase;
+        }
+        .currency-selector::placeholder { color: #93c5fd; font-weight: normal; }
+        .rate-display { font-size: 0.8rem; color: var(--secondary); margin-left: 8px; }
+        
+        .display-toggle-container {
+            display: flex; justify-content: space-between; align-items: center;
+            background: #f8fafc; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 15px;
+        }
+
+        details.indiv-details { margin-top: 16px; padding-top: 12px; border-top: 2px dotted var(--border); }
+        details.indiv-details summary { font-size: 0.8rem; font-weight: 800; text-transform: uppercase; color: var(--secondary); cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; }
+        details.indiv-details summary::-webkit-details-marker { display: none; }
+        details.indiv-details summary::after { content: '▼'; font-size: 0.7rem; transition: transform 0.2s; }
+        details.indiv-details[open] summary::after { transform: rotate(180deg); }
+        .indiv-content { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        
+        <div class="top-bar-area">
+            <div class="header-top-row">
+                <input type="text" id="trip-name" class="trip-name-input" value="My Trip" onchange="updateTripName()">
+                
+                <div id="next-payer-container"></div>
+
+                <div style="display: flex; align-items: center; background: white; padding: 4px 12px; border-radius: 8px; border: 1px solid var(--border); box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                    <span style="font-size: 0.85rem; font-weight: bold; margin-right: 8px;" title="Leave blank for USD only">Trip Currency:</span>
+                    <input type="text" id="global-currency" class="currency-selector" style="width: 70px; text-align: center;" placeholder="EUR" maxlength="3" onchange="handleCurrencyChange()">
+                    <span id="rate-display" class="rate-display"></span>
+                </div>
+
+                <div class="header-controls">
+                    <button class="danger outline small" onclick="resetTrip()">🆕 New</button>
+                    <button class="secondary small" onclick="exportTrip()">💾 Save</button>
+                    <button class="warning small" onclick="exportSecureTrip()" title="Save with Password Encryption">🔐 Secure Save</button>
+                    <button class="secondary small" onclick="document.getElementById('file-import').click()">📂 Load</button>
+                    <input type="file" id="file-import" accept=".json, .tsplit" style="display:none;" onchange="importTrip(event)">
+                </div>
+            </div>
+
+            <details class="participants-dropdown">
+                <summary>
+                    <span>👥 Manage Participants & Groups</span>
+                </summary>
+                <div style="margin-top: 12px; border-top: 1px solid var(--border); padding-top: 12px;">
+                    <div class="form-row">
+                        <input type="text" id="new-participant" placeholder="Initials (e.g., AB)" maxlength="3" style="flex: 1;" onkeypress="handleParticipantKeyPress(event)">
+                        <input type="text" id="new-participant-group" placeholder="Family/Group Name (Optional)" style="flex: 2;" onkeypress="handleParticipantKeyPress(event)">
+                        <button onclick="addParticipant()" style="flex: none;">Add Person</button>
+                    </div>
+                    <div id="participant-list" style="margin-bottom: 10px;"></div>
+                    <div style="display:flex; justify-content: space-between; align-items: center;">
+                        <span style="font-size: 0.8rem; color: var(--secondary);"><em>Click names to rename. Click 👥 to bundle into families.</em></span>
+                        <div style="display:flex; gap: 5px;">
+                            <button class="outline small" onclick="saveGroupTemplate()">Save Setup Memory</button>
+                            <button class="outline small" onclick="loadGroupTemplate()">Load Setup Memory</button>
+                        </div>
+                    </div>
+                </div>
+            </details>
+        </div>
+
+        <div class="col-left">
+            <div class="card" id="activity-card">
+                <div class="activity-form-scrollable">
+                    <h2 id="activity-header">➕ Add Activity</h2>
+                    
+                    <div class="form-row">
+                        <input type="date" id="exp-date" style="flex: 1;">
+                        <select id="exp-category" style="flex: 1;">
+                            <option value="Food">🍔 Food</option>
+                            <option value="Transport">🚕 Transport</option>
+                            <option value="Travel">✈️ Travel</option>
+                            <option value="Fun">🎟️ Fun</option>
+                            <option value="Other" selected>📝 Other</option>
+                        </select>
+                    </div>
+
+                    <div class="form-row">
+                        <input type="text" id="exp-desc" style="flex: 1;" placeholder="Description (e.g., Dinner)" list="desc-suggestions">
+                        <datalist id="desc-suggestions"></datalist>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="amount-currency-group" style="flex: 1.2;">
+                            <input type="number" id="exp-amount" placeholder="Amount" step="0.01">
+                            <select id="exp-currency">
+                                <option value="USD">USD</option>
+                            </select>
+                        </div>
+                        <select id="exp-payer" style="flex: 1;" onchange="updatePayerColor()">
+                            <option value="">Who paid?</option>
+                        </select>
+                    </div>
+
+                    <div class="form-row">
+                        <input type="text" id="exp-notes" placeholder="Notes or Link (Optional)" style="flex: 1;">
+                    </div>
+
+                    <div class="participant-selector">
+                        <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 6px; flex-wrap: wrap; gap: 10px;">
+                            <label class="checkbox-item" style="flex: none; color: var(--primary);">
+                                <input type="checkbox" id="master-participant-checkbox" checked onchange="toggleAllCheckboxes(this.checked)">
+                                <strong style="font-size: 0.9rem;">Who participates?</strong>
+                            </label>
+                            
+                            <div style="display:flex; gap: 6px; align-items: center;">
+                                <select id="exp-split-type" class="split-type-select" onchange="updateSplitTypeUI()">
+                                    <option value="equal">Equal + Extras</option>
+                                    <option value="percentage">Percentage (%)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div id="split-helper-text" style="font-size: 0.8rem; color: var(--secondary); margin-bottom: 8px;">
+                            <em>Add personal items to be excluded from the equal split.</em>
+                        </div>
+                        
+                        <div id="participant-list-inputs" class="participant-list-scroller"></div>
+                    </div>
+                </div> <div class="sticky-action-buttons" style="display: flex; gap: 8px;">
+                    <button id="save-expense-btn" onclick="saveExpense()">Save Activity</button>
+                    <button id="cancel-edit-btn" class="secondary outline" style="display:none; flex: none;" onclick="cancelEdit()">Cancel Edit</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-mid">
+            <div class="card ledger-card">
+                <div class="sticky-ledger-header">
+                    <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <h2 style="margin: 0; border: none; padding: 0;">📜 Activity Ledger</h2>
+                        <div style="display:flex; gap: 5px; align-items: center;">
+                            <select id="ledger-sort" class="split-type-select" style="font-weight: 600; padding: 4px 8px; border-color: #cbd5e1; color: var(--secondary); background: white;" onchange="handleSortChange()">
+                                <option value="date-desc">📅 Date (Newest)</option>
+                                <option value="date-asc">📅 Date (Oldest)</option>
+                                <option value="amt-desc">💰 Amt (High-Low)</option>
+                                <option value="amt-asc">💰 Amt (Low-High)</option>
+                                <option value="payer-asc">👤 Payer (A-Z)</option>
+                            </select>
+                            <button class="outline small" onclick="toggleAllExpenses(false)" title="Include All in Math">✅ All</button>
+                            <button class="outline small" onclick="toggleAllExpenses(true)" title="Ignore All in Math">🚫 All</button>
+                        </div>
+                    </div>
+                    <div id="category-filters" style="display: flex; gap: 6px; flex-wrap: wrap;"></div>
+                </div>
+                
+                <div id="expense-list"></div>
+            </div>
+        </div>
+
+        <div class="col-right">
+            <div class="card">
+                <div style="display:flex; justify-content: space-between; align-items: center;">
+                    <h2>📊 Trip Analytics</h2>
+                </div>
+                <div id="ledger-stats"></div>
+            </div>
+
+            <div class="card">
+                <div style="display:flex; justify-content: space-between; align-items: center;">
+                    <h2>💸 Final Settlement</h2>
+                </div>
+                
+                <div class="display-toggle-container" id="dashboard-currency-toggle" style="display: none;">
+                    <strong style="font-size: 0.9rem;">View Dashboard In:</strong>
+                    <select id="view-currency" class="currency-selector" onchange="updateUI()">
+                        <option value="USD">🇺🇸 USD ($)</option>
+                    </select>
+                </div>
+
+                <div id="balances-list"></div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // --- STATE ---
+        let tripName = "My Trip";
+        let participants = [];
+        let participantGroups = {}; 
+        let expenses = [];
+        let editingExpenseId = null; 
+
+        // --- CURRENCY & VIEW STATE ---
+        let secondaryCurrency = ""; 
+        let currentExchangeRate = 1; 
+        let currentSort = 'date-desc';
+
+        const CATEGORIES = {
+            'Food': { icon: '🍔', color: '#d97706', bg: '#fef3c7' },       
+            'Transport': { icon: '🚕', color: '#2563eb', bg: '#dbeafe' },  
+            'Travel': { icon: '✈️', color: '#7c3aed', bg: '#ede9fe' },     
+            'Fun': { icon: '🎟️', color: '#db2777', bg: '#fce7f3' },     
+            'Other': { icon: '📝', color: '#475569', bg: '#f1f5f9' }       
+        };
+
+        const COLORS = ['#2563eb', '#dc2626', '#16a34a', '#d97706', '#9333ea', '#db2777', '#0d9488', '#4f46e5', '#ea580c', '#0284c7'];
+        
+        const CURRENCY_SYMBOLS = { USD: '$', EUR: '€', GBP: '£', CAD: 'C$', AUD: 'A$', JPY: '¥', MXN: 'M$' };
+
+        let activeCategoryFilters = new Set(Object.keys(CATEGORIES));
+
+        function getColor(name) {
+            const index = participants.indexOf(name);
+            return index === -1 ? '#64748b' : COLORS[index % COLORS.length];
+        }
+        
+        function formatDateDisplay(dateStr) {
+            if (!dateStr) return '';
+            const [year, month, day] = dateStr.split('-');
+            if (!year || !month || !day) return dateStr;
+            const dateObj = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            return `${year} ${months[dateObj.getMonth()]} ${day} ${days[dateObj.getDay()]}`;
+        }
+
+        document.getElementById('exp-date').valueAsDate = new Date();
+
+        function repairLegacyData() {
+            if (typeof participantGroups === 'undefined' || participantGroups === null) participantGroups = {};
+            participants.forEach(p => { if (!participantGroups[p]) participantGroups[p] = p; });
+
+            expenses.forEach((e, i) => {
+                if (!e.involved) e.involved = [...participants];
+                if (!e.id) e.id = Math.random().toString(36).substr(2, 9); 
+                if (typeof e.ignored === 'undefined') e.ignored = false;
+                if (!e.category) e.category = 'Other';
+                if (!e.personalExpenses) e.personalExpenses = {}; 
+                if (!e.splitType) e.splitType = 'equal'; 
+                if (!e.percentageShares) e.percentageShares = {}; 
+                if (typeof e.notes === 'undefined') e.notes = ''; 
+                if (!e.timestamp) e.timestamp = Date.now() + i; 
+                if (!e.localCurrency) e.localCurrency = 'USD';
+                if (!e.localAmount) e.localAmount = e.amount;
+            });
+        }
+
+        // --- CRYPTOGRAPHY LOGIC (Web Crypto API) ---
+        const enc = new TextEncoder();
+        const dec = new TextDecoder();
+
+        // Convert buffer to base64 safely
+        function bufferToBase64(buffer) {
+            let binary = '';
+            let bytes = new Uint8Array(buffer);
+            for (let i = 0; i < bytes.byteLength; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            return window.btoa(binary);
+        }
+
+        // Convert base64 to buffer
+        function base64ToBuffer(base64) {
+            let binary_string = window.atob(base64);
+            let len = binary_string.length;
+            let bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binary_string.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
+        async function getKeyMaterial(password) {
+            return window.crypto.subtle.importKey(
+                "raw", enc.encode(password), { name: "PBKDF2" }, false, ["deriveBits", "deriveKey"]
+            );
+        }
+
+        async function getKey(keyMaterial, salt) {
+            return window.crypto.subtle.deriveKey(
+                { name: "PBKDF2", salt: salt, iterations: 100000, hash: "SHA-256" },
+                keyMaterial, { name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]
+            );
+        }
+
+        async function encryptData(password, plainText) {
+            const keyMaterial = await getKeyMaterial(password);
+            const salt = window.crypto.getRandomValues(new Uint8Array(16));
+            const key = await getKey(keyMaterial, salt);
+            const iv = window.crypto.getRandomValues(new Uint8Array(12));
+
+            const encryptedContent = await window.crypto.subtle.encrypt(
+                { name: "AES-GCM", iv: iv }, key, enc.encode(plainText)
+            );
+
+            return {
+                salt: bufferToBase64(salt),
+                iv: bufferToBase64(iv),
+                ciphertext: bufferToBase64(encryptedContent)
+            };
+        }
+
+        async function decryptData(password, encryptedObj) {
+            try {
+                const keyMaterial = await getKeyMaterial(password);
+                const salt = new Uint8Array(base64ToBuffer(encryptedObj.salt));
+                const iv = new Uint8Array(base64ToBuffer(encryptedObj.iv));
+                const ciphertext = new Uint8Array(base64ToBuffer(encryptedObj.ciphertext));
+
+                const key = await getKey(keyMaterial, salt);
+
+                const decryptedContent = await window.crypto.subtle.decrypt(
+                    { name: "AES-GCM", iv: iv }, key, ciphertext
+                );
+
+                return dec.decode(decryptedContent);
+            } catch (e) {
+                console.error("Decryption error", e);
+                return null;
+            }
+        }
+
+
+        // --- FILE SAVING & LOADING ---
+        function saveState() {
+            localStorage.setItem('tripSplitterLatest', JSON.stringify({ 
+                tripName, participants, participantGroups, expenses, 
+                secondaryCurrency, currentExchangeRate, currentSort 
+            }));
+        }
+
+        function loadState() {
+            const saved = localStorage.getItem('tripSplitterLatest');
+            if (saved) {
+                try {
+                    const data = JSON.parse(saved);
+                    tripName = data.tripName || "My Trip";
+                    participants = data.participants || [];
+                    participantGroups = data.participantGroups || {};
+                    expenses = data.expenses || [];
+                    secondaryCurrency = data.secondaryCurrency || "";
+                    currentExchangeRate = data.currentExchangeRate || 1;
+                    currentSort = data.currentSort || 'date-desc';
+                    
+                    repairLegacyData();
+                    document.getElementById('trip-name').value = tripName;
+                    document.getElementById('global-currency').value = secondaryCurrency;
+                    document.getElementById('ledger-sort').value = currentSort;
+                    
+                    if (secondaryCurrency) {
+                        updateCurrencySelectors();
+                        fetchExchangeRate(secondaryCurrency, true); 
+                    }
+                } catch(err) {}
+            }
+            updateUI();
+        }
+
+        function resetTrip() {
+            if(confirm("Start a new trip? This wipes your current progress! Make sure you saved your file first.")) {
+                tripName = "My Trip"; participants = []; participantGroups = {}; expenses = [];
+                secondaryCurrency = ""; currentExchangeRate = 1; currentSort = 'date-desc';
+                document.getElementById('global-currency').value = "";
+                document.getElementById('ledger-sort').value = "date-desc";
+                activeCategoryFilters = new Set(Object.keys(CATEGORIES)); 
+                document.getElementById('trip-name').value = tripName;
+                cancelEdit();
+                localStorage.removeItem('tripSplitterLatest');
+                updateCurrencySelectors();
+                updateUI();
+            }
+        }
+
+        // Standard Unencrypted Save
+        function exportTrip() {
+            const payload = JSON.stringify({ 
+                tripName, participants, participantGroups, expenses, 
+                secondaryCurrency, currentExchangeRate, currentSort 
+            });
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(payload);
+            const dl = document.createElement('a');
+            dl.setAttribute("href", dataStr);
+            dl.setAttribute("download", tripName.replace(/\s+/g, '_') + ".json");
+            dl.click();
+        }
+
+        // NEW: Secure Encrypted Save
+        async function exportSecureTrip() {
+            const password = prompt("⚠️ Secure Save ⚠️\nEnter a password to encrypt this trip file.\n\nWARNING: If you forget this password, your data cannot be recovered.");
+            if (!password) return; // User cancelled or left blank
+
+            const payload = JSON.stringify({ 
+                tripName, participants, participantGroups, expenses, 
+                secondaryCurrency, currentExchangeRate, currentSort 
+            });
+
+            try {
+                const encryptedData = await encryptData(password, payload);
+                const securePayload = JSON.stringify(encryptedData);
+                
+                const dataStr = "data:text/plain;charset=utf-8," + encodeURIComponent(securePayload);
+                const dl = document.createElement('a');
+                dl.setAttribute("href", dataStr);
+                // Use custom extension
+                dl.setAttribute("download", tripName.replace(/\s+/g, '_') + ".tsplit");
+                dl.click();
+            } catch (err) {
+                alert("Failed to encrypt data. See console for details.");
+                console.error(err);
+            }
+        }
+
+        // UPDATED: Async loader to handle both JSON and TSPLIT
+        function importTrip(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = async (event) => {
+                let parsedData = null;
+                
+                try {
+                    const rawJson = JSON.parse(event.target.result);
+                    
+                    // Check if it's an encrypted wrapper
+                    if (rawJson.ciphertext && rawJson.salt && rawJson.iv) {
+                        const password = prompt("🔐 This trip file is locked.\n\nEnter password to decrypt:");
+                        if (!password) {
+                            document.getElementById('file-import').value = "";
+                            return; // Cancelled
+                        }
+                        
+                        const decryptedText = await decryptData(password, rawJson);
+                        if (!decryptedText) {
+                            alert("❌ Incorrect password or corrupted file.");
+                            document.getElementById('file-import').value = "";
+                            return;
+                        }
+                        parsedData = JSON.parse(decryptedText);
+                    } else {
+                        // Standard unencrypted load
+                        parsedData = rawJson;
+                    }
+                } catch (err) { 
+                    alert("Invalid file format."); 
+                    document.getElementById('file-import').value = "";
+                    return; 
+                }
+
+                // Apply parsed data
+                if (parsedData) {
+                    tripName = parsedData.tripName || "Imported Trip"; 
+                    participants = parsedData.participants || []; 
+                    participantGroups = parsedData.participantGroups || {};
+                    expenses = parsedData.expenses || [];
+                    secondaryCurrency = parsedData.secondaryCurrency || "";
+                    currentExchangeRate = parsedData.currentExchangeRate || 1;
+                    currentSort = parsedData.currentSort || 'date-desc';
+                    
+                    activeCategoryFilters = new Set(Object.keys(CATEGORIES)); 
+                    repairLegacyData();
+                    document.getElementById('trip-name').value = tripName;
+                    document.getElementById('global-currency').value = secondaryCurrency;
+                    document.getElementById('ledger-sort').value = currentSort;
+                    
+                    saveState(); 
+                    updateCurrencySelectors();
+                    updateUI(); 
+                    cancelEdit();
+                }
+                document.getElementById('file-import').value = "";
+            };
+            reader.readAsText(file);
+        }
+
+        function updateTripName() { tripName = document.getElementById('trip-name').value; saveState(); }
+
+        async function fetchExchangeRate(targetCurrency, isSilent = false) {
+            if (!targetCurrency || targetCurrency === 'USD') return false;
+
+            if (!isSilent) document.getElementById('rate-display').innerText = 'Loading...';
+
+            try {
+                const res = await fetch('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json');
+                const data = await res.json();
+                const rate = data.usd[targetCurrency.toLowerCase()];
+
+                if (rate) {
+                    currentExchangeRate = rate;
+                    document.getElementById('rate-display').innerText = `(1 USD = ${currentExchangeRate.toFixed(3)} ${targetCurrency})`;
+                    return true;
+                } else {
+                    if (!isSilent) alert(`Currency code "${targetCurrency}" not found on the exchange server.`);
+                    return false;
+                }
+            } catch (e) {
+                console.error('Failed to fetch rate', e);
+                if (!isSilent) alert("Failed to connect to currency API. Using offline rate if available.");
+                document.getElementById('rate-display').innerText = `(Offline Rate: 1 USD = ${currentExchangeRate.toFixed(3)} ${targetCurrency})`;
+                return true; 
+            }
+        }
+
+        async function handleCurrencyChange() {
+            let inputVal = document.getElementById('global-currency').value.trim().toUpperCase();
+
+            if (inputVal === "" || inputVal === "USD") {
+                secondaryCurrency = "";
+                currentExchangeRate = 1;
+                document.getElementById('rate-display').innerText = '';
+                document.getElementById('global-currency').value = "";
+                saveState();
+                updateCurrencySelectors();
+                updateUI();
+                return;
+            }
+
+            if (inputVal.length !== 3) {
+                document.getElementById('global-currency').value = secondaryCurrency;
+                return;
+            }
+
+            const success = await fetchExchangeRate(inputVal, false);
+            if (success) {
+                secondaryCurrency = inputVal;
+                saveState();
+                updateCurrencySelectors();
+                updateUI();
+            } else {
+                document.getElementById('global-currency').value = secondaryCurrency;
+                if (secondaryCurrency) {
+                    document.getElementById('rate-display').innerText = `(1 USD = ${currentExchangeRate.toFixed(3)} ${secondaryCurrency})`;
+                } else {
+                    document.getElementById('rate-display').innerText = '';
+                }
+            }
+        }
+
+        function updateCurrencySelectors() {
+            const expSelector = document.getElementById('exp-currency');
+            const viewSelector = document.getElementById('view-currency');
+            const viewContainer = document.getElementById('dashboard-currency-toggle');
+            
+            const currExpVal = expSelector.value;
+            const currViewVal = viewSelector.value;
+
+            let expHtml = `<option value="USD">USD</option>`;
+            let viewHtml = `<option value="USD">🇺🇸 USD ($)</option>`;
+            
+            if (secondaryCurrency) {
+                const sym = CURRENCY_SYMBOLS[secondaryCurrency] || secondaryCurrency;
+                expHtml += `<option value="${secondaryCurrency}">${secondaryCurrency}</option>`;
+                viewHtml += `<option value="${secondaryCurrency}">🌎 ${secondaryCurrency} (${sym})</option>`;
+                viewContainer.style.display = 'flex';
+            } else {
+                viewContainer.style.display = 'none';
+            }
+            
+            expSelector.innerHTML = expHtml;
+            viewSelector.innerHTML = viewHtml;
+            
+            if(secondaryCurrency && currExpVal === secondaryCurrency) expSelector.value = secondaryCurrency;
+            if(secondaryCurrency && currViewVal === secondaryCurrency) viewSelector.value = secondaryCurrency;
+        }
+
+        function formatMoney(amountInUsd) {
+            const displayCur = document.getElementById('view-currency').value || 'USD';
+            if (displayCur === 'USD') {
+                return `$${amountInUsd.toFixed(2)}`;
+            } else {
+                const converted = amountInUsd * currentExchangeRate;
+                const sym = CURRENCY_SYMBOLS[displayCur] ? CURRENCY_SYMBOLS[displayCur] : displayCur + ' ';
+                return `${sym}${converted.toFixed(2)}`;
+            }
+        }
+
+        function handleSortChange() {
+            currentSort = document.getElementById('ledger-sort').value;
+            saveState();
+            updateUI();
+        }
+
+        function handleParticipantKeyPress(event) {
+            if (event.key === 'Enter') { event.preventDefault(); addParticipant(); }
+        }
+
+        function addParticipant() {
+            const val = document.getElementById('new-participant').value.trim().toUpperCase();
+            let groupVal = document.getElementById('new-participant-group').value.trim();
+            
+            if (val && !participants.includes(val)) {
+                participants.push(val);
+                participantGroups[val] = groupVal || val;
+                document.getElementById('new-participant').value = '';
+                document.getElementById('new-participant-group').value = ''; 
+                saveState(); updateUI();
+            } else if (participants.includes(val)) alert("Participant already added!");
+        }
+
+        function renameParticipant(oldName) {
+            const newNameInput = prompt(`Rename ${oldName} to (Max 10 chars):`, oldName);
+            if (!newNameInput) return;
+            const newName = newNameInput.trim().toUpperCase();
+            if (newName === oldName || newName === "") return;
+            
+            if (newName.length > 10) {
+                alert("Name is too long! Please keep it to 10 characters or less.");
+                return;
+            }
+
+            if (participants.includes(newName)) { alert("Name already exists."); return; }
+
+            const idx = participants.indexOf(oldName);
+            participants[idx] = newName;
+            
+            participantGroups[newName] = participantGroups[oldName] === oldName ? newName : participantGroups[oldName];
+            delete participantGroups[oldName];
+
+            expenses.forEach(e => {
+                if (e.payer === oldName) e.payer = newName;
+                const involvedIdx = e.involved.indexOf(oldName);
+                if (involvedIdx > -1) e.involved[involvedIdx] = newName;
+                
+                if (e.personalExpenses && e.personalExpenses[oldName]) {
+                    e.personalExpenses[newName] = e.personalExpenses[oldName];
+                    delete e.personalExpenses[oldName];
+                }
+                if (e.percentageShares && e.percentageShares[oldName]) {
+                    e.percentageShares[newName] = e.percentageShares[oldName];
+                    delete e.percentageShares[oldName];
+                }
+            });
+            saveState(); updateUI();
+        }
+
+        function changeGroup(name) {
+            const currentGroup = participantGroups[name] === name ? "" : participantGroups[name];
+            let newGroup = prompt(`Assign ${name} to a Family/Group:\n(Leave blank to keep them separate)`, currentGroup);
+            if (newGroup === null) return; 
+            
+            newGroup = newGroup.trim();
+            participantGroups[name] = newGroup || name;
+            saveState(); updateUI();
+        }
+
+        function deleteParticipant(name) {
+            const inUse = expenses.some(e => e.payer === name || e.involved.includes(name));
+            if (inUse) {
+                alert(`Cannot delete ${name} because they are tied to an existing activity. Please edit or delete those activities first.`);
+                return;
+            }
+            if (confirm(`Remove ${name} from the trip?`)) {
+                participants = participants.filter(p => p !== name);
+                delete participantGroups[name];
+                saveState(); updateUI();
+            }
+        }
+
+        function saveGroupTemplate() {
+            if (participants.length === 0) { alert("No participants to save."); return; }
+            localStorage.setItem('tripSplitter_GroupTemplate', JSON.stringify({participants, participantGroups}));
+            alert("Group setup saved! You can load them instantly on your next trip.");
+        }
+
+        function loadGroupTemplate() {
+            const saved = localStorage.getItem('tripSplitter_GroupTemplate');
+            if (saved) {
+                const data = JSON.parse(saved);
+                const savedParticipants = Array.isArray(data) ? data : data.participants;
+                const savedGroups = Array.isArray(data) ? {} : (data.participantGroups || {});
+                
+                let added = 0;
+                savedParticipants.forEach(p => { 
+                    if (!participants.includes(p)) { 
+                        participants.push(p); 
+                        participantGroups[p] = savedGroups[p] || p;
+                        added++; 
+                    } 
+                });
+                saveState(); updateUI();
+                alert(`Loaded ${added} participants from your saved setup.`);
+            } else { alert("No saved setup found."); }
+        }
+
+        function updatePayerColor() {
+            const pSelect = document.getElementById('exp-payer');
+            const val = pSelect.value;
+            if (val) {
+                pSelect.style.color = getColor(val);
+                pSelect.style.fontWeight = '800';
+            } else {
+                pSelect.style.color = 'var(--text)';
+                pSelect.style.fontWeight = 'normal';
+            }
+        }
+
+        function toggleAllCheckboxes(state) {
+            document.querySelectorAll('#participant-list-inputs .part-checkbox').forEach(cb => {
+                cb.checked = state;
+            });
+            const master = document.getElementById('master-participant-checkbox');
+            if (master) master.checked = state;
+            calculateRemainingPercentage();
+        }
+        
+        function checkMasterCheckboxState() {
+            const master = document.getElementById('master-participant-checkbox');
+            if (!master) return;
+            const checkboxes = document.querySelectorAll('#participant-list-inputs .part-checkbox');
+            if (checkboxes.length === 0) {
+                master.checked = false;
+                return;
+            }
+            const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+            const someChecked = Array.from(checkboxes).some(cb => cb.checked);
+            
+            master.checked = allChecked;
+            master.indeterminate = someChecked && !allChecked;
+            calculateRemainingPercentage();
+        }
+
+        function updateSplitTypeUI() {
+            const type = document.getElementById('exp-split-type').value;
+            const helper = document.getElementById('split-helper-text');
+            const inputs = document.querySelectorAll('.part-personal');
+            
+            if (type === 'percentage') {
+                helper.innerHTML = `<em>Enter % for specific people. The rest divides equally.</em> <strong id="perc-remaining" style="margin-left: 5px; padding: 2px 6px; background: #e2e8f0; border-radius: 4px;">100% left</strong>`;
+                inputs.forEach(input => {
+                    input.placeholder = "Share %";
+                    input.max = "100";
+                    if(!editingExpenseId) input.value = '';
+                });
+                calculateRemainingPercentage();
+            } else {
+                const cur = document.getElementById('exp-currency').value;
+                const sym = CURRENCY_SYMBOLS[cur] ? CURRENCY_SYMBOLS[cur] : cur;
+                helper.innerHTML = '<em>Add personal items to be excluded from the equal split.</em>';
+                inputs.forEach(input => {
+                    input.placeholder = `+ Pers. ${sym}`;
+                    input.removeAttribute('max');
+                    if(!editingExpenseId) input.value = '';
+                });
+            }
+        }
+        
+        document.getElementById('exp-currency').addEventListener('change', updateSplitTypeUI);
+
+        function calculateRemainingPercentage() {
+            if (document.getElementById('exp-split-type').value !== 'percentage') return;
+            
+            let totalEntered = 0;
+            document.querySelectorAll('.participant-row').forEach(row => {
+                if(row.querySelector('.part-checkbox').checked) {
+                    const val = parseFloat(row.querySelector('.part-personal').value);
+                    if (!isNaN(val)) totalEntered += val;
+                }
+            });
+            
+            const remaining = 100 - totalEntered;
+            const remEl = document.getElementById('perc-remaining');
+            if (remEl) {
+                const displayRem = Math.abs(remaining) < 0.01 ? 0 : remaining; 
+                remEl.innerText = `${displayRem.toFixed(1)}% left`;
+                remEl.style.color = remaining < -0.01 ? 'var(--danger)' : 'var(--text)';
+                remEl.style.background = remaining < -0.01 ? '#fee2e2' : '#e2e8f0';
+            }
+        }
+
+        function saveExpense() {
+            const category = document.getElementById('exp-category').value;
+            const desc = document.getElementById('exp-desc').value;
+            const notes = document.getElementById('exp-notes').value.trim();
+            const date = document.getElementById('exp-date').value;
+            
+            const localAmount = parseFloat(document.getElementById('exp-amount').value);
+            const localCurrency = document.getElementById('exp-currency').value;
+            
+            const payer = document.getElementById('exp-payer').value;
+            const splitType = document.getElementById('exp-split-type').value;
+            
+            const selected = [];
+            const personalExpensesLocal = {};
+            const percentageShares = {};
+            
+            let totalPersonalAmtLocal = 0;
+            let totalPercentageEntered = 0;
+
+            document.querySelectorAll('.participant-row').forEach(row => {
+                const cb = row.querySelector('.part-checkbox');
+                if (cb.checked) {
+                    const name = cb.value;
+                    selected.push(name);
+                    
+                    const pInput = row.querySelector('.part-personal').value;
+                    const pAmt = parseFloat(pInput);
+                    
+                    if (!isNaN(pAmt) && pAmt > 0) {
+                        if (splitType === 'equal') {
+                            personalExpensesLocal[name] = pAmt;
+                            totalPersonalAmtLocal += pAmt;
+                        } else {
+                            percentageShares[name] = pAmt;
+                            totalPercentageEntered += pAmt;
+                        }
+                    }
+                }
+            });
+
+            if (!desc || isNaN(localAmount) || localAmount <= 0 || !payer || selected.length === 0) {
+                alert("Please fill all fields, enter a valid amount, and select at least one participant.");
+                return;
+            }
+
+            if (splitType === 'equal' && totalPersonalAmtLocal > localAmount) {
+                alert(`Total personal expenses (${totalPersonalAmtLocal}) cannot exceed the total check amount (${localAmount}).`);
+                return;
+            }
+            if (splitType === 'percentage' && totalPercentageEntered > 100.01) {
+                alert(`Total percentages entered (${totalPercentageEntered}%) cannot exceed 100%.`);
+                return;
+            }
+
+            let amountUsd = localAmount;
+            let personalExpensesUsd = {};
+            
+            if (localCurrency !== 'USD' && currentExchangeRate > 0) {
+                amountUsd = localAmount / currentExchangeRate;
+                if (splitType === 'equal') {
+                    Object.keys(personalExpensesLocal).forEach(k => {
+                        personalExpensesUsd[k] = personalExpensesLocal[k] / currentExchangeRate;
+                    });
+                }
+            } else {
+                personalExpensesUsd = personalExpensesLocal;
+            }
+
+            if (editingExpenseId) {
+                const index = expenses.findIndex(e => e.id === editingExpenseId);
+                if (index > -1) {
+                    const existingIgnored = expenses[index].ignored;
+                    const existingTimestamp = expenses[index].timestamp; 
+                    expenses[index] = { 
+                        id: editingExpenseId, category, desc, notes, date, 
+                        amount: amountUsd, localAmount, localCurrency, 
+                        payer, splitType, involved: selected, personalExpenses: personalExpensesUsd, 
+                        percentageShares, ignored: existingIgnored, timestamp: existingTimestamp 
+                    };
+                }
+                cancelEdit(); 
+            } else {
+                expenses.push({ 
+                    id: Math.random().toString(36).substr(2, 9), category, desc, notes, date, 
+                    amount: amountUsd, localAmount, localCurrency, 
+                    payer, splitType, involved: selected, personalExpenses: personalExpensesUsd, 
+                    percentageShares, ignored: false, timestamp: Date.now() 
+                });
+                document.getElementById('exp-desc').value = '';
+                document.getElementById('exp-notes').value = '';
+                document.getElementById('exp-amount').value = '';
+                document.querySelectorAll('.part-personal').forEach(input => input.value = ''); 
+                calculateRemainingPercentage();
+            }
+            saveState(); updateUI();
+        }
+
+        function editExpense(id) {
+            const exp = expenses.find(e => e.id === id);
+            if (!exp) return;
+
+            editingExpenseId = id;
+            document.getElementById('activity-header').innerText = "✏️ Edit Activity";
+            document.getElementById('exp-category').value = exp.category || 'Other';
+            document.getElementById('exp-desc').value = exp.desc;
+            document.getElementById('exp-notes').value = exp.notes || '';
+            document.getElementById('exp-date').value = exp.date;
+            
+            document.getElementById('exp-currency').value = exp.localCurrency || 'USD';
+            
+            document.getElementById('exp-split-type').value = exp.splitType || 'equal';
+            
+            renderParticipantInputs();
+            updateSplitTypeUI(); 
+            
+            document.querySelectorAll('.participant-row').forEach(row => {
+                const cb = row.querySelector('.part-checkbox');
+                const pInput = row.querySelector('.part-personal');
+                const name = cb.value;
+                
+                if (exp.involved.includes(name)) {
+                    cb.checked = true;
+                    if (exp.splitType === 'percentage' && exp.percentageShares && exp.percentageShares[name]) {
+                        pInput.value = exp.percentageShares[name];
+                    } else if ((!exp.splitType || exp.splitType === 'equal') && exp.personalExpenses && exp.personalExpenses[name]) {
+                        let pVal = exp.personalExpenses[name];
+                        if (exp.localCurrency !== 'USD' && currentExchangeRate > 0) {
+                            pVal = pVal * currentExchangeRate;
+                        }
+                        pInput.value = pVal.toFixed(2);
+                    } else {
+                        pInput.value = '';
+                    }
+                } else {
+                    cb.checked = false;
+                    pInput.value = '';
+                }
+            });
+            checkMasterCheckboxState();
+
+            document.getElementById('save-expense-btn').innerText = "Update Activity";
+            document.getElementById('cancel-edit-btn').style.display = "block";
+            
+            document.getElementById('activity-card').classList.add('edit-mode');
+            
+            document.getElementById('exp-amount').value = exp.localAmount || exp.amount;
+            updateUI(); 
+            document.getElementById('exp-payer').value = exp.payer; 
+            updatePayerColor(); 
+            
+            setTimeout(() => {
+                if (window.innerWidth >= 1024) {
+                    const colLeft = document.querySelector('.col-left');
+                    if (colLeft) colLeft.scrollTo({ top: 0, behavior: 'smooth' });
+                    
+                    const activeRow = document.getElementById(`exp-row-${id}`);
+                    const colMid = document.querySelector('.col-mid');
+                    if (activeRow && colMid) {
+                        colMid.scrollTo({ top: activeRow.offsetTop - 120, behavior: 'smooth' }); 
+                    }
+                } else {
+                    document.getElementById('activity-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            }, 50);
+        }
+
+        function duplicateExpense(id) {
+            const exp = expenses.find(e => e.id === id);
+            if (exp) {
+                const newExp = JSON.parse(JSON.stringify(exp));
+                newExp.id = Math.random().toString(36).substr(2, 9);
+                newExp.timestamp = Date.now(); 
+                
+                let baseDesc = exp.desc.replace(/ #\d+$/, '');
+                let maxNum = 1; 
+                
+                expenses.forEach(e => {
+                    let m = e.desc.match(/(.*?) #(\d+)$/);
+                    let name = m ? m[1] : e.desc;
+                    let num = m ? parseInt(m[2], 10) : 1;
+                    if (name === baseDesc && num >= maxNum) maxNum = num;
+                });
+                
+                newExp.desc = `${baseDesc} #${maxNum + 1}`;
+                expenses.push(newExp);
+                saveState(); 
+                updateUI();
+
+                setTimeout(() => {
+                    const row = document.getElementById(`exp-row-${newExp.id}`);
+                    if (row) {
+                        if (window.innerWidth >= 1024) {
+                            const colMid = document.querySelector('.col-mid');
+                            if (colMid) colMid.scrollTo({ top: row.offsetTop - 120, behavior: 'smooth' });
+                        } else {
+                            row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                        
+                        const originalBg = row.style.background;
+                        row.style.transition = 'background-color 0.5s ease';
+                        row.style.backgroundColor = '#fef08a'; 
+                        setTimeout(() => { row.style.backgroundColor = originalBg; }, 1200);
+                    }
+                }, 50);
+            }
+        }
+
+        function deleteExpense(id) {
+            if (confirm("Delete this activity completely?")) {
+                if (editingExpenseId === id) cancelEdit();
+                expenses = expenses.filter(e => e.id !== id);
+                saveState(); updateUI();
+            }
+        }
+        
+        function toggleIgnore(id) {
+            const exp = expenses.find(e => e.id === id);
+            if (exp) {
+                exp.ignored = !exp.ignored;
+                saveState(); updateUI();
+            }
+        }
+
+        function toggleAllExpenses(ignoreState) {
+            if (expenses.length === 0) return;
+            const actionText = ignoreState ? "ignore" : "include";
+            if (confirm(`Are you sure you want to ${actionText} ALL activities?`)) {
+                expenses.forEach(e => e.ignored = ignoreState);
+                saveState(); updateUI();
+            }
+        }
+
+        function toggleCategoryFilter(cat) {
+            if (activeCategoryFilters.has(cat)) {
+                activeCategoryFilters.delete(cat);
+            } else {
+                activeCategoryFilters.add(cat);
+            }
+            updateUI();
+        }
+
+        function renderCategoryFilters() {
+            const container = document.getElementById('category-filters');
+            let html = '';
+            Object.keys(CATEGORIES).forEach(cat => {
+                const info = CATEGORIES[cat];
+                const isActive = activeCategoryFilters.has(cat);
+                const opacity = isActive ? '1' : '0.5';
+                const bg = isActive ? info.bg : '#f8fafc';
+                const border = isActive ? info.color : '#cbd5e1';
+                const textCol = isActive ? info.color : '#64748b';
+                
+                html += `<button class="cat-filter-btn" style="opacity: ${opacity}; background: ${bg}; border: 1px solid ${border}; color: ${textCol};" onclick="toggleCategoryFilter('${cat}')" title="Toggle ${cat}">
+                            ${info.icon} ${cat}
+                         </button>`;
+            });
+            container.innerHTML = html;
+        }
+
+        function cancelEdit() {
+            editingExpenseId = null;
+            document.getElementById('activity-header').innerText = "➕ Add Activity";
+            document.getElementById('save-expense-btn').innerText = "Save Activity";
+            document.getElementById('cancel-edit-btn').style.display = "none";
+            document.getElementById('exp-category').value = 'Other';
+            document.getElementById('exp-desc').value = '';
+            document.getElementById('exp-notes').value = '';
+            document.getElementById('exp-amount').value = '';
+            document.getElementById('exp-payer').value = '';
+            document.getElementById('exp-split-type').value = 'equal';
+            document.getElementById('activity-card').classList.remove('edit-mode');
+            updatePayerColor();
+            updateSplitTypeUI();
+            document.querySelectorAll('.part-personal').forEach(input => input.value = ''); 
+            updateUI();
+        }
+
+        function renderParticipantInputs() {
+            const pListInputs = document.getElementById('participant-list-inputs');
+            pListInputs.innerHTML = participants.map(p => `
+                <div class="participant-row">
+                    <label class="checkbox-item" style="color: ${getColor(p)}">
+                        <input type="checkbox" value="${p}" class="part-checkbox" checked onchange="checkMasterCheckboxState()"> ${p}
+                    </label>
+                    <input type="number" class="part-personal" data-name="${p}" placeholder="+ Personal $" step="0.01" min="0" oninput="calculateRemainingPercentage()">
+                </div>
+            `).join('');
+            checkMasterCheckboxState();
+        }
+
+        function updateAutocomplete() {
+            const dataList = document.getElementById('desc-suggestions');
+            const uniqueDescs = [...new Set(expenses.map(e => e.desc.replace(/ #\d+$/, '')))].filter(d => d);
+            dataList.innerHTML = uniqueDescs.map(d => `<option value="${d}">`).join('');
+        }
+
+        function updateUI() {
+            updateAutocomplete(); 
+            renderCategoryFilters();
+
+            const pList = document.getElementById('participant-list');
+            pList.innerHTML = participants.length ? participants.map(p => {
+                const c = getColor(p);
+                const hasGroup = participantGroups[p] && participantGroups[p] !== p;
+                const groupText = hasGroup ? `👥 ${participantGroups[p]}` : '👤 Edit Group';
+                
+                return `
+                <div class="tag" style="color: ${c}; background-color: ${c}15; border: 1px solid ${c}40;">
+                    <span class="tag-name" onclick="renameParticipant('${p}')">${p}</span>
+                    <span class="tag-group-btn" onclick="changeGroup('${p}')" title="Assign to a group">${groupText}</span>
+                    <span class="tag-del" onclick="deleteParticipant('${p}')">&times;</span>
+                </div>`
+            }).join('') : '<em style="color:var(--secondary); font-size:0.9rem;">No participants.</em>';
+
+            const pSelect = document.getElementById('exp-payer');
+            const currentPayer = pSelect.value;
+            pSelect.innerHTML = '<option value="" style="color: var(--text); font-weight: normal;">Who paid?</option>' + participants.map(p => `<option value="${p}" style="color: ${getColor(p)}; font-weight: 800;">${p}</option>`).join('');
+            if(!editingExpenseId) pSelect.value = currentPayer; 
+            updatePayerColor();
+
+            if (!editingExpenseId) {
+                renderParticipantInputs();
+                updateSplitTypeUI();
+            }
+
+            // --- DATA CALCULATIONS ---
+            const groupsMap = {};
+            participants.forEach(p => {
+                const gName = participantGroups[p] || p;
+                if (!groupsMap[gName]) groupsMap[gName] = [];
+                groupsMap[gName].push(p);
+            });
+
+            const categoryTotals = {};
+            const categoryParticipations = {}; 
+            
+            const groupStats = {};
+            Object.keys(groupsMap).forEach(g => {
+                groupStats[g] = { 
+                    paid: 0, owed: 0, members: groupsMap[g], 
+                    catShares: {}, catActivitySets: {}, memberStats: {} 
+                };
+                groupsMap[g].forEach(m => {
+                    groupStats[g].memberStats[m] = { paid: 0, owed: 0, catShares: {} };
+                    Object.keys(CATEGORIES).forEach(c => {
+                        groupStats[g].memberStats[m].catShares[c] = 0;
+                    });
+                });
+                Object.keys(CATEGORIES).forEach(c => {
+                    groupStats[g].catShares[c] = 0;
+                    groupStats[g].catActivitySets[c] = new Set();
+                });
+            });
+
+            Object.keys(CATEGORIES).forEach(c => { 
+                categoryTotals[c] = 0; 
+                categoryParticipations[c] = 0; 
+            });
+            
+            let totalSpent = 0;
+            let biggestSplurge = { desc: 'None', amount: 0, category: 'Other' };
+            let validActiveCount = 0;
+
+            expenses.forEach(e => {
+                const cat = e.category || 'Other';
+                if (e.ignored || !activeCategoryFilters.has(cat)) return; 
+                
+                validActiveCount++;
+                const payerGroup = participantGroups[e.payer] || e.payer;
+                
+                totalSpent += e.amount;
+                categoryTotals[cat] += e.amount;
+                categoryParticipations[cat] += e.involved.length;
+                
+                if (e.amount > biggestSplurge.amount) {
+                    biggestSplurge = { desc: e.desc, amount: e.amount, category: e.category };
+                }
+
+                groupStats[payerGroup].paid += e.amount;
+                groupStats[payerGroup].memberStats[e.payer].paid += e.amount;
+                
+                if (e.splitType === 'percentage') {
+                    let totalEnteredPerc = 0;
+                    let unenteredCount = 0;
+                    e.involved.forEach(inv => {
+                        if (e.percentageShares && e.percentageShares[inv] !== undefined) totalEnteredPerc += e.percentageShares[inv];
+                        else unenteredCount++;
+                    });
+                    
+                    let defaultPerc = unenteredCount > 0 ? Math.max(0, 100 - totalEnteredPerc) / unenteredCount : 0;
+                    
+                    e.involved.forEach(p => {
+                        const involvedGroup = participantGroups[p] || p;
+                        const pPerc = (e.percentageShares && e.percentageShares[p] !== undefined) ? e.percentageShares[p] : defaultPerc;
+                        const finalShare = e.amount * (pPerc / 100);
+                        
+                        if (finalShare > 0) {
+                            groupStats[involvedGroup].owed += finalShare;
+                            groupStats[involvedGroup].memberStats[p].owed += finalShare;
+                            groupStats[involvedGroup].catShares[cat] += finalShare;
+                            groupStats[involvedGroup].memberStats[p].catShares[cat] += finalShare;
+                            groupStats[involvedGroup].catActivitySets[cat].add(e.id);
+                        }
+                    });
+                } else {
+                    let totalPersonalForExp = 0;
+                    if (e.personalExpenses) Object.values(e.personalExpenses).forEach(val => totalPersonalForExp += val);
+                    const sharedAmount = Math.max(0, e.amount - totalPersonalForExp);
+                    const baseShare = sharedAmount / e.involved.length;
+
+                    e.involved.forEach(p => {
+                        const involvedGroup = participantGroups[p] || p;
+                        const personal = (e.personalExpenses && e.personalExpenses[p]) ? e.personalExpenses[p] : 0;
+                        const finalShare = baseShare + personal;
+                        
+                        if (finalShare > 0) {
+                            groupStats[involvedGroup].owed += finalShare;
+                            groupStats[involvedGroup].memberStats[p].owed += finalShare;
+                            groupStats[involvedGroup].catShares[cat] += finalShare;
+                            groupStats[involvedGroup].memberStats[p].catShares[cat] += finalShare;
+                            groupStats[involvedGroup].catActivitySets[cat].add(e.id);
+                        }
+                    });
+                }
+            });
+
+            // 2. Render Activity History List
+            const eList = document.getElementById('expense-list');
+            
+            let sorted = [...expenses];
+            if (currentSort === 'date-desc') {
+                sorted.sort((a,b) => new Date(b.date) - new Date(a.date) || b.timestamp - a.timestamp);
+            } else if (currentSort === 'date-asc') {
+                sorted.sort((a,b) => new Date(a.date) - new Date(b.date) || a.timestamp - b.timestamp);
+            } else if (currentSort === 'amt-desc') {
+                sorted.sort((a,b) => b.amount - a.amount || b.timestamp - a.timestamp);
+            } else if (currentSort === 'amt-asc') {
+                sorted.sort((a,b) => a.amount - b.amount || a.timestamp - b.timestamp);
+            } else if (currentSort === 'payer-asc') {
+                sorted.sort((a,b) => a.payer.localeCompare(b.payer) || new Date(b.date) - new Date(a.date) || b.timestamp - a.timestamp);
+            }
+
+            const filteredExpenses = sorted.filter(e => activeCategoryFilters.has(e.category || 'Other'));
+
+            eList.innerHTML = filteredExpenses.length ? filteredExpenses.map(e => {
+                const payerColor = getColor(e.payer);
+                const catInfo = CATEGORIES[e.category] || CATEGORIES['Other'];
+                const formattedDate = formatDateDisplay(e.date);
+                
+                let breakdownHtml = '';
+
+                const localSym = CURRENCY_SYMBOLS[e.localCurrency] ? CURRENCY_SYMBOLS[e.localCurrency] : (e.localCurrency ? e.localCurrency + ' ' : '$');
+                let displayMainAmount = `${localSym}${e.localAmount.toFixed(2)}`;
+                let displaySubAmount = '';
+                
+                if (e.localCurrency !== 'USD') {
+                    displaySubAmount = `<br><span style="font-size: 0.8rem; color: var(--secondary);">($${e.amount.toFixed(2)} USD)</span>`;
+                }
+
+                if (e.splitType === 'percentage') {
+                    let totalEnteredPerc = 0;
+                    let unenteredCount = 0;
+                    e.involved.forEach(inv => {
+                        if (e.percentageShares && e.percentageShares[inv] !== undefined) totalEnteredPerc += e.percentageShares[inv];
+                        else unenteredCount++;
+                    });
+                    let defaultPerc = unenteredCount > 0 ? Math.max(0, 100 - totalEnteredPerc) / unenteredCount : 0;
+                    
+                    breakdownHtml = e.involved.map(p => {
+                        const pPerc = (e.percentageShares && e.percentageShares[p] !== undefined) ? e.percentageShares[p] : defaultPerc;
+                        const finalShare = e.amount * (pPerc / 100);
+                        return `<span style="white-space: nowrap;"><span style="color: ${getColor(p)}; font-weight: 600;">${p}</span> <span style="font-size: 0.75rem; color: var(--text);">(${formatMoney(finalShare)} / ${pPerc.toFixed(1)}%)</span></span>`;
+                    }).join(', ');
+                } else {
+                    let totalPersonalForExp = 0;
+                    if (e.personalExpenses) Object.values(e.personalExpenses).forEach(val => totalPersonalForExp += val);
+                    const sharedAmount = Math.max(0, e.amount - totalPersonalForExp);
+                    const baseShare = sharedAmount / e.involved.length;
+                    
+                    breakdownHtml = e.involved.map(p => {
+                        const personal = (e.personalExpenses && e.personalExpenses[p]) ? e.personalExpenses[p] : 0;
+                        const finalShare = baseShare + personal;
+                        
+                        let displayPersonal = personal;
+                        const displayCur = document.getElementById('view-currency').value || 'USD';
+                        if (displayCur !== 'USD') {
+                            displayPersonal = personal * currentExchangeRate;
+                        }
+                        
+                        let personalNote = personal > 0 ? ` <span style="font-size:0.7rem; color: #b45309;">(inc. ${formatMoney(personal)} pers.)</span>` : '';
+                        return `<span style="white-space: nowrap;"><span style="color: ${getColor(p)}; font-weight: 600;">${p}</span> <span style="font-size: 0.75rem; color: var(--text);">(${formatMoney(finalShare)}${personalNote})</span></span>`;
+                    }).join(', ');
+                }
+
+                let notesHtml = '';
+                if (e.notes && e.notes.trim() !== '') {
+                    const isUrl = e.notes.startsWith('http://') || e.notes.startsWith('https://');
+                    const noteContent = isUrl ? `<a href="${e.notes}" target="_blank" style="color: var(--primary); text-decoration: underline; word-break: break-all;">${e.notes}</a>` : `<span style="word-break: break-word;">${e.notes}</span>`;
+                    notesHtml = `
+                    <div style="margin-top: 8px; padding: 6px 10px; background: rgba(0,0,0,0.02); border-radius: 6px; font-size: 0.8rem; color: var(--secondary); border-left: 3px solid ${catInfo.color}60;">
+                        ${noteContent}
+                    </div>`;
+                }
+
+                const isEditing = editingExpenseId === e.id;
+                const editingClass = isEditing ? 'is-editing' : '';
+                let cardStyle = `background: ${catInfo.bg}; border: 1px solid ${catInfo.color}40;`;
+                const ignoredClass = e.ignored ? 'ignored' : '';
+
+                return `
+                <div id="exp-row-${e.id}" class="expense-item ${ignoredClass} ${editingClass}" style="${cardStyle}">
+                    <div class="expense-details">
+                        <span style="color:${catInfo.color}; font-weight: 900; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px;">
+                            ${catInfo.icon} ${e.category}
+                        </span><br>
+                        <strong style="font-size: 1.15rem; color: #0f172a;">${e.desc}</strong>
+                        ${e.ignored ? '<span style="color: var(--danger); font-size: 0.8rem; font-weight: bold; margin-left: 5px;">[IGNORED]</span>' : ''}
+                        <br>
+                        <span style="font-size:0.9rem; color:var(--secondary)">
+                            ${formattedDate} • Paid by <span style="color:${payerColor}; font-weight:800;">${e.payer}</span><br>
+                            <div style="margin-top: 6px; padding-left: 8px; border-left: 2px solid ${catInfo.color}50; font-size: 0.85rem; line-height: 1.5;">
+                                <strong>For:</strong> ${breakdownHtml}
+                            </div>
+                        </span>
+                        ${notesHtml}
+                    </div>
+                    <div class="expense-amount-actions">
+                        <div class="expense-amount">${displayMainAmount}${displaySubAmount}</div>
+                        <div class="expense-actions">
+                            <button class="outline small" style="background: white;" onclick="duplicateExpense('${e.id}')" title="Duplicate Activity">📋</button>
+                            <button class="outline small" style="background: white;" onclick="toggleIgnore('${e.id}')" title="Toggle Ignore">${e.ignored ? '✅' : '🚫'}</button>
+                            <button class="outline small" style="background: white;" onclick="editExpense('${e.id}')" title="Edit">✏️</button>
+                            <button class="outline small" style="background: white; color: var(--danger);" onclick="deleteExpense('${e.id}')" title="Delete">🗑️</button>
+                        </div>
+                    </div>
+                </div>`
+            }).join('') : '<div style="padding: 20px; text-align: center; color: var(--secondary); background: #f8fafc; border-radius: 8px;"><em>No activities matching selected filters.</em></div>';
+
+
+            // --- NEXT PAYER CALCULATION ---
+            const badgeContainer = document.getElementById('next-payer-container');
+            if (validActiveCount > 0 && participants.length > 0) {
+                let topDebtor = null;
+                let maxDebt = 0.01; 
+                
+                Object.keys(groupStats).forEach(gName => {
+                    const diff = groupStats[gName].paid - groupStats[gName].owed;
+                    if (diff < -maxDebt) {
+                        maxDebt = Math.abs(diff);
+                        topDebtor = gName;
+                    }
+                });
+
+                if (topDebtor) {
+                    badgeContainer.innerHTML = `<div class="next-payer-badge">🚨 Who Should Pay Next? <strong style="color: ${getColor(groupStats[topDebtor].members[0])};">${topDebtor}</strong> (Owes ${formatMoney(maxDebt)})</div>`;
+                } else {
+                    badgeContainer.innerHTML = `<div class="next-payer-badge" style="color: var(--green); border-color: #bbf7d0; background: #f0fdf4;">🎉 Everyone is perfectly settled!</div>`;
+                }
+            } else {
+                badgeContainer.innerHTML = '';
+            }
+
+            // 3. Render GROUP-AWARE Stats Dashboard
+            const statsDiv = document.getElementById('ledger-stats');
+            
+            if (validActiveCount > 0 && participants.length > 0) {
+                
+                let statsHtml = `
+                <div style="display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap;">
+                    <div class="global-stat-box" style="flex: 1; min-width: 200px; flex-direction: column; align-items: flex-start;">
+                        <span class="global-stat-label">Filtered Trip Cost</span>
+                        <span class="global-stat-value" style="color: var(--primary);">${formatMoney(totalSpent)}</span>
+                    </div>
+                    <div class="global-stat-box" style="flex: 1.5; min-width: 200px; flex-direction: column; align-items: flex-start; background: #fff1f2; border-color: #fecdd3;">
+                        <span class="global-stat-label" style="color: #be123c;">Biggest Splurge (Filtered)</span>
+                        <span class="global-stat-value" style="font-size: 1.1rem; color: #be123c;">
+                            ${CATEGORIES[biggestSplurge.category]?.icon || '📝'} ${biggestSplurge.desc} <strong style="font-size: 1.2rem;">(${formatMoney(biggestSplurge.amount)})</strong>
+                        </span>
+                    </div>
+                </div>`;
+                
+                statsHtml += `<div class="section-label">Category Breakdown & Averages</div>`;
+                statsHtml += `<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; margin-bottom: 28px;">`;
+                
+                Object.keys(categoryTotals).forEach(cat => {
+                    if (categoryTotals[cat] > 0) {
+                        const info = CATEGORIES[cat];
+                        const avgPerPerson = categoryTotals[cat] / categoryParticipations[cat];
+                        
+                        statsHtml += `
+                        <div style="background:${info.bg}; border: 1px solid ${info.color}40; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+                            <div style="font-size: 0.95rem; font-weight: 800; color: ${info.color}; margin-bottom: 6px;">${info.icon} ${cat}</div>
+                            <div style="font-size: 1.25rem; color: var(--text); font-weight: 800;">${formatMoney(categoryTotals[cat])}</div>
+                            <div style="font-size: 0.8rem; color: var(--secondary); margin-top: 8px; border-top: 1px solid ${info.color}30; padding-top: 8px; width: 100%; text-align: center;">
+                                <strong>Avg: ${formatMoney(avgPerPerson)}</strong> / person
+                            </div>
+                        </div>`;
+                    }
+                });
+                statsHtml += `</div>`;
+
+                statsHtml += `<div class="section-label">Group / Personal Insights</div>`;
+                statsHtml += `<div class="stats-grid">`;
+                
+                Object.keys(groupStats).forEach(gName => {
+                    const stats = groupStats[gName];
+                    if (stats.owed === 0 && stats.paid === 0) return; 
+                    
+                    const repColor = getColor(stats.members[0]); 
+                    
+                    let topCat = null;
+                    let maxCatAmt = 0;
+                    
+                    let catBreakdownHtml = '<div style="margin-top: 12px; display: flex; flex-direction: column; gap: 8px;">';
+                    Object.keys(stats.catShares).forEach(cat => {
+                        const amt = stats.catShares[cat];
+                        if (amt > 0) {
+                            if (amt > maxCatAmt) { maxCatAmt = amt; topCat = cat; }
+                            const icon = CATEGORIES[cat].icon;
+                            const catColor = CATEGORIES[cat].color;
+                            const catBg = CATEGORIES[cat].bg; 
+                            const catActCount = stats.catActivitySets[cat].size;
+                            const catAvg = catActCount > 0 ? formatMoney(amt / catActCount) : '0.00';
+                            
+                            catBreakdownHtml += `
+                                <div style="display:flex; justify-content:space-between; align-items: center; background: ${catBg}; border: 1px solid ${catColor}40; padding: 8px 12px; border-radius: 8px;">
+                                    <span style="color: ${catColor}; font-weight: 800; font-size: 0.9rem;">${icon} ${cat}</span> 
+                                    <div style="text-align: right; line-height: 1.3;">
+                                        <span style="color: var(--text); font-weight: 800; font-size: 1rem;">${formatMoney(amt)}</span><br>
+                                        <span style="font-size: 0.75rem; color: var(--secondary); font-weight: 600;">Avg: ${catAvg}/act</span>
+                                    </div>
+                                </div>`;
+                        }
+                    });
+                    catBreakdownHtml += '</div>';
+
+                    let individualBreakdownHtml = '';
+                    if (stats.members.length > 1) {
+                        individualBreakdownHtml += `<details class="indiv-details"><summary>Individual Breakdown</summary><div class="indiv-content">`;
+                        
+                        stats.members.forEach(m => {
+                            const mStats = stats.memberStats[m];
+                            if (mStats.paid > 0 || mStats.owed > 0) {
+                                let mCatHtml = '';
+                                Object.keys(mStats.catShares).forEach(cat => {
+                                    const amt = mStats.catShares[cat];
+                                    if (amt > 0) {
+                                        const icon = CATEGORIES[cat].icon;
+                                        mCatHtml += `<span style="display: inline-block; background: var(--bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); font-size: 0.7rem; color: var(--secondary);">${icon} ${formatMoney(amt)}</span>`;
+                                    }
+                                });
+
+                                individualBreakdownHtml += `
+                                    <div style="background: #ffffff; padding: 10px; border-radius: 8px; border: 1px solid var(--border);">
+                                        <div style="display:flex; justify-content:space-between; align-items: center; font-size: 0.85rem; margin-bottom: 6px;">
+                                            <span style="color: ${getColor(m)}; font-weight: 800; font-size: 0.95rem;">${m}</span>
+                                            <div style="text-align: right; line-height: 1.3;">
+                                                <span style="color: var(--secondary); font-size: 0.75rem; margin-right: 4px;">Share:</span><strong style="color: var(--text);">${formatMoney(mStats.owed)}</strong><br>
+                                                <span style="color: var(--secondary); font-size: 0.75rem; margin-right: 4px;">Paid:</span><strong style="color: var(--text);">${formatMoney(mStats.paid)}</strong>
+                                            </div>
+                                        </div>
+                                        <div style="display:flex; flex-wrap: wrap; gap: 4px;">
+                                            ${mCatHtml}
+                                        </div>
+                                    </div>`;
+                            }
+                        });
+                        individualBreakdownHtml += `</div></details>`;
+                    }
+
+                    const totalGroupActs = new Set();
+                    Object.keys(stats.catActivitySets).forEach(cat => {
+                        stats.catActivitySets[cat].forEach(id => totalGroupActs.add(id));
+                    });
+                    const avgPerActivity = totalGroupActs.size > 0 ? formatMoney(stats.owed / totalGroupActs.size) : '0.00';
+                    const topCatDisplay = topCat ? `<span style="color: ${CATEGORIES[topCat].color}; font-weight: 800;">${CATEGORIES[topCat].icon} ${topCat}</span>` : '<span style="color: var(--secondary);">None</span>';
+                    const memberSubtext = stats.members.length > 1 ? `<div class="stat-members">Includes: ${stats.members.join(', ')}</div>` : '';
+
+                    statsHtml += `
+                        <div class="stat-card" style="border-top: 4px solid ${repColor}; padding: 20px;">
+                            <div class="stat-name" style="color: ${repColor}; font-size: 1.2rem; margin-bottom: 4px;">${gName}</div>
+                            ${memberSubtext}
+                            
+                            <div style="background: #f8fafc; padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; font-size: 0.9rem; border: 1px solid var(--border);">
+                                <div style="display:flex; justify-content:space-between; margin-bottom: 8px; align-items: center;">
+                                    <span style="color: var(--secondary); font-weight: 600;">Avg/Activity:</span> 
+                                    <strong style="color: var(--text); font-size: 1rem;">${avgPerActivity}</strong>
+                                </div>
+                                <div style="display:flex; justify-content:space-between; align-items: center;">
+                                    <span style="color: var(--secondary); font-weight: 600;">Top Spend:</span> 
+                                    ${topCatDisplay}
+                                </div>
+                            </div>
+
+                            <div style="display:flex; justify-content:space-between; margin-bottom: 12px; font-size: 1.05rem; align-items: center;">
+                                <span style="font-weight: 600; color: var(--secondary);">Total Paid:</span> 
+                                <strong style="color: var(--text); font-size: 1.15rem;">${formatMoney(stats.paid)}</strong>
+                            </div>
+                            
+                            <div style="border-top: 2px dotted var(--border); padding-top: 16px;">
+                                <div style="display:flex; justify-content:space-between; font-weight: 800; font-size: 1.15rem; margin-bottom: 4px;">
+                                    <span>Total Share:</span> 
+                                    <span>${formatMoney(stats.owed)}</span>
+                                </div>
+                                ${catBreakdownHtml}
+                                ${individualBreakdownHtml}
+                            </div>
+                        </div>`;
+                });
+                statsHtml += `</div>`;
+                statsDiv.innerHTML = statsHtml;
+            } else {
+                statsDiv.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--secondary); background: #f8fafc; border-radius: 8px;"><em>Ensure you have active expenses and matching filters.</em></div>';
+            }
+
+            renderGroupBalances(groupStats, validActiveCount);
+        }
+
+        function renderGroupBalances(groupStats, activeCount) {
+            const bList = document.getElementById('balances-list');
+            if (!participants.length || activeCount === 0) {
+                bList.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--secondary); background: #f8fafc; border-radius: 8px;"><em>Ensure you have active expenses and matching filters.</em></div>';
+                return;
+            }
+
+            const groupBalances = [];
+            let html = '<div class="section-label" style="margin-top: 0;">Overall Standing (Filtered)</div>';
+            
+            Object.keys(groupStats).forEach(gName => {
+                const diff = groupStats[gName].paid - groupStats[gName].owed;
+                groupBalances.push({ name: gName, net: diff, color: getColor(groupStats[gName].members[0]) }); 
+                
+                let txt = diff > 0.01 ? `is owed ${formatMoney(diff)}` : (diff < -0.01 ? `owes ${formatMoney(Math.abs(diff))}` : 'is settled');
+                let cls = diff > 0.01 ? 'owed' : (diff < -0.01 ? 'owes' : '');
+                
+                const memberText = groupStats[gName].members.length > 1 ? `<div style="font-size: 0.8rem; color: var(--secondary); margin-top: 6px;">Members: ${groupStats[gName].members.join(', ')}</div>` : '';
+
+                html += `<div class="balance-item" style="flex-direction: column; align-items: flex-start; padding: 12px 0;">
+                            <div style="display: flex; justify-content: space-between; width: 100%;">
+                                <span style="color: ${groupBalances[groupBalances.length-1].color}; font-weight: 800; font-size: 1.1rem;">${gName}</span>
+                                <span class="${cls}" style="font-size: 1.1rem;">${txt}</span>
+                            </div>
+                            ${memberText}
+                         </div>`;
+            });
+
+            html += '<div class="section-label" style="margin-top: 25px;">How to Settle Up</div>';
+            
+            let debtors = groupBalances.filter(b => b.net < -0.01).map(b => ({ name: b.name, debt: Math.abs(b.net), color: b.color })).sort((a,b) => b.debt - a.debt);
+            let creditors = groupBalances.filter(b => b.net > 0.01).map(b => ({ name: b.name, credit: b.net, color: b.color })).sort((a,b) => b.credit - a.credit);
+            
+            let settlements = [];
+            let d = 0, c = 0; 
+            
+            while (d < debtors.length && c < creditors.length) {
+                let debtor = debtors[d];
+                let creditor = creditors[c];
+                let amount = Math.min(debtor.debt, creditor.credit);
+                
+                if (amount > 0.01) {
+                    settlements.push({ from: debtor, to: creditor, amount: amount });
+                }
+                
+                debtor.debt -= amount;
+                creditor.credit -= amount;
+                if (debtor.debt < 0.01) d++;
+                if (creditor.credit < 0.01) c++;
+            }
+
+            if (settlements.length === 0) {
+                html += '<div style="padding: 20px; text-align: center; color: var(--green); font-weight: bold; background: #f0fdf4; border-radius: 8px;">🎉 Everyone is fully settled!</div>';
+            } else {
+                html += '<div class="settlement-box">';
+                settlements.forEach(s => {
+                    html += `<div class="settlement-item">
+                                <span><strong style="color:${s.from.color}; font-size: 1.1rem;">${s.from.name}</strong> pays <strong style="color:${s.to.color}; font-size: 1.1rem;">${s.to.name}</strong></span>
+                                <span style="font-weight: 800; color: var(--text); font-size: 1.1rem;">Out: ${formatMoney(s.amount)}</span>
+                             </div>`;
+                });
+                html += '</div>';
+            }
+
+            bList.innerHTML = html;
+        }
+
+        loadState();
+    </script>
+</body>
+</html>
