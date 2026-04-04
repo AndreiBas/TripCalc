@@ -212,6 +212,7 @@
             padding: 14px; border-radius: 10px; margin-bottom: 10px; gap: 10px; 
             transition: all 0.3s ease; box-shadow: 0 2px 5px rgba(0,0,0,0.04); 
             background: var(--card-bg);
+            flex-wrap: wrap; /* Helps items behave on extremely small screens */
         }
         .expense-item:last-child { margin-bottom: 0; }
         .expense-item.ignored { opacity: 0.4; filter: grayscale(0.8); }
@@ -229,7 +230,7 @@
             100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
         }
 
-        .expense-details { flex: 1; }
+        .expense-details { flex: 1; min-width: 200px; }
         .expense-amount-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; min-width: 90px; }
         .expense-amount { font-weight: 800; text-align: right; font-size: 1.15rem; color: #0f172a;}
         .expense-item.ignored .expense-amount { text-decoration: line-through; color: var(--secondary); }
@@ -299,12 +300,10 @@
 
                 <div class="header-controls">
                     <button class="danger outline small" onclick="resetTrip()">🆕 New</button>
-                    
                     <button class="secondary small" onclick="exportTrip()">💾 Save Local</button>
                     <button class="warning small" onclick="exportSecureTrip()" title="Save with Password Encryption">🔐 Secure</button>
                     <button class="secondary small" onclick="document.getElementById('file-import').click()">📂 Load Local</button>
                     <input type="file" id="file-import" accept=".json, .tsplit" style="display:none;" onchange="importTrip(event)">
-                    
                     <button id="cloud-save-btn" class="cloud small" onclick="saveToSupabase()" title="Save to Supabase">☁️ Save Cloud</button>
                     <button id="cloud-load-btn" class="cloud small" onclick="loadFromSupabase()" title="Load from Supabase">☁️ Load Cloud</button>
                 </div>
@@ -321,7 +320,7 @@
                         <button onclick="addParticipant()" style="flex: none;">Add Person</button>
                     </div>
                     <div id="participant-list" style="margin-bottom: 10px;"></div>
-                    <div style="display:flex; justify-content: space-between; align-items: center;">
+                    <div style="display:flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
                         <div style="display:flex; gap: 10px; align-items: center;">
                             <span style="font-size: 0.8rem; color: var(--secondary);"><em>Click names to rename. Click 👥 to bundle into families.</em></span>
                             <span style="font-size: 0.75rem; color: var(--danger); cursor: pointer; font-weight: bold;" onclick="resetSupabaseConfig()">⚙️ Reset Cloud Sync</span>
@@ -402,9 +401,9 @@
         <div class="col-mid">
             <div class="card ledger-card">
                 <div class="sticky-ledger-header">
-                    <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 10px;">
                         <h2 style="margin: 0; border: none; padding: 0;">📜 Activity Ledger</h2>
-                        <div style="display:flex; gap: 5px; align-items: center;">
+                        <div style="display:flex; gap: 5px; align-items: center; flex-wrap: wrap;">
                             <select id="ledger-sort" class="split-type-select" style="font-weight: 600; padding: 4px 8px; border-color: #cbd5e1; color: var(--secondary); background: white;" onchange="handleSortChange()">
                                 <option value="date-desc">📅 Date (Newest)</option>
                                 <option value="date-asc">📅 Date (Oldest)</option>
@@ -450,19 +449,16 @@
     </div>
 
     <script>
-        // --- STATE ---
+        // --- 1. STATE VARIABLES ---
         let tripName = "My Trip";
         let participants = [];
         let participantGroups = {}; 
         let expenses = [];
         let editingExpenseId = null; 
 
-        // --- CURRENCY & VIEW STATE ---
         let secondaryCurrency = ""; 
         let currentExchangeRate = 1; 
         let currentSort = 'date-desc';
-
-        // --- SUPABASE CLIENT STATE ---
         let supabaseClient = null;
 
         const CATEGORIES = {
@@ -472,17 +468,19 @@
             'Fun': { icon: '🎟️', color: '#db2777', bg: '#fce7f3' },     
             'Other': { icon: '📝', color: '#475569', bg: '#f1f5f9' }       
         };
-
         const COLORS = ['#2563eb', '#dc2626', '#16a34a', '#d97706', '#9333ea', '#db2777', '#0d9488', '#4f46e5', '#ea580c', '#0284c7'];
         const CURRENCY_SYMBOLS = { USD: '$', EUR: '€', GBP: '£', CAD: 'C$', AUD: 'A$', JPY: '¥', MXN: 'M$' };
 
         let activeCategoryFilters = new Set(Object.keys(CATEGORIES));
 
+        // --- 2. INITIALIZATION & DATA REPAIR ---
+        document.getElementById('exp-date').valueAsDate = new Date();
+
         function getColor(name) {
             const index = participants.indexOf(name);
             return index === -1 ? '#64748b' : COLORS[index % COLORS.length];
         }
-        
+
         function formatDateDisplay(dateStr) {
             if (!dateStr) return '';
             const [year, month, day] = dateStr.split('-');
@@ -492,8 +490,6 @@
             const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
             return `${year} ${months[dateObj.getMonth()]} ${day} ${days[dateObj.getDay()]}`;
         }
-
-        document.getElementById('exp-date').valueAsDate = new Date();
 
         function repairLegacyData() {
             if (typeof participantGroups === 'undefined' || participantGroups === null) participantGroups = {};
@@ -514,193 +510,6 @@
             });
         }
 
-        // --- SUPABASE CLOUD INTEGRATION (Single Password Approach) ---
-        function getSupabase() {
-            if (supabaseClient) return supabaseClient;
-            
-            let storedAccessCode = localStorage.getItem('tripSplitter_cloudAccess');
-            
-            if (!storedAccessCode) {
-                const inputCode = prompt("☁️ Setup Cloud Sync ☁️\n\nEnter your Base64 encoded Cloud Access Code:");
-                if (!inputCode) return null;
-                
-                try {
-                    const decoded = window.atob(inputCode.trim());
-                    const parts = decoded.split('|');
-                    if (parts.length === 2 && parts[0].startsWith('http')) {
-                        localStorage.setItem('tripSplitter_cloudAccess', inputCode.trim());
-                        storedAccessCode = inputCode.trim();
-                    } else {
-                        alert("Invalid Access Code format.");
-                        return null;
-                    }
-                } catch(e) {
-                    alert("Invalid Access Code. Ensure it is properly Base64 encoded.");
-                    return null;
-                }
-            }
-            
-            // Decode and initialize
-            const decodedConfig = window.atob(storedAccessCode);
-            const [url, key] = decodedConfig.split('|');
-            supabaseClient = supabase.createClient(url, key);
-            return supabaseClient;
-        }
-
-        function resetSupabaseConfig() {
-            if(confirm("Clear your Cloud Access Code from this browser? You will need to re-enter it to sync to the cloud.")) {
-                localStorage.removeItem('tripSplitter_cloudAccess');
-                supabaseClient = null;
-                alert("Cloud configuration cleared.");
-            }
-        }
-
-        async function saveToSupabase() {
-            const client = getSupabase();
-            if (!client) return;
-
-            const payload = { 
-                tripName, participants, participantGroups, expenses, 
-                secondaryCurrency, currentExchangeRate, currentSort 
-            };
-
-            const btn = document.getElementById('cloud-save-btn');
-            btn.innerText = "⏳ Saving...";
-
-            const { data, error } = await client
-                .from('trip_sync')
-                .upsert({ id: 'current_trip', trip_data: payload });
-
-            if (error) {
-                console.error("Supabase Save Error:", error);
-                alert("Error saving to cloud: " + error.message);
-            } else {
-                alert("✅ Trip saved to the cloud successfully!");
-            }
-            
-            btn.innerText = "☁️ Save Cloud";
-        }
-
-        async function loadFromSupabase() {
-            const client = getSupabase();
-            if (!client) return;
-
-            const btn = document.getElementById('cloud-load-btn');
-            btn.innerText = "⏳ Loading...";
-
-            const { data, error } = await client
-                .from('trip_sync')
-                .select('trip_data')
-                .eq('id', 'current_trip')
-                .single();
-
-            if (error) {
-                console.error("Supabase Load Error:", error);
-                alert("Error loading from cloud (Ensure table 'trip_sync' exists): " + error.message);
-            } else if (data && data.trip_data) {
-                const parsedData = data.trip_data;
-                
-                tripName = parsedData.tripName || "Imported Trip"; 
-                participants = parsedData.participants || []; 
-                participantGroups = parsedData.participantGroups || {};
-                expenses = parsedData.expenses || [];
-                secondaryCurrency = parsedData.secondaryCurrency || "";
-                currentExchangeRate = parsedData.currentExchangeRate || 1;
-                currentSort = parsedData.currentSort || 'date-desc';
-                
-                activeCategoryFilters = new Set(Object.keys(CATEGORIES)); 
-                repairLegacyData();
-                
-                document.getElementById('trip-name').value = tripName;
-                document.getElementById('global-currency').value = secondaryCurrency;
-                document.getElementById('ledger-sort').value = currentSort;
-                
-                saveState(); 
-                updateCurrencySelectors();
-                updateUI(); 
-                cancelEdit();
-                alert("✅ Trip loaded from cloud!");
-            } else {
-                alert("No trip data found in the cloud.");
-            }
-            
-            btn.innerText = "☁️ Load Cloud";
-        }
-
-        // --- CRYPTOGRAPHY LOGIC ---
-        const enc = new TextEncoder();
-        const dec = new TextDecoder();
-
-        function bufferToBase64(buffer) {
-            let binary = '';
-            let bytes = new Uint8Array(buffer);
-            for (let i = 0; i < bytes.byteLength; i++) {
-                binary += String.fromCharCode(bytes[i]);
-            }
-            return window.btoa(binary);
-        }
-
-        function base64ToBuffer(base64) {
-            let binary_string = window.atob(base64);
-            let len = binary_string.length;
-            let bytes = new Uint8Array(len);
-            for (let i = 0; i < len; i++) {
-                bytes[i] = binary_string.charCodeAt(i);
-            }
-            return bytes.buffer;
-        }
-
-        async function getKeyMaterial(password) {
-            return window.crypto.subtle.importKey(
-                "raw", enc.encode(password), { name: "PBKDF2" }, false, ["deriveBits", "deriveKey"]
-            );
-        }
-
-        async function getKey(keyMaterial, salt) {
-            return window.crypto.subtle.deriveKey(
-                { name: "PBKDF2", salt: salt, iterations: 100000, hash: "SHA-256" },
-                keyMaterial, { name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]
-            );
-        }
-
-        async function encryptData(password, plainText) {
-            const keyMaterial = await getKeyMaterial(password);
-            const salt = window.crypto.getRandomValues(new Uint8Array(16));
-            const key = await getKey(keyMaterial, salt);
-            const iv = window.crypto.getRandomValues(new Uint8Array(12));
-
-            const encryptedContent = await window.crypto.subtle.encrypt(
-                { name: "AES-GCM", iv: iv }, key, enc.encode(plainText)
-            );
-
-            return {
-                salt: bufferToBase64(salt),
-                iv: bufferToBase64(iv),
-                ciphertext: bufferToBase64(encryptedContent)
-            };
-        }
-
-        async function decryptData(password, encryptedObj) {
-            try {
-                const keyMaterial = await getKeyMaterial(password);
-                const salt = new Uint8Array(base64ToBuffer(encryptedObj.salt));
-                const iv = new Uint8Array(base64ToBuffer(encryptedObj.iv));
-                const ciphertext = new Uint8Array(base64ToBuffer(encryptedObj.ciphertext));
-
-                const key = await getKey(keyMaterial, salt);
-
-                const decryptedContent = await window.crypto.subtle.decrypt(
-                    { name: "AES-GCM", iv: iv }, key, ciphertext
-                );
-
-                return dec.decode(decryptedContent);
-            } catch (e) {
-                console.error("Decryption error", e);
-                return null;
-            }
-        }
-
-        // --- LOCAL FILE SAVING & LOADING ---
         function saveState() {
             localStorage.setItem('tripSplitterLatest', JSON.stringify({ 
                 tripName, participants, participantGroups, expenses, 
@@ -735,11 +544,99 @@
             updateUI();
         }
 
+        // FIXED: resetTrip now correctly clears all state variables AND forces UI update
+        function resetTrip() {
+            if(confirm("Start a new trip? This wipes your current progress! Make sure you saved your file first.")) {
+                // Completely purge state
+                tripName = "My Trip"; 
+                participants = []; 
+                participantGroups = {}; 
+                expenses = [];
+                secondaryCurrency = ""; 
+                currentExchangeRate = 1; 
+                currentSort = 'date-desc';
+                
+                // Reset UI inputs
+                document.getElementById('global-currency').value = "";
+                document.getElementById('ledger-sort').value = "date-desc";
+                document.getElementById('trip-name').value = tripName;
+                
+                activeCategoryFilters = new Set(Object.keys(CATEGORIES)); 
+                cancelEdit(); // Make sure we aren't stuck in edit mode
+                
+                // Clear local storage memory
+                localStorage.removeItem('tripSplitterLatest');
+                
+                // Force a full clean re-render
+                updateCurrencySelectors();
+                updateUI();
+                
+                // Manually clear next payer badge
+                document.getElementById('next-payer-container').innerHTML = '';
+            }
+        }
+
+        function updateTripName() { tripName = document.getElementById('trip-name').value; saveState(); }
+
+        // --- 3. EXPORT / IMPORT / CRYPTO ---
+        const enc = new TextEncoder();
+        const dec = new TextDecoder();
+
+        function bufferToBase64(buffer) {
+            let binary = '';
+            let bytes = new Uint8Array(buffer);
+            for (let i = 0; i < bytes.byteLength; i++) { binary += String.fromCharCode(bytes[i]); }
+            return window.btoa(binary);
+        }
+
+        function base64ToBuffer(base64) {
+            let binary_string = window.atob(base64);
+            let len = binary_string.length;
+            let bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) { bytes[i] = binary_string.charCodeAt(i); }
+            return bytes.buffer;
+        }
+
+        async function getKeyMaterial(password) {
+            return window.crypto.subtle.importKey("raw", enc.encode(password), { name: "PBKDF2" }, false, ["deriveBits", "deriveKey"]);
+        }
+
+        async function getKey(keyMaterial, salt) {
+            return window.crypto.subtle.deriveKey(
+                { name: "PBKDF2", salt: salt, iterations: 100000, hash: "SHA-256" },
+                keyMaterial, { name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]
+            );
+        }
+
+        async function encryptData(password, plainText) {
+            const keyMaterial = await getKeyMaterial(password);
+            const salt = window.crypto.getRandomValues(new Uint8Array(16));
+            const key = await getKey(keyMaterial, salt);
+            const iv = window.crypto.getRandomValues(new Uint8Array(12));
+
+            const encryptedContent = await window.crypto.subtle.encrypt({ name: "AES-GCM", iv: iv }, key, enc.encode(plainText));
+
+            return { salt: bufferToBase64(salt), iv: bufferToBase64(iv), ciphertext: bufferToBase64(encryptedContent) };
+        }
+
+        async function decryptData(password, encryptedObj) {
+            try {
+                const keyMaterial = await getKeyMaterial(password);
+                const salt = new Uint8Array(base64ToBuffer(encryptedObj.salt));
+                const iv = new Uint8Array(base64ToBuffer(encryptedObj.iv));
+                const ciphertext = new Uint8Array(base64ToBuffer(encryptedObj.ciphertext));
+
+                const key = await getKey(keyMaterial, salt);
+                const decryptedContent = await window.crypto.subtle.decrypt({ name: "AES-GCM", iv: iv }, key, ciphertext);
+                return dec.decode(decryptedContent);
+            } catch (e) {
+                console.error("Decryption error", e);
+                return null;
+            }
+        }
+
         function exportTrip() {
-            const payload = JSON.stringify({ 
-                tripName, participants, participantGroups, expenses, 
-                secondaryCurrency, currentExchangeRate, currentSort 
-            });
+            const payload = JSON.stringify({ tripName, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort });
             const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(payload);
             const dl = document.createElement('a');
             dl.setAttribute("href", dataStr);
@@ -751,23 +648,17 @@
             const password = prompt("⚠️ Secure Save ⚠️\nEnter a password to encrypt this trip file.\n\nWARNING: If you forget this password, your data cannot be recovered.");
             if (!password) return; 
 
-            const payload = JSON.stringify({ 
-                tripName, participants, participantGroups, expenses, 
-                secondaryCurrency, currentExchangeRate, currentSort 
-            });
-
+            const payload = JSON.stringify({ tripName, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort });
             try {
                 const encryptedData = await encryptData(password, payload);
                 const securePayload = JSON.stringify(encryptedData);
-                
                 const dataStr = "data:text/plain;charset=utf-8," + encodeURIComponent(securePayload);
                 const dl = document.createElement('a');
                 dl.setAttribute("href", dataStr);
                 dl.setAttribute("download", tripName.replace(/\s+/g, '_') + ".tsplit");
                 dl.click();
             } catch (err) {
-                alert("Failed to encrypt data. See console for details.");
-                console.error(err);
+                alert("Failed to encrypt data."); console.error(err);
             }
         }
 
@@ -778,30 +669,20 @@
             const reader = new FileReader();
             reader.onload = async (event) => {
                 let parsedData = null;
-                
                 try {
                     const rawJson = JSON.parse(event.target.result);
                     if (rawJson.ciphertext && rawJson.salt && rawJson.iv) {
                         const password = prompt("🔐 This trip file is locked.\n\nEnter password to decrypt:");
-                        if (!password) {
-                            document.getElementById('file-import').value = "";
-                            return; 
-                        }
+                        if (!password) { document.getElementById('file-import').value = ""; return; }
                         
                         const decryptedText = await decryptData(password, rawJson);
-                        if (!decryptedText) {
-                            alert("❌ Incorrect password or corrupted file.");
-                            document.getElementById('file-import').value = "";
-                            return;
-                        }
+                        if (!decryptedText) { alert("❌ Incorrect password or corrupted file."); document.getElementById('file-import').value = ""; return; }
                         parsedData = JSON.parse(decryptedText);
                     } else {
                         parsedData = rawJson;
                     }
                 } catch (err) { 
-                    alert("Invalid file format."); 
-                    document.getElementById('file-import').value = "";
-                    return; 
+                    alert("Invalid file format."); document.getElementById('file-import').value = ""; return; 
                 }
 
                 if (parsedData) {
@@ -819,19 +700,85 @@
                     document.getElementById('global-currency').value = secondaryCurrency;
                     document.getElementById('ledger-sort').value = currentSort;
                     
-                    saveState(); 
-                    updateCurrencySelectors();
-                    updateUI(); 
-                    cancelEdit();
+                    saveState(); updateCurrencySelectors(); updateUI(); cancelEdit();
                 }
                 document.getElementById('file-import').value = "";
             };
             reader.readAsText(file);
         }
 
-        function updateTripName() { tripName = document.getElementById('trip-name').value; saveState(); }
+        // --- 4. SUPABASE INTEGRATION ---
+        function getSupabase() {
+            if (supabaseClient) return supabaseClient;
+            let storedAccessCode = localStorage.getItem('tripSplitter_cloudAccess');
+            if (!storedAccessCode) {
+                const inputCode = prompt("☁️ Setup Cloud Sync ☁️\n\nEnter your Base64 encoded Cloud Access Code:");
+                if (!inputCode) return null;
+                try {
+                    const decoded = window.atob(inputCode.trim());
+                    const parts = decoded.split('|');
+                    if (parts.length === 2 && parts[0].startsWith('http')) {
+                        localStorage.setItem('tripSplitter_cloudAccess', inputCode.trim());
+                        storedAccessCode = inputCode.trim();
+                    } else { alert("Invalid Access Code format."); return null; }
+                } catch(e) { alert("Invalid Access Code. Ensure it is properly Base64 encoded."); return null; }
+            }
+            const decodedConfig = window.atob(storedAccessCode);
+            const [url, key] = decodedConfig.split('|');
+            supabaseClient = supabase.createClient(url, key);
+            return supabaseClient;
+        }
 
-        // --- CURRENCY SETTINGS ---
+        function resetSupabaseConfig() {
+            if(confirm("Clear your Cloud Access Code from this browser? You will need to re-enter it to sync to the cloud.")) {
+                localStorage.removeItem('tripSplitter_cloudAccess');
+                supabaseClient = null;
+                alert("Cloud configuration cleared.");
+            }
+        }
+
+        async function saveToSupabase() {
+            const client = getSupabase();
+            if (!client) return;
+            const payload = { tripName, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort };
+            const btn = document.getElementById('cloud-save-btn');
+            btn.innerText = "⏳ Saving...";
+            const { data, error } = await client.from('trip_sync').upsert({ id: 'current_trip', trip_data: payload });
+            if (error) { console.error(error); alert("Error saving to cloud: " + error.message); } 
+            else { alert("✅ Trip saved to the cloud successfully!"); }
+            btn.innerText = "☁️ Save Cloud";
+        }
+
+        async function loadFromSupabase() {
+            const client = getSupabase();
+            if (!client) return;
+            const btn = document.getElementById('cloud-load-btn');
+            btn.innerText = "⏳ Loading...";
+            const { data, error } = await client.from('trip_sync').select('trip_data').eq('id', 'current_trip').single();
+            if (error) { console.error(error); alert("Error loading from cloud: " + error.message); } 
+            else if (data && data.trip_data) {
+                const parsedData = data.trip_data;
+                tripName = parsedData.tripName || "Imported Trip"; 
+                participants = parsedData.participants || []; 
+                participantGroups = parsedData.participantGroups || {};
+                expenses = parsedData.expenses || [];
+                secondaryCurrency = parsedData.secondaryCurrency || "";
+                currentExchangeRate = parsedData.currentExchangeRate || 1;
+                currentSort = parsedData.currentSort || 'date-desc';
+                
+                activeCategoryFilters = new Set(Object.keys(CATEGORIES)); 
+                repairLegacyData();
+                document.getElementById('trip-name').value = tripName;
+                document.getElementById('global-currency').value = secondaryCurrency;
+                document.getElementById('ledger-sort').value = currentSort;
+                
+                saveState(); updateCurrencySelectors(); updateUI(); cancelEdit();
+                alert("✅ Trip loaded from cloud!");
+            } else { alert("No trip data found in the cloud."); }
+            btn.innerText = "☁️ Load Cloud";
+        }
+
+        // --- 5. CURRENCY & FORMATTING ---
         async function fetchExchangeRate(targetCurrency, isSilent = false) {
             if (!targetCurrency || targetCurrency === 'USD') return false;
             if (!isSilent) document.getElementById('rate-display').innerText = 'Loading...';
@@ -848,7 +795,7 @@
                     return false;
                 }
             } catch (e) {
-                console.error('Failed to fetch rate', e);
+                console.error(e);
                 if (!isSilent) alert("Failed to connect to currency API. Using offline rate if available.");
                 document.getElementById('rate-display').innerText = `(Offline Rate: 1 USD = ${currentExchangeRate.toFixed(3)} ${targetCurrency})`;
                 return true; 
@@ -861,23 +808,16 @@
                 secondaryCurrency = ""; currentExchangeRate = 1;
                 document.getElementById('rate-display').innerText = '';
                 document.getElementById('global-currency').value = "";
-                saveState(); updateCurrencySelectors(); updateUI();
-                return;
+                saveState(); updateCurrencySelectors(); updateUI(); return;
             }
-            if (inputVal.length !== 3) {
-                document.getElementById('global-currency').value = secondaryCurrency; return;
-            }
+            if (inputVal.length !== 3) { document.getElementById('global-currency').value = secondaryCurrency; return; }
             const success = await fetchExchangeRate(inputVal, false);
             if (success) {
-                secondaryCurrency = inputVal; saveState();
-                updateCurrencySelectors(); updateUI();
+                secondaryCurrency = inputVal; saveState(); updateCurrencySelectors(); updateUI();
             } else {
                 document.getElementById('global-currency').value = secondaryCurrency;
-                if (secondaryCurrency) {
-                    document.getElementById('rate-display').innerText = `(1 USD = ${currentExchangeRate.toFixed(3)} ${secondaryCurrency})`;
-                } else {
-                    document.getElementById('rate-display').innerText = '';
-                }
+                if (secondaryCurrency) document.getElementById('rate-display').innerText = `(1 USD = ${currentExchangeRate.toFixed(3)} ${secondaryCurrency})`;
+                else document.getElementById('rate-display').innerText = '';
             }
         }
 
@@ -885,10 +825,8 @@
             const expSelector = document.getElementById('exp-currency');
             const viewSelector = document.getElementById('view-currency');
             const viewContainer = document.getElementById('dashboard-currency-toggle');
-            
             const currExpVal = expSelector.value;
             const currViewVal = viewSelector.value;
-
             let expHtml = `<option value="USD">USD</option>`;
             let viewHtml = `<option value="USD">🇺🇸 USD ($)</option>`;
             
@@ -897,9 +835,7 @@
                 expHtml += `<option value="${secondaryCurrency}">${secondaryCurrency}</option>`;
                 viewHtml += `<option value="${secondaryCurrency}">🌎 ${secondaryCurrency} (${sym})</option>`;
                 viewContainer.style.display = 'flex';
-            } else {
-                viewContainer.style.display = 'none';
-            }
+            } else { viewContainer.style.display = 'none'; }
             
             expSelector.innerHTML = expHtml;
             viewSelector.innerHTML = viewHtml;
@@ -910,34 +846,23 @@
 
         function formatMoney(amountInUsd) {
             const displayCur = document.getElementById('view-currency').value || 'USD';
-            if (displayCur === 'USD') {
-                return `$${amountInUsd.toFixed(2)}`;
-            } else {
+            if (displayCur === 'USD') { return `$${amountInUsd.toFixed(2)}`; } 
+            else {
                 const converted = amountInUsd * currentExchangeRate;
                 const sym = CURRENCY_SYMBOLS[displayCur] ? CURRENCY_SYMBOLS[displayCur] : displayCur + ' ';
                 return `${sym}${converted.toFixed(2)}`;
             }
         }
 
-        function handleSortChange() {
-            currentSort = document.getElementById('ledger-sort').value;
-            saveState();
-            updateUI();
-        }
-
-        function handleParticipantKeyPress(event) {
-            if (event.key === 'Enter') { event.preventDefault(); addParticipant(); }
-        }
+        // --- 6. PARTICIPANTS CRUD ---
+        function handleParticipantKeyPress(event) { if (event.key === 'Enter') { event.preventDefault(); addParticipant(); } }
 
         function addParticipant() {
             const val = document.getElementById('new-participant').value.trim().toUpperCase();
             let groupVal = document.getElementById('new-participant-group').value.trim();
-            
             if (val && !participants.includes(val)) {
-                participants.push(val);
-                participantGroups[val] = groupVal || val;
-                document.getElementById('new-participant').value = '';
-                document.getElementById('new-participant-group').value = ''; 
+                participants.push(val); participantGroups[val] = groupVal || val;
+                document.getElementById('new-participant').value = ''; document.getElementById('new-participant-group').value = ''; 
                 saveState(); updateUI();
             } else if (participants.includes(val)) alert("Participant already added!");
         }
@@ -947,17 +872,11 @@
             if (!newNameInput) return;
             const newName = newNameInput.trim().toUpperCase();
             if (newName === oldName || newName === "") return;
-            
-            if (newName.length > 10) {
-                alert("Name is too long! Please keep it to 10 characters or less.");
-                return;
-            }
-
+            if (newName.length > 10) { alert("Name is too long! Please keep it to 10 characters or less."); return; }
             if (participants.includes(newName)) { alert("Name already exists."); return; }
 
             const idx = participants.indexOf(oldName);
             participants[idx] = newName;
-            
             participantGroups[newName] = participantGroups[oldName] === oldName ? newName : participantGroups[oldName];
             delete participantGroups[oldName];
 
@@ -965,14 +884,11 @@
                 if (e.payer === oldName) e.payer = newName;
                 const involvedIdx = e.involved.indexOf(oldName);
                 if (involvedIdx > -1) e.involved[involvedIdx] = newName;
-                
                 if (e.personalExpenses && e.personalExpenses[oldName]) {
-                    e.personalExpenses[newName] = e.personalExpenses[oldName];
-                    delete e.personalExpenses[oldName];
+                    e.personalExpenses[newName] = e.personalExpenses[oldName]; delete e.personalExpenses[oldName];
                 }
                 if (e.percentageShares && e.percentageShares[oldName]) {
-                    e.percentageShares[newName] = e.percentageShares[oldName];
-                    delete e.percentageShares[oldName];
+                    e.percentageShares[newName] = e.percentageShares[oldName]; delete e.percentageShares[oldName];
                 }
             });
             saveState(); updateUI();
@@ -982,18 +898,13 @@
             const currentGroup = participantGroups[name] === name ? "" : participantGroups[name];
             let newGroup = prompt(`Assign ${name} to a Family/Group:\n(Leave blank to keep them separate)`, currentGroup);
             if (newGroup === null) return; 
-            
-            newGroup = newGroup.trim();
-            participantGroups[name] = newGroup || name;
+            participantGroups[name] = newGroup.trim() || name;
             saveState(); updateUI();
         }
 
         function deleteParticipant(name) {
             const inUse = expenses.some(e => e.payer === name || e.involved.includes(name));
-            if (inUse) {
-                alert(`Cannot delete ${name} because they are tied to an existing activity. Please edit or delete those activities first.`);
-                return;
-            }
+            if (inUse) { alert(`Cannot delete ${name} because they are tied to an existing activity.`); return; }
             if (confirm(`Remove ${name} from the trip?`)) {
                 participants = participants.filter(p => p !== name);
                 delete participantGroups[name];
@@ -1013,36 +924,26 @@
                 const data = JSON.parse(saved);
                 const savedParticipants = Array.isArray(data) ? data : data.participants;
                 const savedGroups = Array.isArray(data) ? {} : (data.participantGroups || {});
-                
                 let added = 0;
                 savedParticipants.forEach(p => { 
                     if (!participants.includes(p)) { 
-                        participants.push(p); 
-                        participantGroups[p] = savedGroups[p] || p;
-                        added++; 
+                        participants.push(p); participantGroups[p] = savedGroups[p] || p; added++; 
                     } 
                 });
-                saveState(); updateUI();
-                alert(`Loaded ${added} participants from your saved setup.`);
+                saveState(); updateUI(); alert(`Loaded ${added} participants from your saved setup.`);
             } else { alert("No saved setup found."); }
         }
 
+        // --- 7. INPUT FORM LOGIC ---
         function updatePayerColor() {
             const pSelect = document.getElementById('exp-payer');
             const val = pSelect.value;
-            if (val) {
-                pSelect.style.color = getColor(val);
-                pSelect.style.fontWeight = '800';
-            } else {
-                pSelect.style.color = 'var(--text)';
-                pSelect.style.fontWeight = 'normal';
-            }
+            if (val) { pSelect.style.color = getColor(val); pSelect.style.fontWeight = '800'; } 
+            else { pSelect.style.color = 'var(--text)'; pSelect.style.fontWeight = 'normal'; }
         }
 
         function toggleAllCheckboxes(state) {
-            document.querySelectorAll('#participant-list-inputs .part-checkbox').forEach(cb => {
-                cb.checked = state;
-            });
+            document.querySelectorAll('#participant-list-inputs .part-checkbox').forEach(cb => { cb.checked = state; });
             const master = document.getElementById('master-participant-checkbox');
             if (master) master.checked = state;
             calculateRemainingPercentage();
@@ -1052,13 +953,9 @@
             const master = document.getElementById('master-participant-checkbox');
             if (!master) return;
             const checkboxes = document.querySelectorAll('#participant-list-inputs .part-checkbox');
-            if (checkboxes.length === 0) {
-                master.checked = false;
-                return;
-            }
+            if (checkboxes.length === 0) { master.checked = false; return; }
             const allChecked = Array.from(checkboxes).every(cb => cb.checked);
             const someChecked = Array.from(checkboxes).some(cb => cb.checked);
-            
             master.checked = allChecked;
             master.indeterminate = someChecked && !allChecked;
             calculateRemainingPercentage();
@@ -1071,21 +968,13 @@
             
             if (type === 'percentage') {
                 helper.innerHTML = `<em>Enter % for specific people. The rest divides equally.</em> <strong id="perc-remaining" style="margin-left: 5px; padding: 2px 6px; background: #e2e8f0; border-radius: 4px;">100% left</strong>`;
-                inputs.forEach(input => {
-                    input.placeholder = "Share %";
-                    input.max = "100";
-                    if(!editingExpenseId) input.value = '';
-                });
+                inputs.forEach(input => { input.placeholder = "Share %"; input.max = "100"; if(!editingExpenseId) input.value = ''; });
                 calculateRemainingPercentage();
             } else {
                 const cur = document.getElementById('exp-currency').value;
                 const sym = CURRENCY_SYMBOLS[cur] ? CURRENCY_SYMBOLS[cur] : cur;
                 helper.innerHTML = '<em>Add personal items to be excluded from the equal split.</em>';
-                inputs.forEach(input => {
-                    input.placeholder = `+ Pers. ${sym}`;
-                    input.removeAttribute('max');
-                    if(!editingExpenseId) input.value = '';
-                });
+                inputs.forEach(input => { input.placeholder = `+ Pers. ${sym}`; input.removeAttribute('max'); if(!editingExpenseId) input.value = ''; });
             }
         }
         
@@ -1093,7 +982,6 @@
 
         function calculateRemainingPercentage() {
             if (document.getElementById('exp-split-type').value !== 'percentage') return;
-            
             let totalEntered = 0;
             document.querySelectorAll('.participant-row').forEach(row => {
                 if(row.querySelector('.part-checkbox').checked) {
@@ -1101,7 +989,6 @@
                     if (!isNaN(val)) totalEntered += val;
                 }
             });
-            
             const remaining = 100 - totalEntered;
             const remEl = document.getElementById('perc-remaining');
             if (remEl) {
@@ -1112,15 +999,16 @@
             }
         }
 
+        // --- 8. EXPENSE CRUD ---
+        function handleSortChange() { currentSort = document.getElementById('ledger-sort').value; saveState(); updateUI(); }
+
         function saveExpense() {
             const category = document.getElementById('exp-category').value;
             const desc = document.getElementById('exp-desc').value;
             const notes = document.getElementById('exp-notes').value.trim();
             const date = document.getElementById('exp-date').value;
-            
             const localAmount = parseFloat(document.getElementById('exp-amount').value);
             const localCurrency = document.getElementById('exp-currency').value;
-            
             const payer = document.getElementById('exp-payer').value;
             const splitType = document.getElementById('exp-split-type').value;
             
@@ -1136,34 +1024,24 @@
                 if (cb.checked) {
                     const name = cb.value;
                     selected.push(name);
-                    
                     const pInput = row.querySelector('.part-personal').value;
                     const pAmt = parseFloat(pInput);
                     
                     if (!isNaN(pAmt) && pAmt > 0) {
-                        if (splitType === 'equal') {
-                            personalExpensesLocal[name] = pAmt;
-                            totalPersonalAmtLocal += pAmt;
-                        } else {
-                            percentageShares[name] = pAmt;
-                            totalPercentageEntered += pAmt;
-                        }
+                        if (splitType === 'equal') { personalExpensesLocal[name] = pAmt; totalPersonalAmtLocal += pAmt; } 
+                        else { percentageShares[name] = pAmt; totalPercentageEntered += pAmt; }
                     }
                 }
             });
 
             if (!desc || isNaN(localAmount) || localAmount <= 0 || !payer || selected.length === 0) {
-                alert("Please fill all fields, enter a valid amount, and select at least one participant.");
-                return;
+                alert("Please fill all fields, enter a valid amount, and select at least one participant."); return;
             }
-
             if (splitType === 'equal' && totalPersonalAmtLocal > localAmount) {
-                alert(`Total personal expenses (${totalPersonalAmtLocal}) cannot exceed the total check amount (${localAmount}).`);
-                return;
+                alert(`Total personal expenses (${totalPersonalAmtLocal}) cannot exceed the total check amount (${localAmount}).`); return;
             }
             if (splitType === 'percentage' && totalPercentageEntered > 100.01) {
-                alert(`Total percentages entered (${totalPercentageEntered}%) cannot exceed 100%.`);
-                return;
+                alert(`Total percentages entered (${totalPercentageEntered}%) cannot exceed 100%.`); return;
             }
 
             let amountUsd = localAmount;
@@ -1172,38 +1050,28 @@
             if (localCurrency !== 'USD' && currentExchangeRate > 0) {
                 amountUsd = localAmount / currentExchangeRate;
                 if (splitType === 'equal') {
-                    Object.keys(personalExpensesLocal).forEach(k => {
-                        personalExpensesUsd[k] = personalExpensesLocal[k] / currentExchangeRate;
-                    });
+                    Object.keys(personalExpensesLocal).forEach(k => { personalExpensesUsd[k] = personalExpensesLocal[k] / currentExchangeRate; });
                 }
-            } else {
-                personalExpensesUsd = personalExpensesLocal;
-            }
+            } else { personalExpensesUsd = personalExpensesLocal; }
 
             if (editingExpenseId) {
                 const index = expenses.findIndex(e => e.id === editingExpenseId);
                 if (index > -1) {
-                    const existingIgnored = expenses[index].ignored;
-                    const existingTimestamp = expenses[index].timestamp; 
                     expenses[index] = { 
-                        id: editingExpenseId, category, desc, notes, date, 
-                        amount: amountUsd, localAmount, localCurrency, 
+                        id: editingExpenseId, category, desc, notes, date, amount: amountUsd, localAmount, localCurrency, 
                         payer, splitType, involved: selected, personalExpenses: personalExpensesUsd, 
-                        percentageShares, ignored: existingIgnored, timestamp: existingTimestamp 
+                        percentageShares, ignored: expenses[index].ignored, timestamp: expenses[index].timestamp 
                     };
                 }
                 cancelEdit(); 
             } else {
                 expenses.push({ 
-                    id: Math.random().toString(36).substr(2, 9), category, desc, notes, date, 
-                    amount: amountUsd, localAmount, localCurrency, 
+                    id: Math.random().toString(36).substr(2, 9), category, desc, notes, date, amount: amountUsd, localAmount, localCurrency, 
                     payer, splitType, involved: selected, personalExpenses: personalExpensesUsd, 
                     percentageShares, ignored: false, timestamp: Date.now() 
                 });
-                document.getElementById('exp-desc').value = '';
-                document.getElementById('exp-notes').value = '';
-                document.getElementById('exp-amount').value = '';
-                document.querySelectorAll('.part-personal').forEach(input => input.value = ''); 
+                document.getElementById('exp-desc').value = ''; document.getElementById('exp-notes').value = '';
+                document.getElementById('exp-amount').value = ''; document.querySelectorAll('.part-personal').forEach(input => input.value = ''); 
                 calculateRemainingPercentage();
             }
             saveState(); updateUI();
@@ -1219,9 +1087,7 @@
             document.getElementById('exp-desc').value = exp.desc;
             document.getElementById('exp-notes').value = exp.notes || '';
             document.getElementById('exp-date').value = exp.date;
-            
             document.getElementById('exp-currency').value = exp.localCurrency || 'USD';
-            
             document.getElementById('exp-split-type').value = exp.splitType || 'equal';
             
             renderParticipantInputs();
@@ -1238,26 +1104,18 @@
                         pInput.value = exp.percentageShares[name];
                     } else if ((!exp.splitType || exp.splitType === 'equal') && exp.personalExpenses && exp.personalExpenses[name]) {
                         let pVal = exp.personalExpenses[name];
-                        if (exp.localCurrency !== 'USD' && currentExchangeRate > 0) {
-                            pVal = pVal * currentExchangeRate;
-                        }
+                        if (exp.localCurrency !== 'USD' && currentExchangeRate > 0) pVal = pVal * currentExchangeRate;
                         pInput.value = pVal.toFixed(2);
-                    } else {
-                        pInput.value = '';
-                    }
-                } else {
-                    cb.checked = false;
-                    pInput.value = '';
-                }
+                    } else { pInput.value = ''; }
+                } else { cb.checked = false; pInput.value = ''; }
             });
             checkMasterCheckboxState();
 
             document.getElementById('save-expense-btn').innerText = "Update Activity";
             document.getElementById('cancel-edit-btn').style.display = "block";
-            
             document.getElementById('activity-card').classList.add('edit-mode');
-            
             document.getElementById('exp-amount').value = exp.localAmount || exp.amount;
+            
             updateUI(); 
             document.getElementById('exp-payer').value = exp.payer; 
             updatePayerColor(); 
@@ -1266,15 +1124,10 @@
                 if (window.innerWidth >= 1024) {
                     const colLeft = document.querySelector('.col-left');
                     if (colLeft) colLeft.scrollTo({ top: 0, behavior: 'smooth' });
-                    
                     const activeRow = document.getElementById(`exp-row-${id}`);
                     const colMid = document.querySelector('.col-mid');
-                    if (activeRow && colMid) {
-                        colMid.scrollTo({ top: activeRow.offsetTop - 120, behavior: 'smooth' }); 
-                    }
-                } else {
-                    document.getElementById('activity-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }
+                    if (activeRow && colMid) colMid.scrollTo({ top: activeRow.offsetTop - 120, behavior: 'smooth' }); 
+                } else { document.getElementById('activity-card').scrollIntoView({ behavior: 'smooth', block: 'start' }); }
             }, 50);
         }
 
@@ -1282,23 +1135,16 @@
             const exp = expenses.find(e => e.id === id);
             if (exp) {
                 const newExp = JSON.parse(JSON.stringify(exp));
-                newExp.id = Math.random().toString(36).substr(2, 9);
-                newExp.timestamp = Date.now(); 
+                newExp.id = Math.random().toString(36).substr(2, 9); newExp.timestamp = Date.now(); 
                 
-                let baseDesc = exp.desc.replace(/ #\d+$/, '');
-                let maxNum = 1; 
-                
+                let baseDesc = exp.desc.replace(/ #\d+$/, ''); let maxNum = 1; 
                 expenses.forEach(e => {
                     let m = e.desc.match(/(.*?) #(\d+)$/);
-                    let name = m ? m[1] : e.desc;
-                    let num = m ? parseInt(m[2], 10) : 1;
+                    let name = m ? m[1] : e.desc; let num = m ? parseInt(m[2], 10) : 1;
                     if (name === baseDesc && num >= maxNum) maxNum = num;
                 });
-                
                 newExp.desc = `${baseDesc} #${maxNum + 1}`;
-                expenses.push(newExp);
-                saveState(); 
-                updateUI();
+                expenses.push(newExp); saveState(); updateUI();
 
                 setTimeout(() => {
                     const row = document.getElementById(`exp-row-${newExp.id}`);
@@ -1306,13 +1152,9 @@
                         if (window.innerWidth >= 1024) {
                             const colMid = document.querySelector('.col-mid');
                             if (colMid) colMid.scrollTo({ top: row.offsetTop - 120, behavior: 'smooth' });
-                        } else {
-                            row.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        }
-                        
+                        } else { row.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
                         const originalBg = row.style.background;
-                        row.style.transition = 'background-color 0.5s ease';
-                        row.style.backgroundColor = '#fef08a'; 
+                        row.style.transition = 'background-color 0.5s ease'; row.style.backgroundColor = '#fef08a'; 
                         setTimeout(() => { row.style.backgroundColor = originalBg; }, 1200);
                     }
                 }, 50);
@@ -1322,53 +1164,21 @@
         function deleteExpense(id) {
             if (confirm("Delete this activity completely?")) {
                 if (editingExpenseId === id) cancelEdit();
-                expenses = expenses.filter(e => e.id !== id);
-                saveState(); updateUI();
+                expenses = expenses.filter(e => e.id !== id); saveState(); updateUI();
             }
         }
         
         function toggleIgnore(id) {
             const exp = expenses.find(e => e.id === id);
-            if (exp) {
-                exp.ignored = !exp.ignored;
-                saveState(); updateUI();
-            }
+            if (exp) { exp.ignored = !exp.ignored; saveState(); updateUI(); }
         }
 
         function toggleAllExpenses(ignoreState) {
             if (expenses.length === 0) return;
             const actionText = ignoreState ? "ignore" : "include";
             if (confirm(`Are you sure you want to ${actionText} ALL activities?`)) {
-                expenses.forEach(e => e.ignored = ignoreState);
-                saveState(); updateUI();
+                expenses.forEach(e => e.ignored = ignoreState); saveState(); updateUI();
             }
-        }
-
-        function toggleCategoryFilter(cat) {
-            if (activeCategoryFilters.has(cat)) {
-                activeCategoryFilters.delete(cat);
-            } else {
-                activeCategoryFilters.add(cat);
-            }
-            updateUI();
-        }
-
-        function renderCategoryFilters() {
-            const container = document.getElementById('category-filters');
-            let html = '';
-            Object.keys(CATEGORIES).forEach(cat => {
-                const info = CATEGORIES[cat];
-                const isActive = activeCategoryFilters.has(cat);
-                const opacity = isActive ? '1' : '0.5';
-                const bg = isActive ? info.bg : '#f8fafc';
-                const border = isActive ? info.color : '#cbd5e1';
-                const textCol = isActive ? info.color : '#64748b';
-                
-                html += `<button class="cat-filter-btn" style="opacity: ${opacity}; background: ${bg}; border: 1px solid ${border}; color: ${textCol};" onclick="toggleCategoryFilter('${cat}')" title="Toggle ${cat}">
-                            ${info.icon} ${cat}
-                         </button>`;
-            });
-            container.innerHTML = html;
         }
 
         function cancelEdit() {
@@ -1383,10 +1193,27 @@
             document.getElementById('exp-payer').value = '';
             document.getElementById('exp-split-type').value = 'equal';
             document.getElementById('activity-card').classList.remove('edit-mode');
-            updatePayerColor();
-            updateSplitTypeUI();
+            updatePayerColor(); updateSplitTypeUI();
             document.querySelectorAll('.part-personal').forEach(input => input.value = ''); 
             updateUI();
+        }
+
+        // --- 9. RENDERING & UI UPDATES ---
+        function toggleCategoryFilter(cat) {
+            if (activeCategoryFilters.has(cat)) activeCategoryFilters.delete(cat);
+            else activeCategoryFilters.add(cat);
+            updateUI();
+        }
+
+        function renderCategoryFilters() {
+            const container = document.getElementById('category-filters'); let html = '';
+            Object.keys(CATEGORIES).forEach(cat => {
+                const info = CATEGORIES[cat]; const isActive = activeCategoryFilters.has(cat);
+                const opacity = isActive ? '1' : '0.5'; const bg = isActive ? info.bg : '#f8fafc';
+                const border = isActive ? info.color : '#cbd5e1'; const textCol = isActive ? info.color : '#64748b';
+                html += `<button class="cat-filter-btn" style="opacity: ${opacity}; background: ${bg}; border: 1px solid ${border}; color: ${textCol};" onclick="toggleCategoryFilter('${cat}')" title="Toggle ${cat}">${info.icon} ${cat}</button>`;
+            });
+            container.innerHTML = html;
         }
 
         function renderParticipantInputs() {
@@ -1417,7 +1244,6 @@
                 const c = getColor(p);
                 const hasGroup = participantGroups[p] && participantGroups[p] !== p;
                 const groupText = hasGroup ? `👥 ${participantGroups[p]}` : '👤 Edit Group';
-                
                 return `
                 <div class="tag" style="color: ${c}; background-color: ${c}15; border: 1px solid ${c}40;">
                     <span class="tag-name" onclick="renameParticipant('${p}')">${p}</span>
@@ -1437,7 +1263,7 @@
                 updateSplitTypeUI();
             }
 
-            // --- DATA CALCULATIONS ---
+            // Calculations
             const groupsMap = {};
             participants.forEach(p => {
                 const gName = participantGroups[p] || p;
@@ -1450,26 +1276,17 @@
             
             const groupStats = {};
             Object.keys(groupsMap).forEach(g => {
-                groupStats[g] = { 
-                    paid: 0, owed: 0, members: groupsMap[g], 
-                    catShares: {}, catActivitySets: {}, memberStats: {} 
-                };
+                groupStats[g] = { paid: 0, owed: 0, members: groupsMap[g], catShares: {}, catActivitySets: {}, memberStats: {} };
                 groupsMap[g].forEach(m => {
                     groupStats[g].memberStats[m] = { paid: 0, owed: 0, catShares: {} };
-                    Object.keys(CATEGORIES).forEach(c => {
-                        groupStats[g].memberStats[m].catShares[c] = 0;
-                    });
+                    Object.keys(CATEGORIES).forEach(c => { groupStats[g].memberStats[m].catShares[c] = 0; });
                 });
                 Object.keys(CATEGORIES).forEach(c => {
-                    groupStats[g].catShares[c] = 0;
-                    groupStats[g].catActivitySets[c] = new Set();
+                    groupStats[g].catShares[c] = 0; groupStats[g].catActivitySets[c] = new Set();
                 });
             });
 
-            Object.keys(CATEGORIES).forEach(c => { 
-                categoryTotals[c] = 0; 
-                categoryParticipations[c] = 0; 
-            });
+            Object.keys(CATEGORIES).forEach(c => { categoryTotals[c] = 0; categoryParticipations[c] = 0; });
             
             let totalSpent = 0;
             let biggestSplurge = { desc: 'None', amount: 0, category: 'Other' };
@@ -1486,21 +1303,17 @@
                 categoryTotals[cat] += e.amount;
                 categoryParticipations[cat] += e.involved.length;
                 
-                if (e.amount > biggestSplurge.amount) {
-                    biggestSplurge = { desc: e.desc, amount: e.amount, category: e.category };
-                }
+                if (e.amount > biggestSplurge.amount) biggestSplurge = { desc: e.desc, amount: e.amount, category: e.category };
 
                 groupStats[payerGroup].paid += e.amount;
                 groupStats[payerGroup].memberStats[e.payer].paid += e.amount;
                 
                 if (e.splitType === 'percentage') {
-                    let totalEnteredPerc = 0;
-                    let unenteredCount = 0;
+                    let totalEnteredPerc = 0; let unenteredCount = 0;
                     e.involved.forEach(inv => {
                         if (e.percentageShares && e.percentageShares[inv] !== undefined) totalEnteredPerc += e.percentageShares[inv];
                         else unenteredCount++;
                     });
-                    
                     let defaultPerc = unenteredCount > 0 ? Math.max(0, 100 - totalEnteredPerc) / unenteredCount : 0;
                     
                     e.involved.forEach(p => {
@@ -1509,10 +1322,8 @@
                         const finalShare = e.amount * (pPerc / 100);
                         
                         if (finalShare > 0) {
-                            groupStats[involvedGroup].owed += finalShare;
-                            groupStats[involvedGroup].memberStats[p].owed += finalShare;
-                            groupStats[involvedGroup].catShares[cat] += finalShare;
-                            groupStats[involvedGroup].memberStats[p].catShares[cat] += finalShare;
+                            groupStats[involvedGroup].owed += finalShare; groupStats[involvedGroup].memberStats[p].owed += finalShare;
+                            groupStats[involvedGroup].catShares[cat] += finalShare; groupStats[involvedGroup].memberStats[p].catShares[cat] += finalShare;
                             groupStats[involvedGroup].catActivitySets[cat].add(e.id);
                         }
                     });
@@ -1528,58 +1339,42 @@
                         const finalShare = baseShare + personal;
                         
                         if (finalShare > 0) {
-                            groupStats[involvedGroup].owed += finalShare;
-                            groupStats[involvedGroup].memberStats[p].owed += finalShare;
-                            groupStats[involvedGroup].catShares[cat] += finalShare;
-                            groupStats[involvedGroup].memberStats[p].catShares[cat] += finalShare;
+                            groupStats[involvedGroup].owed += finalShare; groupStats[involvedGroup].memberStats[p].owed += finalShare;
+                            groupStats[involvedGroup].catShares[cat] += finalShare; groupStats[involvedGroup].memberStats[p].catShares[cat] += finalShare;
                             groupStats[involvedGroup].catActivitySets[cat].add(e.id);
                         }
                     });
                 }
             });
 
-            // 2. Render Activity History List (Sorted & Filtered)
+            // Ledger Output
             const eList = document.getElementById('expense-list');
-            
             let sorted = [...expenses];
-            if (currentSort === 'date-desc') {
-                sorted.sort((a,b) => new Date(b.date) - new Date(a.date) || b.timestamp - a.timestamp);
-            } else if (currentSort === 'date-asc') {
-                sorted.sort((a,b) => new Date(a.date) - new Date(b.date) || a.timestamp - b.timestamp);
-            } else if (currentSort === 'amt-desc') {
-                sorted.sort((a,b) => b.amount - a.amount || b.timestamp - a.timestamp);
-            } else if (currentSort === 'amt-asc') {
-                sorted.sort((a,b) => a.amount - b.amount || a.timestamp - b.timestamp);
-            } else if (currentSort === 'payer-asc') {
-                sorted.sort((a,b) => a.payer.localeCompare(b.payer) || new Date(b.date) - new Date(a.date) || b.timestamp - a.timestamp);
-            }
+            if (currentSort === 'date-desc') { sorted.sort((a,b) => new Date(b.date) - new Date(a.date) || b.timestamp - a.timestamp); } 
+            else if (currentSort === 'date-asc') { sorted.sort((a,b) => new Date(a.date) - new Date(b.date) || a.timestamp - b.timestamp); } 
+            else if (currentSort === 'amt-desc') { sorted.sort((a,b) => b.amount - a.amount || b.timestamp - a.timestamp); } 
+            else if (currentSort === 'amt-asc') { sorted.sort((a,b) => a.amount - b.amount || a.timestamp - b.timestamp); } 
+            else if (currentSort === 'payer-asc') { sorted.sort((a,b) => a.payer.localeCompare(b.payer) || new Date(b.date) - new Date(a.date) || b.timestamp - a.timestamp); }
 
             const filteredExpenses = sorted.filter(e => activeCategoryFilters.has(e.category || 'Other'));
 
             eList.innerHTML = filteredExpenses.length ? filteredExpenses.map(e => {
-                const payerColor = getColor(e.payer);
-                const catInfo = CATEGORIES[e.category] || CATEGORIES['Other'];
+                const payerColor = getColor(e.payer); const catInfo = CATEGORIES[e.category] || CATEGORIES['Other'];
                 const formattedDate = formatDateDisplay(e.date);
-                
                 let breakdownHtml = '';
-
                 const localSym = CURRENCY_SYMBOLS[e.localCurrency] ? CURRENCY_SYMBOLS[e.localCurrency] : (e.localCurrency ? e.localCurrency + ' ' : '$');
                 let displayMainAmount = `${localSym}${e.localAmount.toFixed(2)}`;
                 let displaySubAmount = '';
                 
-                if (e.localCurrency !== 'USD') {
-                    displaySubAmount = `<br><span style="font-size: 0.8rem; color: var(--secondary);">($${e.amount.toFixed(2)} USD)</span>`;
-                }
+                if (e.localCurrency !== 'USD') displaySubAmount = `<br><span style="font-size: 0.8rem; color: var(--secondary);">($${e.amount.toFixed(2)} USD)</span>`;
 
                 if (e.splitType === 'percentage') {
-                    let totalEnteredPerc = 0;
-                    let unenteredCount = 0;
+                    let totalEnteredPerc = 0; let unenteredCount = 0;
                     e.involved.forEach(inv => {
                         if (e.percentageShares && e.percentageShares[inv] !== undefined) totalEnteredPerc += e.percentageShares[inv];
                         else unenteredCount++;
                     });
                     let defaultPerc = unenteredCount > 0 ? Math.max(0, 100 - totalEnteredPerc) / unenteredCount : 0;
-                    
                     breakdownHtml = e.involved.map(p => {
                         const pPerc = (e.percentageShares && e.percentageShares[p] !== undefined) ? e.percentageShares[p] : defaultPerc;
                         const finalShare = e.amount * (pPerc / 100);
@@ -1588,18 +1383,14 @@
                 } else {
                     let totalPersonalForExp = 0;
                     if (e.personalExpenses) Object.values(e.personalExpenses).forEach(val => totalPersonalForExp += val);
-                    const sharedAmount = Math.max(0, e.amount - totalPersonalForExp);
-                    const baseShare = sharedAmount / e.involved.length;
+                    const sharedAmount = Math.max(0, e.amount - totalPersonalForExp); const baseShare = sharedAmount / e.involved.length;
                     
                     breakdownHtml = e.involved.map(p => {
                         const personal = (e.personalExpenses && e.personalExpenses[p]) ? e.personalExpenses[p] : 0;
                         const finalShare = baseShare + personal;
-                        
                         let displayPersonal = personal;
                         const displayCur = document.getElementById('view-currency').value || 'USD';
-                        if (displayCur !== 'USD') {
-                            displayPersonal = personal * currentExchangeRate;
-                        }
+                        if (displayCur !== 'USD') displayPersonal = personal * currentExchangeRate;
                         
                         let personalNote = personal > 0 ? ` <span style="font-size:0.7rem; color: #b45309;">(inc. ${formatMoney(personal)} pers.)</span>` : '';
                         return `<span style="white-space: nowrap;"><span style="color: ${getColor(p)}; font-weight: 600;">${p}</span> <span style="font-size: 0.75rem; color: var(--text);">(${formatMoney(finalShare)}${personalNote})</span></span>`;
@@ -1610,26 +1401,18 @@
                 if (e.notes && e.notes.trim() !== '') {
                     const isUrl = e.notes.startsWith('http://') || e.notes.startsWith('https://');
                     const noteContent = isUrl ? `<a href="${e.notes}" target="_blank" style="color: var(--primary); text-decoration: underline; word-break: break-all;">${e.notes}</a>` : `<span style="word-break: break-word;">${e.notes}</span>`;
-                    notesHtml = `
-                    <div style="margin-top: 8px; padding: 6px 10px; background: rgba(0,0,0,0.02); border-radius: 6px; font-size: 0.8rem; color: var(--secondary); border-left: 3px solid ${catInfo.color}60;">
-                        ${noteContent}
-                    </div>`;
+                    notesHtml = `<div style="margin-top: 8px; padding: 6px 10px; background: rgba(0,0,0,0.02); border-radius: 6px; font-size: 0.8rem; color: var(--secondary); border-left: 3px solid ${catInfo.color}60;">${noteContent}</div>`;
                 }
 
-                const isEditing = editingExpenseId === e.id;
-                const editingClass = isEditing ? 'is-editing' : '';
-                let cardStyle = `background: ${catInfo.bg}; border: 1px solid ${catInfo.color}40;`;
-                const ignoredClass = e.ignored ? 'ignored' : '';
+                const isEditing = editingExpenseId === e.id; const editingClass = isEditing ? 'is-editing' : '';
+                let cardStyle = `background: ${catInfo.bg}; border: 1px solid ${catInfo.color}40;`; const ignoredClass = e.ignored ? 'ignored' : '';
 
                 return `
                 <div id="exp-row-${e.id}" class="expense-item ${ignoredClass} ${editingClass}" style="${cardStyle}">
                     <div class="expense-details">
-                        <span style="color:${catInfo.color}; font-weight: 900; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px;">
-                            ${catInfo.icon} ${e.category}
-                        </span><br>
+                        <span style="color:${catInfo.color}; font-weight: 900; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px;">${catInfo.icon} ${e.category}</span><br>
                         <strong style="font-size: 1.15rem; color: #0f172a;">${e.desc}</strong>
-                        ${e.ignored ? '<span style="color: var(--danger); font-size: 0.8rem; font-weight: bold; margin-left: 5px;">[IGNORED]</span>' : ''}
-                        <br>
+                        ${e.ignored ? '<span style="color: var(--danger); font-size: 0.8rem; font-weight: bold; margin-left: 5px;">[IGNORED]</span>' : ''}<br>
                         <span style="font-size:0.9rem; color:var(--secondary)">
                             ${formattedDate} • Paid by <span style="color:${payerColor}; font-weight:800;">${e.payer}</span><br>
                             <div style="margin-top: 6px; padding-left: 8px; border-left: 2px solid ${catInfo.color}50; font-size: 0.85rem; line-height: 1.5;">
@@ -1650,35 +1433,22 @@
                 </div>`
             }).join('') : '<div style="padding: 20px; text-align: center; color: var(--secondary); background: #f8fafc; border-radius: 8px;"><em>No activities matching selected filters.</em></div>';
 
-
-            // --- NEXT PAYER CALCULATION ---
             const badgeContainer = document.getElementById('next-payer-container');
             if (validActiveCount > 0 && participants.length > 0) {
-                let topDebtor = null;
-                let maxDebt = 0.01; 
-                
+                let topDebtor = null; let maxDebt = 0.01; 
                 Object.keys(groupStats).forEach(gName => {
                     const diff = groupStats[gName].paid - groupStats[gName].owed;
-                    if (diff < -maxDebt) {
-                        maxDebt = Math.abs(diff);
-                        topDebtor = gName;
-                    }
+                    if (diff < -maxDebt) { maxDebt = Math.abs(diff); topDebtor = gName; }
                 });
-
                 if (topDebtor) {
                     badgeContainer.innerHTML = `<div class="next-payer-badge">🚨 Who Should Pay Next? <strong style="color: ${getColor(groupStats[topDebtor].members[0])};">${topDebtor}</strong> (Owes ${formatMoney(maxDebt)})</div>`;
                 } else {
                     badgeContainer.innerHTML = `<div class="next-payer-badge" style="color: var(--green); border-color: #bbf7d0; background: #f0fdf4;">🎉 Everyone is perfectly settled!</div>`;
                 }
-            } else {
-                badgeContainer.innerHTML = '';
-            }
+            } else { badgeContainer.innerHTML = ''; }
 
-            // 3. Render GROUP-AWARE Stats Dashboard
             const statsDiv = document.getElementById('ledger-stats');
-            
             if (validActiveCount > 0 && participants.length > 0) {
-                
                 let statsHtml = `
                 <div style="display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap;">
                     <div class="global-stat-box" style="flex: 1; min-width: 200px; flex-direction: column; align-items: flex-start;">
@@ -1695,12 +1465,9 @@
                 
                 statsHtml += `<div class="section-label">Category Breakdown & Averages</div>`;
                 statsHtml += `<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; margin-bottom: 28px;">`;
-                
                 Object.keys(categoryTotals).forEach(cat => {
                     if (categoryTotals[cat] > 0) {
-                        const info = CATEGORIES[cat];
-                        const avgPerPerson = categoryTotals[cat] / categoryParticipations[cat];
-                        
+                        const info = CATEGORIES[cat]; const avgPerPerson = categoryTotals[cat] / categoryParticipations[cat];
                         statsHtml += `
                         <div style="background:${info.bg}; border: 1px solid ${info.color}40; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
                             <div style="font-size: 0.95rem; font-weight: 800; color: ${info.color}; margin-bottom: 6px;">${info.icon} ${cat}</div>
@@ -1719,22 +1486,16 @@
                 Object.keys(groupStats).forEach(gName => {
                     const stats = groupStats[gName];
                     if (stats.owed === 0 && stats.paid === 0) return; 
-                    
                     const repColor = getColor(stats.members[0]); 
-                    
-                    let topCat = null;
-                    let maxCatAmt = 0;
+                    let topCat = null; let maxCatAmt = 0;
                     
                     let catBreakdownHtml = '<div style="margin-top: 12px; display: flex; flex-direction: column; gap: 8px;">';
                     Object.keys(stats.catShares).forEach(cat => {
                         const amt = stats.catShares[cat];
                         if (amt > 0) {
                             if (amt > maxCatAmt) { maxCatAmt = amt; topCat = cat; }
-                            const icon = CATEGORIES[cat].icon;
-                            const catColor = CATEGORIES[cat].color;
-                            const catBg = CATEGORIES[cat].bg; 
-                            const catActCount = stats.catActivitySets[cat].size;
-                            const catAvg = catActCount > 0 ? formatMoney(amt / catActCount) : '0.00';
+                            const icon = CATEGORIES[cat].icon; const catColor = CATEGORIES[cat].color; const catBg = CATEGORIES[cat].bg; 
+                            const catActCount = stats.catActivitySets[cat].size; const catAvg = catActCount > 0 ? formatMoney(amt / catActCount) : '0.00';
                             
                             catBreakdownHtml += `
                                 <div style="display:flex; justify-content:space-between; align-items: center; background: ${catBg}; border: 1px solid ${catColor}40; padding: 8px 12px; border-radius: 8px;">
@@ -1751,7 +1512,6 @@
                     let individualBreakdownHtml = '';
                     if (stats.members.length > 1) {
                         individualBreakdownHtml += `<details class="indiv-details"><summary>Individual Breakdown</summary><div class="indiv-content">`;
-                        
                         stats.members.forEach(m => {
                             const mStats = stats.memberStats[m];
                             if (mStats.paid > 0 || mStats.owed > 0) {
@@ -1763,7 +1523,6 @@
                                         mCatHtml += `<span style="display: inline-block; background: var(--bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); font-size: 0.7rem; color: var(--secondary);">${icon} ${formatMoney(amt)}</span>`;
                                     }
                                 });
-
                                 individualBreakdownHtml += `
                                     <div style="background: #ffffff; padding: 10px; border-radius: 8px; border: 1px solid var(--border);">
                                         <div style="display:flex; justify-content:space-between; align-items: center; font-size: 0.85rem; margin-bottom: 6px;">
@@ -1773,9 +1532,7 @@
                                                 <span style="color: var(--secondary); font-size: 0.75rem; margin-right: 4px;">Paid:</span><strong style="color: var(--text);">${formatMoney(mStats.paid)}</strong>
                                             </div>
                                         </div>
-                                        <div style="display:flex; flex-wrap: wrap; gap: 4px;">
-                                            ${mCatHtml}
-                                        </div>
+                                        <div style="display:flex; flex-wrap: wrap; gap: 4px;">${mCatHtml}</div>
                                     </div>`;
                             }
                         });
@@ -1783,9 +1540,7 @@
                     }
 
                     const totalGroupActs = new Set();
-                    Object.keys(stats.catActivitySets).forEach(cat => {
-                        stats.catActivitySets[cat].forEach(id => totalGroupActs.add(id));
-                    });
+                    Object.keys(stats.catActivitySets).forEach(cat => { stats.catActivitySets[cat].forEach(id => totalGroupActs.add(id)); });
                     const avgPerActivity = totalGroupActs.size > 0 ? formatMoney(stats.owed / totalGroupActs.size) : '0.00';
                     const topCatDisplay = topCat ? `<span style="color: ${CATEGORIES[topCat].color}; font-weight: 800;">${CATEGORIES[topCat].icon} ${topCat}</span>` : '<span style="color: var(--secondary);">None</span>';
                     const memberSubtext = stats.members.length > 1 ? `<div class="stat-members">Includes: ${stats.members.join(', ')}</div>` : '';
@@ -1794,27 +1549,20 @@
                         <div class="stat-card" style="border-top: 4px solid ${repColor}; padding: 20px;">
                             <div class="stat-name" style="color: ${repColor}; font-size: 1.2rem; margin-bottom: 4px;">${gName}</div>
                             ${memberSubtext}
-                            
                             <div style="background: #f8fafc; padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; font-size: 0.9rem; border: 1px solid var(--border);">
                                 <div style="display:flex; justify-content:space-between; margin-bottom: 8px; align-items: center;">
-                                    <span style="color: var(--secondary); font-weight: 600;">Avg/Activity:</span> 
-                                    <strong style="color: var(--text); font-size: 1rem;">${avgPerActivity}</strong>
+                                    <span style="color: var(--secondary); font-weight: 600;">Avg/Activity:</span> <strong style="color: var(--text); font-size: 1rem;">${avgPerActivity}</strong>
                                 </div>
                                 <div style="display:flex; justify-content:space-between; align-items: center;">
-                                    <span style="color: var(--secondary); font-weight: 600;">Top Spend:</span> 
-                                    ${topCatDisplay}
+                                    <span style="color: var(--secondary); font-weight: 600;">Top Spend:</span> ${topCatDisplay}
                                 </div>
                             </div>
-
                             <div style="display:flex; justify-content:space-between; margin-bottom: 12px; font-size: 1.05rem; align-items: center;">
-                                <span style="font-weight: 600; color: var(--secondary);">Total Paid:</span> 
-                                <strong style="color: var(--text); font-size: 1.15rem;">${formatMoney(stats.paid)}</strong>
+                                <span style="font-weight: 600; color: var(--secondary);">Total Paid:</span> <strong style="color: var(--text); font-size: 1.15rem;">${formatMoney(stats.paid)}</strong>
                             </div>
-                            
                             <div style="border-top: 2px dotted var(--border); padding-top: 16px;">
                                 <div style="display:flex; justify-content:space-between; font-weight: 800; font-size: 1.15rem; margin-bottom: 4px;">
-                                    <span>Total Share:</span> 
-                                    <span>${formatMoney(stats.owed)}</span>
+                                    <span>Total Share:</span> <span>${formatMoney(stats.owed)}</span>
                                 </div>
                                 ${catBreakdownHtml}
                                 ${individualBreakdownHtml}
@@ -1839,16 +1587,12 @@
 
             const groupBalances = [];
             let html = '<div class="section-label" style="margin-top: 0;">Overall Standing (Filtered)</div>';
-            
             Object.keys(groupStats).forEach(gName => {
                 const diff = groupStats[gName].paid - groupStats[gName].owed;
                 groupBalances.push({ name: gName, net: diff, color: getColor(groupStats[gName].members[0]) }); 
-                
                 let txt = diff > 0.01 ? `is owed ${formatMoney(diff)}` : (diff < -0.01 ? `owes ${formatMoney(Math.abs(diff))}` : 'is settled');
                 let cls = diff > 0.01 ? 'owed' : (diff < -0.01 ? 'owes' : '');
-                
                 const memberText = groupStats[gName].members.length > 1 ? `<div style="font-size: 0.8rem; color: var(--secondary); margin-top: 6px;">Members: ${groupStats[gName].members.join(', ')}</div>` : '';
-
                 html += `<div class="balance-item" style="flex-direction: column; align-items: flex-start; padding: 12px 0;">
                             <div style="display: flex; justify-content: space-between; width: 100%;">
                                 <span style="color: ${groupBalances[groupBalances.length-1].color}; font-weight: 800; font-size: 1.1rem;">${gName}</span>
@@ -1859,24 +1603,15 @@
             });
 
             html += '<div class="section-label" style="margin-top: 25px;">How to Settle Up</div>';
-            
             let debtors = groupBalances.filter(b => b.net < -0.01).map(b => ({ name: b.name, debt: Math.abs(b.net), color: b.color })).sort((a,b) => b.debt - a.debt);
             let creditors = groupBalances.filter(b => b.net > 0.01).map(b => ({ name: b.name, credit: b.net, color: b.color })).sort((a,b) => b.credit - a.credit);
             
-            let settlements = [];
-            let d = 0, c = 0; 
-            
+            let settlements = []; let d = 0, c = 0; 
             while (d < debtors.length && c < creditors.length) {
-                let debtor = debtors[d];
-                let creditor = creditors[c];
+                let debtor = debtors[d]; let creditor = creditors[c];
                 let amount = Math.min(debtor.debt, creditor.credit);
-                
-                if (amount > 0.01) {
-                    settlements.push({ from: debtor, to: creditor, amount: amount });
-                }
-                
-                debtor.debt -= amount;
-                creditor.credit -= amount;
+                if (amount > 0.01) { settlements.push({ from: debtor, to: creditor, amount: amount }); }
+                debtor.debt -= amount; creditor.credit -= amount;
                 if (debtor.debt < 0.01) d++;
                 if (creditor.credit < 0.01) c++;
             }
@@ -1893,7 +1628,6 @@
                 });
                 html += '</div>';
             }
-
             bList.innerHTML = html;
         }
 
