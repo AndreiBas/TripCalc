@@ -120,8 +120,6 @@
         }
         
         .card.edit-mode {
-            background-color: #f0f9ff;
-            border-color: var(--primary);
             box-shadow: 0 4px 15px rgba(37, 99, 235, 0.1);
         }
 
@@ -287,26 +285,62 @@
     <div class="app-container">
         
         <div class="top-bar-area">
-            <div class="header-top-row">
-                <input type="text" id="trip-name" class="trip-name-input" value="My Trip" onchange="updateTripName()">
+            <div class="header-top-row" style="align-items: flex-start;">
                 
-                <div id="next-payer-container"></div>
-
-                <div style="display: flex; align-items: center; background: white; padding: 4px 12px; border-radius: 8px; border: 1px solid var(--border); box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-                    <span style="font-size: 0.85rem; font-weight: bold; margin-right: 8px;" title="Leave blank for USD only">Trip Currency:</span>
-                    <input type="text" id="global-currency" class="currency-selector" style="width: 70px; text-align: center;" placeholder="EUR" maxlength="3" onchange="handleCurrencyChange()">
-                    <span id="rate-display" class="rate-display"></span>
+                <div style="display: flex; flex-direction: column; justify-content: center; gap: 2px;">
+                    <input type="text" id="trip-name" class="trip-name-input" value="My Trip" onchange="updateTripName()">
+                    <span id="cloud-status" style="font-size: 0.75rem; color: var(--secondary); font-weight: bold; min-height: 16px; text-align: center;"></span>
                 </div>
 
-                <div class="header-controls">
-                    <button class="danger outline small" onclick="resetTrip()">🆕 New</button>
-                    <button class="secondary small" onclick="exportTrip()">💾 Save Local</button>
-                    <button class="warning small" onclick="exportSecureTrip()" title="Save with Password Encryption">🔐 Secure</button>
-                    <button class="secondary small" onclick="document.getElementById('file-import').click()">📂 Load Local</button>
-                    <input type="file" id="file-import" accept=".json, .tsplit" style="display:none;" onchange="importTrip(event)">
-                    <button id="cloud-save-btn" class="cloud small" onclick="saveToSupabase()" title="Save to Supabase">☁️ Save Cloud</button>
-                    <button id="cloud-load-btn" class="cloud small" onclick="loadFromSupabase()" title="Load from Supabase">☁️ Load Cloud</button>
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; flex: 1;">
+                    
+                    <div style="display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px;">
+                        <div id="next-payer-container"></div>
+
+                        <div style="display: flex; align-items: center; background: white; padding: 4px 12px; border-radius: 8px; border: 1px solid var(--border); box-shadow: 0 1px 3px rgba(0,0,0,0.05); min-height: 32px;">
+                            <span style="font-size: 0.85rem; font-weight: bold; margin-right: 8px;" title="Leave blank for USD only">Trip Currency:</span>
+                            <input type="text" id="global-currency" class="currency-selector" style="width: 60px; text-align: center; padding: 4px 6px; font-size: 0.85rem;" placeholder="EUR" maxlength="3" onchange="handleCurrencyChange()">
+                            <span id="rate-display" class="rate-display" style="font-size: 0.75rem;"></span>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 6px; flex-wrap: wrap; justify-content: center;">
+                        <button class="danger outline small" onclick="resetTrip()">🆕 New</button>
+                        <button class="secondary small" onclick="exportTrip()">💾 Save Local</button>
+                        <button class="warning small" onclick="exportSecureTrip()" title="Save with Password Encryption">🔐 Secure</button>
+                        <button class="secondary small" onclick="document.getElementById('file-import').click()">📂 Load Local</button>
+                        <input type="file" id="file-import" accept=".json, .tsplit" style="display:none;" onchange="importTrip(event)">
+                    </div>
+
                 </div>
+
+                <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
+                    
+                    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; background: white; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border); width: 130px;">
+                        <span style="font-size: 0.65rem; font-weight: 800; color: var(--secondary); text-transform: uppercase; letter-spacing: 0.5px;">Manual 1</span>
+                        <div style="display: flex; gap: 4px; width: 100%;">
+                            <button id="cloud-save-btn-1" class="cloud small" onclick="saveToSupabase('manual_trip')" style="flex: 1; padding: 4px 2px;">☁️ Save</button>
+                            <button id="cloud-load-btn-1" class="cloud small" onclick="loadFromSupabase('manual_trip')" style="flex: 1; padding: 4px 2px;">☁️ Load</button>
+                        </div>
+                        <span id="manual-cloud-name-1" style="font-size: 0.7rem; color: var(--primary); font-weight: bold; text-align: center; margin-top: auto; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 120px;">Checking...</span>
+                    </div>
+
+                    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; background: white; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border); width: 130px;">
+                        <span style="font-size: 0.65rem; font-weight: 800; color: var(--secondary); text-transform: uppercase; letter-spacing: 0.5px;">Manual 2</span>
+                        <div style="display: flex; gap: 4px; width: 100%;">
+                            <button id="cloud-save-btn-2" class="cloud small" onclick="saveToSupabase('manual_trip_2')" style="flex: 1; padding: 4px 2px;">☁️ Save</button>
+                            <button id="cloud-load-btn-2" class="cloud small" onclick="loadFromSupabase('manual_trip_2')" style="flex: 1; padding: 4px 2px;">☁️ Load</button>
+                        </div>
+                        <span id="manual-cloud-name-2" style="font-size: 0.7rem; color: var(--primary); font-weight: bold; text-align: center; margin-top: auto; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 120px;">Checking...</span>
+                    </div>
+                    
+                    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; background: #f0f9ff; padding: 6px 8px; border-radius: 8px; border: 1px solid #bae6fd; width: 130px;">
+                        <span style="font-size: 0.65rem; font-weight: 800; color: #0284c7; text-transform: uppercase; letter-spacing: 0.5px;">Auto-Backup</span>
+                        <button id="cloud-load-auto-btn" class="cloud small" onclick="loadFromSupabase('auto_trip')" style="background-color: #0284c7; width: 100%; padding: 4px 2px;">☁️ Load Backup</button>
+                        <span id="auto-cloud-name" style="font-size: 0.7rem; color: #0284c7; font-weight: bold; text-align: center; margin-top: auto; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 120px;">Checking...</span>
+                    </div>
+                </div>
+
             </div>
 
             <details class="participants-dropdown">
@@ -341,11 +375,12 @@
                     
                     <div class="form-row">
                         <input type="date" id="exp-date" style="flex: 1;">
-                        <select id="exp-category" style="flex: 1;">
+                        <select id="exp-category" style="flex: 1;" onchange="handleCategoryChange()">
                             <option value="Food">🍔 Food</option>
                             <option value="Transport">🚕 Transport</option>
                             <option value="Travel">✈️ Travel</option>
                             <option value="Fun">🎟️ Fun</option>
+                            <option value="Transfer">💸 Transfer / Repay</option>
                             <option value="Other" selected>📝 Other</option>
                         </select>
                     </div>
@@ -460,12 +495,14 @@
         let currentExchangeRate = 1; 
         let currentSort = 'date-desc';
         let supabaseClient = null;
+        let cloudSyncTimeout = null;
 
         const CATEGORIES = {
             'Food': { icon: '🍔', color: '#d97706', bg: '#fef3c7' },       
             'Transport': { icon: '🚕', color: '#2563eb', bg: '#dbeafe' },  
             'Travel': { icon: '✈️', color: '#7c3aed', bg: '#ede9fe' },     
-            'Fun': { icon: '🎟️', color: '#db2777', bg: '#fce7f3' },     
+            'Fun': { icon: '🎟️', color: '#db2777', bg: '#fce7f3' },    
+            'Transfer': { icon: '💸', color: '#10b981', bg: '#ecfdf5' }, 
             'Other': { icon: '📝', color: '#475569', bg: '#f1f5f9' }       
         };
         const COLORS = ['#2563eb', '#dc2626', '#16a34a', '#d97706', '#9333ea', '#db2777', '#0d9488', '#4f46e5', '#ea580c', '#0284c7'];
@@ -515,6 +552,12 @@
                 tripName, participants, participantGroups, expenses, 
                 secondaryCurrency, currentExchangeRate, currentSort 
             }));
+
+            if (supabaseClient) {
+                document.getElementById('cloud-status').innerText = "⏳ Syncing...";
+                clearTimeout(cloudSyncTimeout);
+                cloudSyncTimeout = setTimeout(silentCloudSave, 3000); 
+            }
         }
 
         function loadState() {
@@ -557,6 +600,7 @@
                 document.getElementById('global-currency').value = "";
                 document.getElementById('ledger-sort').value = "date-desc";
                 document.getElementById('trip-name').value = tripName;
+                document.getElementById('exp-category').value = 'Other';
                 
                 activeCategoryFilters = new Set(Object.keys(CATEGORIES)); 
                 cancelEdit(); 
@@ -567,6 +611,7 @@
                 updateUI();
                 
                 document.getElementById('next-payer-container').innerHTML = '';
+                document.getElementById('cloud-status').innerText = '';
             }
         }
 
@@ -702,10 +747,11 @@
         }
 
         // --- 4. SUPABASE INTEGRATION ---
-        function getSupabase() {
+        function getSupabase(silent = false) {
             if (supabaseClient) return supabaseClient;
             let storedAccessCode = localStorage.getItem('tripSplitter_cloudAccess');
             if (!storedAccessCode) {
+                if (silent) return null; 
                 const inputCode = prompt("☁️ Setup Cloud Sync ☁️\n\nEnter your Base64 encoded Cloud Access Code:");
                 if (!inputCode) return null;
                 try {
@@ -731,45 +777,132 @@
             }
         }
 
-        async function saveToSupabase() {
+        async function fetchCloudTripNames() {
+            const client = getSupabase(true);
+            if (!client) return; 
+            
+            document.getElementById('manual-cloud-name-1').innerText = "Checking...";
+            document.getElementById('manual-cloud-name-2').innerText = "Checking...";
+            document.getElementById('auto-cloud-name').innerText = "Checking...";
+            
+            const { data, error } = await client.from('trip_sync').select('id, trip_data').in('id', ['manual_trip', 'manual_trip_2', 'auto_trip']);
+            
+            if (error) {
+                console.error("Fetch names error:", error);
+                document.getElementById('manual-cloud-name-1').innerText = "Sync Error";
+                document.getElementById('manual-cloud-name-2').innerText = "Sync Error";
+                document.getElementById('auto-cloud-name').innerText = "Sync Error";
+                return;
+            }
+
+            let manualName1 = "Empty";
+            let manualName2 = "Empty";
+            let autoName = "Empty";
+            
+            if (data) {
+                data.forEach(row => {
+                    try {
+                        let parsed = typeof row.trip_data === 'string' ? JSON.parse(row.trip_data) : row.trip_data;
+                        if (row.id === 'manual_trip' && parsed && parsed.tripName) manualName1 = parsed.tripName;
+                        if (row.id === 'manual_trip_2' && parsed && parsed.tripName) manualName2 = parsed.tripName;
+                        if (row.id === 'auto_trip' && parsed && parsed.tripName) autoName = parsed.tripName;
+                    } catch(e) { console.error("Parse error", e); }
+                });
+            }
+            
+            document.getElementById('manual-cloud-name-1').innerText = manualName1;
+            document.getElementById('manual-cloud-name-2').innerText = manualName2;
+            document.getElementById('auto-cloud-name').innerText = autoName;
+        }
+
+        async function saveToSupabase(targetId) {
             const client = getSupabase();
             if (!client) return;
             const payload = { tripName, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort };
-            const btn = document.getElementById('cloud-save-btn');
-            btn.innerText = "⏳ Saving...";
-            const { data, error } = await client.from('trip_sync').upsert({ id: 'current_trip', trip_data: payload });
+            
+            const btnId = targetId === 'manual_trip' ? 'cloud-save-btn-1' : 'cloud-save-btn-2';
+            const btn = document.getElementById(btnId);
+            btn.innerText = "⏳";
+            
+            const { data, error } = await client.from('trip_sync').upsert({ id: targetId, trip_data: payload });
+            
             if (error) { console.error(error); alert("Error saving to cloud: " + error.message); } 
-            else { alert("✅ Trip saved to the cloud successfully!"); }
-            btn.innerText = "☁️ Save Cloud";
+            else { 
+                alert(`✅ Trip saved to ${targetId === 'manual_trip' ? 'Manual 1' : 'Manual 2'} slot in the cloud!`); 
+                fetchCloudTripNames(); 
+            }
+            btn.innerText = "☁️ Save";
         }
 
-        async function loadFromSupabase() {
+        async function silentCloudSave() {
+            const client = getSupabase(true);
+            if (!client) return;
+            
+            const payload = { tripName, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort };
+            const statusEl = document.getElementById('cloud-status');
+            
+            const { error } = await client.from('trip_sync').upsert({ id: 'auto_trip', trip_data: payload });
+            
+            if (error) { 
+                if(statusEl) statusEl.innerText = "❌ Auto-Sync Failed";
+            } else { 
+                if(statusEl) {
+                    const now = new Date();
+                    statusEl.innerText = "✅ Auto-Saved " + now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                    statusEl.style.color = "var(--green)";
+                    setTimeout(() => { statusEl.style.color = "var(--secondary)"; }, 5000);
+                    fetchCloudTripNames(); 
+                }
+            }
+        }
+
+        async function loadFromSupabase(targetId) {
             const client = getSupabase();
             if (!client) return;
-            const btn = document.getElementById('cloud-load-btn');
-            btn.innerText = "⏳ Loading...";
-            const { data, error } = await client.from('trip_sync').select('trip_data').eq('id', 'current_trip').single();
-            if (error) { console.error(error); alert("Error loading from cloud: " + error.message); } 
-            else if (data && data.trip_data) {
-                const parsedData = data.trip_data;
-                tripName = parsedData.tripName || "Imported Trip"; 
-                participants = parsedData.participants || []; 
-                participantGroups = parsedData.participantGroups || {};
-                expenses = parsedData.expenses || [];
-                secondaryCurrency = parsedData.secondaryCurrency || "";
-                currentExchangeRate = parsedData.currentExchangeRate || 1;
-                currentSort = parsedData.currentSort || 'date-desc';
-                
-                activeCategoryFilters = new Set(Object.keys(CATEGORIES)); 
-                repairLegacyData();
-                document.getElementById('trip-name').value = tripName;
-                document.getElementById('global-currency').value = secondaryCurrency;
-                document.getElementById('ledger-sort').value = currentSort;
-                
-                saveState(); updateCurrencySelectors(); updateUI(); cancelEdit();
-                alert("✅ Trip loaded from cloud!");
-            } else { alert("No trip data found in the cloud."); }
-            btn.innerText = "☁️ Load Cloud";
+            
+            let btnId = 'cloud-load-auto-btn';
+            if (targetId === 'manual_trip') btnId = 'cloud-load-btn-1';
+            if (targetId === 'manual_trip_2') btnId = 'cloud-load-btn-2';
+            
+            const btn = document.getElementById(btnId);
+            const originalText = btn.innerText;
+            btn.innerText = "⏳ Load...";
+            
+            const { data, error } = await client.from('trip_sync').select('trip_data').eq('id', targetId).maybeSingle();
+            
+            if (error) { 
+                console.error(error); alert("Error loading from cloud: " + error.message); 
+            } else if (data && data.trip_data) {
+                try {
+                    const parsedData = typeof data.trip_data === 'string' ? JSON.parse(data.trip_data) : data.trip_data;
+                    
+                    tripName = parsedData.tripName || "Imported Trip"; 
+                    participants = parsedData.participants || []; 
+                    participantGroups = parsedData.participantGroups || {};
+                    expenses = parsedData.expenses || [];
+                    secondaryCurrency = parsedData.secondaryCurrency || "";
+                    currentExchangeRate = parsedData.currentExchangeRate || 1;
+                    currentSort = parsedData.currentSort || 'date-desc';
+                    
+                    activeCategoryFilters = new Set(Object.keys(CATEGORIES)); 
+                    repairLegacyData();
+                    document.getElementById('trip-name').value = tripName;
+                    document.getElementById('global-currency').value = secondaryCurrency;
+                    document.getElementById('ledger-sort').value = currentSort;
+                    
+                    saveState(); updateCurrencySelectors(); updateUI(); cancelEdit();
+                    
+                    let slotName = "Autosave";
+                    if(targetId === 'manual_trip') slotName = "Manual 1";
+                    if(targetId === 'manual_trip_2') slotName = "Manual 2";
+                    alert(`✅ Trip loaded from the ${slotName} slot!`);
+                } catch(e) {
+                    alert("Error parsing cloud data."); console.error(e);
+                }
+            } else { 
+                alert("No trip data found in this slot."); 
+            }
+            btn.innerText = originalText;
         }
 
         // --- 5. CURRENCY & FORMATTING ---
@@ -929,6 +1062,27 @@
         }
 
         // --- 7. INPUT FORM LOGIC ---
+        function updateFormColor() {
+            const cat = document.getElementById('exp-category').value;
+            const info = CATEGORIES[cat] || CATEGORIES['Other'];
+            const card = document.getElementById('activity-card');
+            const header = document.getElementById('activity-header');
+
+            card.style.backgroundColor = info.bg;
+            card.style.borderColor = info.color + '60';
+            header.style.color = info.color;
+            header.style.borderBottomColor = info.color + '40';
+        }
+
+        function handleCategoryChange() {
+            updateFormColor();
+            const cat = document.getElementById('exp-category').value;
+            const desc = document.getElementById('exp-desc');
+            if (cat === 'Transfer' && desc.value === '') {
+                desc.value = 'Debt Repayment';
+            }
+        }
+
         function updatePayerColor() {
             const pSelect = document.getElementById('exp-payer');
             const val = pSelect.value;
@@ -1084,6 +1238,7 @@
                 document.getElementById('exp-desc').value = ''; document.getElementById('exp-notes').value = '';
                 document.getElementById('exp-amount').value = ''; document.querySelectorAll('.part-personal').forEach(input => input.value = ''); 
                 calculateRemainingPercentage();
+                updateFormColor();
             }
             saveState(); updateUI();
         }
@@ -1130,6 +1285,7 @@
             updateUI(); 
             document.getElementById('exp-payer').value = exp.payer; 
             updatePayerColor(); 
+            updateFormColor();
             
             setTimeout(() => {
                 if (window.innerWidth >= 1024) {
@@ -1207,11 +1363,11 @@
             updatePayerColor(); updateSplitTypeUI();
             document.querySelectorAll('.part-personal').forEach(input => input.value = ''); 
             
-            // Reset Master Checkbox display
             const checkboxes = document.querySelectorAll('#participant-list-inputs .part-checkbox');
             checkboxes.forEach(cb => cb.checked = true);
             checkMasterCheckboxState();
             
+            updateFormColor();
             updateUI();
         }
 
@@ -1293,13 +1449,18 @@
             
             const groupStats = {};
             Object.keys(groupsMap).forEach(g => {
-                groupStats[g] = { paid: 0, owed: 0, members: groupsMap[g], catShares: {}, catActivitySets: {}, memberStats: {} };
+                groupStats[g] = { paid: 0, owed: 0, members: groupsMap[g], catShares: {}, catPaid: {}, catActivitySets: {}, memberStats: {} };
                 groupsMap[g].forEach(m => {
-                    groupStats[g].memberStats[m] = { paid: 0, owed: 0, catShares: {} };
-                    Object.keys(CATEGORIES).forEach(c => { groupStats[g].memberStats[m].catShares[c] = 0; });
+                    groupStats[g].memberStats[m] = { paid: 0, owed: 0, catShares: {}, catPaid: {} };
+                    Object.keys(CATEGORIES).forEach(c => { 
+                        groupStats[g].memberStats[m].catShares[c] = 0; 
+                        groupStats[g].memberStats[m].catPaid[c] = 0; 
+                    });
                 });
                 Object.keys(CATEGORIES).forEach(c => {
-                    groupStats[g].catShares[c] = 0; groupStats[g].catActivitySets[c] = new Set();
+                    groupStats[g].catShares[c] = 0;
+                    groupStats[g].catPaid[c] = 0;
+                    groupStats[g].catActivitySets[c] = new Set();
                 });
             });
 
@@ -1316,14 +1477,20 @@
                 validActiveCount++;
                 const payerGroup = participantGroups[e.payer] || e.payer;
                 
-                totalSpent += e.amount;
+                // Exclude transfers from global totals, but keep them in group stats
+                if (cat !== 'Transfer') {
+                    totalSpent += e.amount;
+                    if (e.amount > biggestSplurge.amount) biggestSplurge = { desc: e.desc, amount: e.amount, category: e.category };
+                }
+                
                 categoryTotals[cat] += e.amount;
                 categoryParticipations[cat] += e.involved.length;
-                
-                if (e.amount > biggestSplurge.amount) biggestSplurge = { desc: e.desc, amount: e.amount, category: e.category };
 
                 groupStats[payerGroup].paid += e.amount;
                 groupStats[payerGroup].memberStats[e.payer].paid += e.amount;
+                
+                groupStats[payerGroup].catPaid[cat] += e.amount;
+                groupStats[payerGroup].memberStats[e.payer].catPaid[cat] += e.amount;
                 
                 if (e.splitType === 'percentage') {
                     let totalEnteredPerc = 0; let unenteredCount = 0;
@@ -1339,8 +1506,15 @@
                         const finalShare = e.amount * (pPerc / 100);
                         
                         if (finalShare > 0) {
-                            groupStats[involvedGroup].owed += finalShare; groupStats[involvedGroup].memberStats[p].owed += finalShare;
-                            groupStats[involvedGroup].catShares[cat] += finalShare; groupStats[involvedGroup].memberStats[p].catShares[cat] += finalShare;
+                            if (cat === 'Transfer') {
+                                groupStats[involvedGroup].paid -= finalShare;
+                                groupStats[involvedGroup].memberStats[p].paid -= finalShare;
+                            } else {
+                                groupStats[involvedGroup].owed += finalShare;
+                                groupStats[involvedGroup].memberStats[p].owed += finalShare;
+                            }
+                            groupStats[involvedGroup].catShares[cat] += finalShare; 
+                            groupStats[involvedGroup].memberStats[p].catShares[cat] += finalShare;
                             groupStats[involvedGroup].catActivitySets[cat].add(e.id);
                         }
                     });
@@ -1356,8 +1530,15 @@
                         const finalShare = baseShare + personal;
                         
                         if (finalShare > 0) {
-                            groupStats[involvedGroup].owed += finalShare; groupStats[involvedGroup].memberStats[p].owed += finalShare;
-                            groupStats[involvedGroup].catShares[cat] += finalShare; groupStats[involvedGroup].memberStats[p].catShares[cat] += finalShare;
+                            if (cat === 'Transfer') {
+                                groupStats[involvedGroup].paid -= finalShare;
+                                groupStats[involvedGroup].memberStats[p].paid -= finalShare;
+                            } else {
+                                groupStats[involvedGroup].owed += finalShare;
+                                groupStats[involvedGroup].memberStats[p].owed += finalShare;
+                            }
+                            groupStats[involvedGroup].catShares[cat] += finalShare; 
+                            groupStats[involvedGroup].memberStats[p].catShares[cat] += finalShare;
                             groupStats[involvedGroup].catActivitySets[cat].add(e.id);
                         }
                     });
@@ -1483,7 +1664,7 @@
                 statsHtml += `<div class="section-label">Category Breakdown & Averages</div>`;
                 statsHtml += `<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; margin-bottom: 28px;">`;
                 Object.keys(categoryTotals).forEach(cat => {
-                    if (categoryTotals[cat] > 0) {
+                    if (cat !== 'Transfer' && categoryTotals[cat] > 0) {
                         const info = CATEGORIES[cat]; const avgPerPerson = categoryTotals[cat] / categoryParticipations[cat];
                         statsHtml += `
                         <div style="background:${info.bg}; border: 1px solid ${info.color}40; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
@@ -1507,21 +1688,44 @@
                     let topCat = null; let maxCatAmt = 0;
                     
                     let catBreakdownHtml = '<div style="margin-top: 12px; display: flex; flex-direction: column; gap: 8px;">';
-                    Object.keys(stats.catShares).forEach(cat => {
+                    Object.keys(CATEGORIES).forEach(cat => {
                         const amt = stats.catShares[cat];
-                        if (amt > 0) {
-                            if (amt > maxCatAmt) { maxCatAmt = amt; topCat = cat; }
-                            const icon = CATEGORIES[cat].icon; const catColor = CATEGORIES[cat].color; const catBg = CATEGORIES[cat].bg; 
-                            const catActCount = stats.catActivitySets[cat].size; const catAvg = catActCount > 0 ? formatMoney(amt / catActCount) : '0.00';
-                            
-                            catBreakdownHtml += `
-                                <div title="📊 ${cat} Insights:&#10;• Total Activities: ${catActCount}&#10;• Total Spent: ${formatMoney(amt)}&#10;• Avg / Activity: ${catAvg}" style="display:flex; justify-content:space-between; align-items: center; background: ${catBg}; border: 1px solid ${catColor}40; padding: 8px 12px; border-radius: 8px; cursor: help; transition: transform 0.2s;">
-                                    <span style="color: ${catColor}; font-weight: 800; font-size: 0.9rem;">${icon} ${cat}</span> 
-                                    <div style="text-align: right; line-height: 1.3;">
-                                        <span style="color: var(--text); font-weight: 800; font-size: 1rem;">${formatMoney(amt)}</span><br>
-                                        <span style="font-size: 0.75rem; color: var(--secondary); font-weight: 600;">Avg: ${catAvg}/act</span>
-                                    </div>
-                                </div>`;
+                        const paidAmt = stats.catPaid[cat];
+                        const icon = CATEGORIES[cat].icon; const catColor = CATEGORIES[cat].color; const catBg = CATEGORIES[cat].bg; 
+                        
+                        if (cat !== 'Transfer') {
+                            if (amt > 0) {
+                                if (amt > maxCatAmt) { maxCatAmt = amt; topCat = cat; }
+                                const catActCount = stats.catActivitySets[cat].size; const catAvg = catActCount > 0 ? formatMoney(amt / catActCount) : '0.00';
+                                
+                                catBreakdownHtml += `
+                                    <div title="📊 ${cat} Insights:&#10;• Total Activities: ${catActCount}&#10;• Total Spent: ${formatMoney(amt)}&#10;• Avg / Activity: ${catAvg}" style="display:flex; justify-content:space-between; align-items: center; background: ${catBg}; border: 1px solid ${catColor}40; padding: 8px 12px; border-radius: 8px; cursor: help; transition: transform 0.2s;">
+                                        <span style="color: ${catColor}; font-weight: 800; font-size: 0.9rem;">${icon} ${cat}</span> 
+                                        <div style="text-align: right; line-height: 1.3;">
+                                            <span style="color: var(--text); font-weight: 800; font-size: 1rem;">${formatMoney(amt)}</span><br>
+                                            <span style="font-size: 0.75rem; color: var(--secondary); font-weight: 600;">Avg: ${catAvg}/act</span>
+                                        </div>
+                                    </div>`;
+                            }
+                        } else {
+                            if (paidAmt > 0) {
+                                catBreakdownHtml += `
+                                    <div style="display:flex; justify-content:space-between; align-items: center; background: ${catBg}; border: 1px solid ${catColor}40; padding: 8px 12px; border-radius: 8px;">
+                                        <span style="color: ${catColor}; font-weight: 800; font-size: 0.9rem;">${icon} ${cat} (Paid)</span> 
+                                        <div style="text-align: right; line-height: 1.3;">
+                                            <span style="color: var(--text); font-weight: 800; font-size: 1rem;">${formatMoney(paidAmt)}</span>
+                                        </div>
+                                    </div>`;
+                            }
+                            if (amt > 0) {
+                                catBreakdownHtml += `
+                                    <div style="display:flex; justify-content:space-between; align-items: center; background: #fef2f2; border: 1px solid #fecdd3; padding: 8px 12px; border-radius: 8px;">
+                                        <span style="color: var(--danger); font-weight: 800; font-size: 0.9rem;">${icon} ${cat} (Received)</span> 
+                                        <div style="text-align: right; line-height: 1.3;">
+                                            <span style="color: var(--danger); font-weight: 800; font-size: 1rem;">+${formatMoney(amt)}</span>
+                                        </div>
+                                    </div>`;
+                            }
                         }
                     });
                     catBreakdownHtml += '</div>';
@@ -1533,11 +1737,22 @@
                             const mStats = stats.memberStats[m];
                             if (mStats.paid > 0 || mStats.owed > 0) {
                                 let mCatHtml = '';
-                                Object.keys(mStats.catShares).forEach(cat => {
+                                Object.keys(CATEGORIES).forEach(cat => {
                                     const amt = mStats.catShares[cat];
-                                    if (amt > 0) {
-                                        const icon = CATEGORIES[cat].icon;
-                                        mCatHtml += `<span style="display: inline-block; background: var(--bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); font-size: 0.7rem; color: var(--secondary);">${icon} ${formatMoney(amt)}</span>`;
+                                    const paidAmt = mStats.catPaid[cat];
+                                    const icon = CATEGORIES[cat].icon;
+                                    
+                                    if (cat !== 'Transfer') {
+                                        if (amt > 0) {
+                                            mCatHtml += `<span style="display: inline-block; background: var(--bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); font-size: 0.7rem; color: var(--secondary);">${icon} ${formatMoney(amt)}</span>`;
+                                        }
+                                    } else {
+                                        if (paidAmt > 0) {
+                                            mCatHtml += `<span style="display: inline-block; background: var(--bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); font-size: 0.7rem; color: var(--text); font-weight: bold;">${icon} ${formatMoney(paidAmt)}</span>`;
+                                        }
+                                        if (amt > 0) {
+                                            mCatHtml += `<span style="display: inline-block; background: #fef2f2; padding: 2px 6px; border-radius: 4px; border: 1px solid #fecdd3; font-size: 0.7rem; color: var(--danger); font-weight: bold;">${icon} +${formatMoney(amt)}</span>`;
+                                        }
                                     }
                                 });
                                 individualBreakdownHtml += `
@@ -1546,7 +1761,7 @@
                                             <span style="color: ${getColor(m)}; font-weight: 800; font-size: 0.95rem;">${m}</span>
                                             <div style="text-align: right; line-height: 1.3;">
                                                 <span style="color: var(--secondary); font-size: 0.75rem; margin-right: 4px;">Share:</span><strong style="color: var(--text);">${formatMoney(mStats.owed)}</strong><br>
-                                                <span style="color: var(--secondary); font-size: 0.75rem; margin-right: 4px;">Paid:</span><strong style="color: var(--text);">${formatMoney(mStats.paid)}</strong>
+                                                <span style="color: var(--secondary); font-size: 0.75rem; margin-right: 4px;">Net Paid:</span><strong style="color: var(--text);">${formatMoney(mStats.paid)}</strong>
                                             </div>
                                         </div>
                                         <div style="display:flex; flex-wrap: wrap; gap: 4px;">${mCatHtml}</div>
@@ -1557,7 +1772,7 @@
                     }
 
                     const totalGroupActs = new Set();
-                    Object.keys(stats.catActivitySets).forEach(cat => { stats.catActivitySets[cat].forEach(id => totalGroupActs.add(id)); });
+                    Object.keys(stats.catActivitySets).forEach(cat => { if(cat !== 'Transfer') stats.catActivitySets[cat].forEach(id => totalGroupActs.add(id)); });
                     const avgPerActivity = totalGroupActs.size > 0 ? formatMoney(stats.owed / totalGroupActs.size) : '0.00';
                     const topCatDisplay = topCat ? `<span style="color: ${CATEGORIES[topCat].color}; font-weight: 800;">${CATEGORIES[topCat].icon} ${topCat}</span>` : '<span style="color: var(--secondary);">None</span>';
                     const memberSubtext = stats.members.length > 1 ? `<div class="stat-members">Includes: ${stats.members.join(', ')}</div>` : '';
@@ -1575,7 +1790,7 @@
                                 </div>
                             </div>
                             <div style="display:flex; justify-content:space-between; margin-bottom: 12px; font-size: 1.05rem; align-items: center;">
-                                <span style="font-weight: 600; color: var(--secondary);">Total Paid:</span> <strong style="color: var(--text); font-size: 1.15rem;">${formatMoney(stats.paid)}</strong>
+                                <span style="font-weight: 600; color: var(--secondary);">Net Paid:</span> <strong style="color: var(--text); font-size: 1.15rem;">${formatMoney(stats.paid)}</strong>
                             </div>
                             <div style="border-top: 2px dotted var(--border); padding-top: 16px;">
                                 <div style="display:flex; justify-content:space-between; font-weight: 800; font-size: 1.15rem; margin-bottom: 4px;">
@@ -1649,6 +1864,8 @@
         }
 
         loadState();
+        updateFormColor();
+        fetchCloudTripNames();
     </script>
 </body>
 </html>
