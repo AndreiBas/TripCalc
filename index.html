@@ -133,6 +133,9 @@
             max-height: calc(100vh - 120px); position: relative;
         }
         
+        .activity-collapsed #activity-content-wrapper { display: none !important; }
+        .activity-collapsed #activity-toggle-icon { transform: rotate(-90deg); }
+        
         .activity-form-scrollable {
             overflow-y: auto; padding-right: 5px; scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent;
         }
@@ -377,75 +380,82 @@
             </details>
             
             <div class="mobile-quick-nav">
-                <button class="outline small" onclick="document.getElementById('activity-card').scrollIntoView({behavior: 'smooth'})">➕ Add</button>
-                <button class="outline small" onclick="document.getElementById('ledger-card-wrapper').scrollIntoView({behavior: 'smooth'})">📜 Ledger</button>
-                <button class="outline small" onclick="document.getElementById('analytics-section').scrollIntoView({behavior: 'smooth'})">📊 Analytics</button>
-                <button class="outline small" onclick="document.getElementById('settlement-section').scrollIntoView({behavior: 'smooth'})">💸 Settle</button>
+                <button class="outline small" onclick="document.getElementById('activity-card').scrollIntoView({behavior: 'smooth', block: 'start'})">➕ Add</button>
+                <button class="outline small" onclick="document.getElementById('ledger-card-wrapper').scrollIntoView({behavior: 'smooth', block: 'start'})">📜 Ledger</button>
+                <button class="outline small" onclick="document.getElementById('analytics-section').scrollIntoView({behavior: 'smooth', block: 'start'})">📊 Analytics</button>
+                <button class="outline small" onclick="document.getElementById('settlement-section').scrollIntoView({behavior: 'smooth', block: 'start'})">💸 Settle</button>
             </div>
             
         </div>
 
         <div class="col-left">
             <div class="card" id="activity-card">
-                <div class="activity-form-scrollable">
-                    <h2 id="activity-header">➕ Add Activity</h2>
-                    
-                    <div class="form-row">
-                        <input type="date" id="exp-date" style="flex: 1;">
-                        <select id="exp-category" style="flex: 1;" onchange="handleCategoryChange()">
-                            <option value="Food">🍔 Food</option>
-                            <option value="Transport">🚕 Transport</option>
-                            <option value="Travel">✈️ Travel</option>
-                            <option value="Fun">🎟️ Fun</option>
-                            <option value="Transfer">💸 Transfer / Repay</option>
-                            <option value="Other" selected>📝 Other</option>
-                        </select>
-                    </div>
-
-                    <div class="form-row">
-                        <input type="text" id="exp-desc" style="flex: 1;" placeholder="Description (e.g., Dinner)" list="desc-suggestions">
-                        <datalist id="desc-suggestions"></datalist>
-                    </div>
-                    
-                    <div class="form-row">
-                        <div class="amount-currency-group" style="flex: 1.2;">
-                            <input type="number" id="exp-amount" placeholder="Amount" step="0.01">
-                            <select id="exp-currency">
-                                <option value="USD">USD</option>
+                
+                <h2 id="activity-header" style="cursor: pointer; user-select: none; display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px;" onclick="toggleActivityCard()">
+                    <span id="activity-title-text">➕ Add Activity</span>
+                    <span id="activity-toggle-icon" style="transition: transform 0.2s; font-size: 0.8rem;">▼</span>
+                </h2>
+                
+                <div id="activity-content-wrapper" style="display: flex; flex-direction: column; flex: 1; min-height: 0;">
+                    <div class="activity-form-scrollable">
+                        <div class="form-row">
+                            <input type="date" id="exp-date" style="flex: 1;">
+                            <select id="exp-category" style="flex: 1;" onchange="handleCategoryChange()">
+                                <option value="Food">🍔 Food</option>
+                                <option value="Transport">🚕 Transport</option>
+                                <option value="Travel">✈️ Travel</option>
+                                <option value="Fun">🎟️ Fun</option>
+                                <option value="Transfer">💸 Transfer / Repay</option>
+                                <option value="Other" selected>📝 Other</option>
                             </select>
                         </div>
-                        <select id="exp-payer" style="flex: 1;" onchange="updatePayerColor()">
-                            <option value="">Who paid?</option>
-                        </select>
-                    </div>
 
-                    <div class="form-row">
-                        <input type="text" id="exp-notes" placeholder="Notes or Link (Optional)" style="flex: 1;">
-                    </div>
-
-                    <div class="participant-selector">
-                        <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 6px; flex-wrap: wrap; gap: 10px;">
-                            <label class="checkbox-item" style="flex: none; color: var(--primary);">
-                                <input type="checkbox" id="master-participant-checkbox" checked onchange="toggleAllCheckboxes(this.checked)">
-                                <strong id="participant-count-display" style="font-size: 0.9rem;">Who participates?</strong>
-                            </label>
-                            
-                            <div style="display:flex; gap: 6px; align-items: center;">
-                                <select id="exp-split-type" class="split-type-select" onchange="updateSplitTypeUI()">
-                                    <option value="equal">Equal + Extras</option>
-                                    <option value="percentage">Percentage (%)</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div id="split-helper-text" style="font-size: 0.8rem; color: var(--secondary); margin-bottom: 8px;">
-                            <em>Add personal items to be excluded from the equal split.</em>
+                        <div class="form-row">
+                            <input type="text" id="exp-desc" style="flex: 1;" placeholder="Description (e.g., Dinner)" list="desc-suggestions">
+                            <datalist id="desc-suggestions"></datalist>
                         </div>
                         
-                        <div id="participant-list-inputs" class="participant-list-scroller"></div>
+                        <div class="form-row">
+                            <div class="amount-currency-group" style="flex: 1.2;">
+                                <input type="number" id="exp-amount" placeholder="Amount" step="0.01">
+                                <select id="exp-currency">
+                                    <option value="USD">USD</option>
+                                </select>
+                            </div>
+                            <select id="exp-payer" style="flex: 1;" onchange="updatePayerColor()">
+                                <option value="">Who paid?</option>
+                            </select>
+                        </div>
+
+                        <div class="form-row">
+                            <input type="text" id="exp-notes" placeholder="Notes or Link (Optional)" style="flex: 1;">
+                        </div>
+
+                        <div class="participant-selector">
+                            <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 6px; flex-wrap: wrap; gap: 10px;">
+                                <label class="checkbox-item" style="flex: none; color: var(--primary);">
+                                    <input type="checkbox" id="master-participant-checkbox" checked onchange="toggleAllCheckboxes(this.checked)">
+                                    <strong id="participant-count-display" style="font-size: 0.9rem;">Who participates?</strong>
+                                </label>
+                                
+                                <div style="display:flex; gap: 6px; align-items: center;">
+                                    <select id="exp-split-type" class="split-type-select" onchange="updateSplitTypeUI()">
+                                        <option value="equal">Equal + Extras</option>
+                                        <option value="percentage">Percentage (%)</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div id="split-helper-text" style="font-size: 0.8rem; color: var(--secondary); margin-bottom: 8px;">
+                                <em>Add personal items to be excluded from the equal split.</em>
+                            </div>
+                            
+                            <div id="participant-list-inputs" class="participant-list-scroller"></div>
+                        </div>
+                    </div> 
+                    <div class="sticky-action-buttons" style="display: flex; gap: 8px;">
+                        <button id="save-expense-btn" onclick="saveExpense()">Save Activity</button>
+                        <button id="cancel-edit-btn" class="secondary outline" style="display:none; flex: none;" onclick="cancelEdit()">Cancel Edit</button>
                     </div>
-                </div> <div class="sticky-action-buttons" style="display: flex; gap: 8px;">
-                    <button id="save-expense-btn" onclick="saveExpense()">Save Activity</button>
-                    <button id="cancel-edit-btn" class="secondary outline" style="display:none; flex: none;" onclick="cancelEdit()">Cancel Edit</button>
                 </div>
             </div>
         </div>
@@ -454,7 +464,9 @@
             <div class="card ledger-card" id="ledger-card-wrapper">
                 <div class="sticky-ledger-header">
                     <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 10px;">
-                        <h2 style="margin: 0; border: none; padding: 0; cursor: pointer; display: flex; align-items: center; user-select: none;" onclick="toggleLedger()" title="Click to expand/collapse">📜 Activity Ledger <span id="ledger-toggle-icon">▼</span></h2>
+                        <h2 style="margin: 0; border: none; padding: 0; cursor: pointer; display: flex; align-items: center; user-select: none;" onclick="toggleLedger()" title="Click to expand/collapse">
+                            📜 Activity Ledger <span id="ledger-count" style="font-size: 0.85rem; color: var(--secondary); margin-left: 8px; font-weight: 600;">(0)</span> <span id="ledger-toggle-icon">▼</span>
+                        </h2>
                         <div style="display:flex; gap: 5px; align-items: center; flex-wrap: wrap;">
                             <select id="ledger-sort" class="split-type-select" style="font-weight: 600; padding: 4px 8px; border-color: #cbd5e1; color: var(--secondary); background: white;" onchange="handleSortChange()">
                                 <option value="date-desc">📅 Date (Newest)</option>
@@ -467,6 +479,9 @@
                             <button class="outline small" onclick="toggleAllExpenses(true)" title="Ignore All in Math">🚫 All</button>
                         </div>
                     </div>
+                    <div style="margin-bottom: 10px;">
+                        <input type="text" id="search-filter" placeholder="🔍 Search activities, people, or notes..." oninput="handleSearchChange()" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border); box-shadow: inset 0 1px 2px rgba(0,0,0,0.02);">
+                    </div>
                     <div id="category-filters" style="display: flex; gap: 6px; flex-wrap: wrap;"></div>
                 </div>
                 
@@ -476,8 +491,14 @@
 
         <div class="col-right">
             <div class="card" id="analytics-section">
-                <div style="display:flex; justify-content: space-between; align-items: center;">
-                    <h2>📊 Trip Analytics</h2>
+                <div style="display:flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; border-bottom: 1px solid var(--border); padding-bottom: 10px;">
+                    <h2 style="margin: 0; border: none; padding: 0;">📊 Trip Analytics</h2>
+                    <div style="display: flex; align-items: center; gap: 8px; background: #f8fafc; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border);">
+                        <label style="font-size: 0.85rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 4px; margin: 0; color: var(--secondary);">
+                            <input type="checkbox" id="per-day-toggle" onchange="togglePerDay()" style="width: auto; box-shadow: none;"> Per Day
+                        </label>
+                        <input type="number" id="trip-days-input" placeholder="Days" min="1" style="width: 70px; padding: 4px 8px; display: none;" oninput="updateTripDays()">
+                    </div>
                 </div>
                 <div id="ledger-stats"></div>
             </div>
@@ -498,6 +519,13 @@
             </div>
         </div>
 
+        <div class="mobile-quick-nav" style="grid-column: 1 / -1; margin-top: 10px; margin-bottom: 20px;">
+            <button class="outline small" onclick="document.getElementById('activity-card').scrollIntoView({behavior: 'smooth', block: 'start'})">➕ Add</button>
+            <button class="outline small" onclick="document.getElementById('ledger-card-wrapper').scrollIntoView({behavior: 'smooth', block: 'start'})">📜 Ledger</button>
+            <button class="outline small" onclick="document.getElementById('analytics-section').scrollIntoView({behavior: 'smooth', block: 'start'})">📊 Analytics</button>
+            <button class="outline small" onclick="document.getElementById('settlement-section').scrollIntoView({behavior: 'smooth', block: 'start'})">💸 Settle</button>
+        </div>
+
     </div>
 
     <script>
@@ -507,6 +535,10 @@
         let participantGroups = {}; 
         let expenses = [];
         let editingExpenseId = null; 
+        let searchText = "";
+        
+        let tripDays = 1;
+        let showPerDay = false;
 
         let secondaryCurrency = ""; 
         let currentExchangeRate = 1; 
@@ -567,7 +599,7 @@
         function saveState() {
             localStorage.setItem('tripSplitterLatest', JSON.stringify({ 
                 tripName, participants, participantGroups, expenses, 
-                secondaryCurrency, currentExchangeRate, currentSort 
+                secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay 
             }));
 
             if (supabaseClient) {
@@ -589,11 +621,21 @@
                     secondaryCurrency = data.secondaryCurrency || "";
                     currentExchangeRate = data.currentExchangeRate || 1;
                     currentSort = data.currentSort || 'date-desc';
+                    tripDays = data.tripDays || 1;
+                    showPerDay = data.showPerDay || false;
                     
                     repairLegacyData();
                     document.getElementById('trip-name').value = tripName;
                     document.getElementById('global-currency').value = secondaryCurrency;
                     document.getElementById('ledger-sort').value = currentSort;
+                    
+                    const toggle = document.getElementById('per-day-toggle');
+                    const daysInput = document.getElementById('trip-days-input');
+                    if(toggle) toggle.checked = showPerDay;
+                    if(daysInput) {
+                        daysInput.value = tripDays;
+                        daysInput.style.display = showPerDay ? 'block' : 'none';
+                    }
                     
                     if (secondaryCurrency) {
                         updateCurrencySelectors();
@@ -613,11 +655,17 @@
                 secondaryCurrency = ""; 
                 currentExchangeRate = 1; 
                 currentSort = 'date-desc';
+                tripDays = 1;
+                showPerDay = false;
                 
                 document.getElementById('global-currency').value = "";
                 document.getElementById('ledger-sort').value = "date-desc";
                 document.getElementById('trip-name').value = tripName;
                 document.getElementById('exp-category').value = 'Other';
+                
+                document.getElementById('per-day-toggle').checked = false;
+                document.getElementById('trip-days-input').style.display = 'none';
+                document.getElementById('trip-days-input').value = 1;
                 
                 activeCategoryFilters = new Set(Object.keys(CATEGORIES)); 
                 cancelEdit(); 
@@ -634,8 +682,23 @@
 
         function updateTripName() { tripName = document.getElementById('trip-name').value; saveState(); }
 
-        function toggleLedger() {
-            document.getElementById('ledger-card-wrapper').classList.toggle('ledger-collapsed');
+        function toggleLedger() { document.getElementById('ledger-card-wrapper').classList.toggle('ledger-collapsed'); }
+        
+        function toggleActivityCard() { document.getElementById('activity-card').classList.toggle('activity-collapsed'); }
+        
+        function togglePerDay() {
+            showPerDay = document.getElementById('per-day-toggle').checked;
+            const daysInput = document.getElementById('trip-days-input');
+            daysInput.style.display = showPerDay ? 'block' : 'none';
+            if (showPerDay && !tripDays) tripDays = 1;
+            daysInput.value = tripDays;
+            saveState();
+            updateUI();
+        }
+
+        function updateTripDays() {
+            let val = parseInt(document.getElementById('trip-days-input').value);
+            if (!isNaN(val) && val > 0) { tripDays = val; saveState(); updateUI(); }
         }
 
         // --- 3. EXPORT / IMPORT / CRYPTO ---
@@ -696,7 +759,7 @@
         }
 
         function exportTrip() {
-            const payload = JSON.stringify({ tripName, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort });
+            const payload = JSON.stringify({ tripName, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay });
             const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(payload);
             const dl = document.createElement('a');
             dl.setAttribute("href", dataStr);
@@ -708,7 +771,7 @@
             const password = prompt("⚠️ Secure Save ⚠️\nEnter a password to encrypt this trip file.\n\nWARNING: If you forget this password, your data cannot be recovered.");
             if (!password) return; 
 
-            const payload = JSON.stringify({ tripName, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort });
+            const payload = JSON.stringify({ tripName, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay });
             try {
                 const encryptedData = await encryptData(password, payload);
                 const securePayload = JSON.stringify(encryptedData);
@@ -753,12 +816,18 @@
                     secondaryCurrency = parsedData.secondaryCurrency || "";
                     currentExchangeRate = parsedData.currentExchangeRate || 1;
                     currentSort = parsedData.currentSort || 'date-desc';
+                    tripDays = parsedData.tripDays || 1;
+                    showPerDay = parsedData.showPerDay || false;
                     
                     activeCategoryFilters = new Set(Object.keys(CATEGORIES)); 
                     repairLegacyData();
                     document.getElementById('trip-name').value = tripName;
                     document.getElementById('global-currency').value = secondaryCurrency;
                     document.getElementById('ledger-sort').value = currentSort;
+                    
+                    document.getElementById('per-day-toggle').checked = showPerDay;
+                    document.getElementById('trip-days-input').style.display = showPerDay ? 'block' : 'none';
+                    document.getElementById('trip-days-input').value = tripDays;
                     
                     saveState(); updateCurrencySelectors(); updateUI(); cancelEdit();
                 }
@@ -839,7 +908,7 @@
         async function saveToSupabase(targetId) {
             const client = getSupabase();
             if (!client) return;
-            const payload = { tripName, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort };
+            const payload = { tripName, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay };
             
             const btnId = targetId === 'manual_trip' ? 'cloud-save-btn-1' : 'cloud-save-btn-2';
             const btn = document.getElementById(btnId);
@@ -859,7 +928,7 @@
             const client = getSupabase(true);
             if (!client) return;
             
-            const payload = { tripName, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort };
+            const payload = { tripName, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay };
             const statusEl = document.getElementById('cloud-status');
             
             const { error } = await client.from('trip_sync').upsert({ id: 'auto_trip', trip_data: payload });
@@ -904,12 +973,18 @@
                     secondaryCurrency = parsedData.secondaryCurrency || "";
                     currentExchangeRate = parsedData.currentExchangeRate || 1;
                     currentSort = parsedData.currentSort || 'date-desc';
+                    tripDays = parsedData.tripDays || 1;
+                    showPerDay = parsedData.showPerDay || false;
                     
                     activeCategoryFilters = new Set(Object.keys(CATEGORIES)); 
                     repairLegacyData();
                     document.getElementById('trip-name').value = tripName;
                     document.getElementById('global-currency').value = secondaryCurrency;
                     document.getElementById('ledger-sort').value = currentSort;
+                    
+                    document.getElementById('per-day-toggle').checked = showPerDay;
+                    document.getElementById('trip-days-input').style.display = showPerDay ? 'block' : 'none';
+                    document.getElementById('trip-days-input').value = tripDays;
                     
                     saveState(); updateCurrencySelectors(); updateUI(); cancelEdit();
                     
@@ -1000,6 +1075,16 @@
                 const sym = CURRENCY_SYMBOLS[displayCur] ? CURRENCY_SYMBOLS[displayCur] : displayCur + ' ';
                 return `${sym}${converted.toFixed(2)}`;
             }
+        }
+        
+        function getPerDayText(amount) {
+            if (!showPerDay || tripDays <= 0) return '';
+            return ` <span style="font-size: 0.75rem; color: var(--primary); font-weight: 800; background: #eff6ff; padding: 2px 6px; border-radius: 4px; margin-left: 6px;">${formatMoney(amount / tripDays)}/d</span>`;
+        }
+        
+        function getPerDayTextSmall(amount) {
+            if (!showPerDay || tripDays <= 0) return '';
+            return ` <span style="font-size: 0.7rem; color: var(--primary); font-weight: bold; margin-left: 4px;">(${formatMoney(amount / tripDays)}/d)</span>`;
         }
 
         // --- 6. PARTICIPANTS CRUD ---
@@ -1187,6 +1272,8 @@
 
         // --- 8. EXPENSE CRUD ---
         function handleSortChange() { currentSort = document.getElementById('ledger-sort').value; saveState(); updateUI(); }
+        
+        function handleSearchChange() { searchText = document.getElementById('search-filter').value.toLowerCase(); updateUI(); }
 
         function saveExpense() {
             const category = document.getElementById('exp-category').value;
@@ -1269,7 +1356,7 @@
             if (!exp) return;
 
             editingExpenseId = id;
-            document.getElementById('activity-header').innerText = "✏️ Edit Activity";
+            document.getElementById('activity-title-text').innerText = "✏️ Edit Activity";
             document.getElementById('exp-category').value = exp.category || 'Other';
             document.getElementById('exp-desc').value = exp.desc;
             document.getElementById('exp-notes').value = exp.notes || '';
@@ -1300,7 +1387,11 @@
 
             document.getElementById('save-expense-btn').innerText = "Update Activity";
             document.getElementById('cancel-edit-btn').style.display = "block";
-            document.getElementById('activity-card').classList.add('edit-mode');
+            
+            const activityCard = document.getElementById('activity-card');
+            activityCard.classList.add('edit-mode');
+            activityCard.classList.remove('activity-collapsed'); // Ensure form opens when editing
+            
             document.getElementById('exp-amount').value = exp.localAmount || exp.amount;
             
             updateUI(); 
@@ -1315,7 +1406,7 @@
                     const activeRow = document.getElementById(`exp-row-${id}`);
                     const colMid = document.querySelector('.col-mid');
                     if (activeRow && colMid) colMid.scrollTo({ top: activeRow.offsetTop - 120, behavior: 'smooth' }); 
-                } else { document.getElementById('activity-card').scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+                } else { activityCard.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
             }, 50);
         }
 
@@ -1371,7 +1462,7 @@
 
         function cancelEdit() {
             editingExpenseId = null;
-            document.getElementById('activity-header').innerText = "➕ Add Activity";
+            document.getElementById('activity-title-text').innerText = "➕ Add Activity";
             document.getElementById('save-expense-btn').innerText = "Save Activity";
             document.getElementById('cancel-edit-btn').style.display = "none";
             document.getElementById('exp-category').value = 'Other';
@@ -1493,7 +1584,14 @@
 
             expenses.forEach(e => {
                 const cat = e.category || 'Other';
-                if (e.ignored || !activeCategoryFilters.has(cat)) return; 
+                
+                // Search filtering check
+                const searchMatch = !searchText || 
+                                    e.desc.toLowerCase().includes(searchText) || 
+                                    e.payer.toLowerCase().includes(searchText) || 
+                                    (e.notes && e.notes.toLowerCase().includes(searchText));
+
+                if (e.ignored || !activeCategoryFilters.has(cat) || !searchMatch) return; 
                 
                 validActiveCount++;
                 const payerGroup = participantGroups[e.payer] || e.payer;
@@ -1510,6 +1608,7 @@
                 groupStats[payerGroup].paid += e.amount;
                 groupStats[payerGroup].memberStats[e.payer].paid += e.amount;
                 
+                // Track explicitly what was paid per category
                 groupStats[payerGroup].catPaid[cat] += e.amount;
                 groupStats[payerGroup].memberStats[e.payer].catPaid[cat] += e.amount;
                 
@@ -1575,7 +1674,18 @@
             else if (currentSort === 'amt-asc') { sorted.sort((a,b) => a.amount - b.amount || a.timestamp - b.timestamp); } 
             else if (currentSort === 'payer-asc') { sorted.sort((a,b) => a.payer.localeCompare(b.payer) || new Date(b.date) - new Date(a.date) || b.timestamp - a.timestamp); }
 
-            const filteredExpenses = sorted.filter(e => activeCategoryFilters.has(e.category || 'Other'));
+            const filteredExpenses = sorted.filter(e => {
+                const cat = e.category || 'Other';
+                const searchMatch = !searchText || 
+                                    e.desc.toLowerCase().includes(searchText) || 
+                                    e.payer.toLowerCase().includes(searchText) || 
+                                    (e.notes && e.notes.toLowerCase().includes(searchText));
+                return activeCategoryFilters.has(cat) && searchMatch;
+            });
+            
+            // Update the visual counter
+            const ledgerCountEl = document.getElementById('ledger-count');
+            if(ledgerCountEl) ledgerCountEl.innerText = `(${filteredExpenses.length})`;
 
             eList.innerHTML = filteredExpenses.length ? filteredExpenses.map(e => {
                 const payerColor = getColor(e.payer); const catInfo = CATEGORIES[e.category] || CATEGORIES['Other'];
@@ -1650,7 +1760,7 @@
                         </div>
                     </div>
                 </div>`
-            }).join('') : '<div style="padding: 20px; text-align: center; color: var(--secondary); background: #f8fafc; border-radius: 8px;"><em>No activities matching selected filters.</em></div>';
+            }).join('') : '<div style="padding: 20px; text-align: center; color: var(--secondary); background: #f8fafc; border-radius: 8px;"><em>No activities match the current filters or search.</em></div>';
 
             const badgeContainer = document.getElementById('next-payer-container');
             if (validActiveCount > 0 && participants.length > 0) {
@@ -1672,7 +1782,10 @@
                 <div style="display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap;">
                     <div class="global-stat-box" style="flex: 1; min-width: 200px; flex-direction: column; align-items: flex-start;">
                         <span class="global-stat-label">Filtered Trip Cost</span>
-                        <span class="global-stat-value" style="color: var(--primary);">${formatMoney(totalSpent)}</span>
+                        <div style="display: flex; align-items: center;">
+                            <span class="global-stat-value" style="color: var(--primary);">${formatMoney(totalSpent)}</span>
+                            ${getPerDayText(totalSpent)}
+                        </div>
                     </div>
                     <div class="global-stat-box" style="flex: 1.5; min-width: 200px; flex-direction: column; align-items: flex-start; background: #fff1f2; border-color: #fecdd3;">
                         <span class="global-stat-label" style="color: #be123c;">Biggest Splurge (Filtered)</span>
@@ -1690,7 +1803,10 @@
                         statsHtml += `
                         <div style="background:${info.bg}; border: 1px solid ${info.color}40; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
                             <div style="font-size: 0.95rem; font-weight: 800; color: ${info.color}; margin-bottom: 6px;">${info.icon} ${cat}</div>
-                            <div style="font-size: 1.25rem; color: var(--text); font-weight: 800;">${formatMoney(categoryTotals[cat])}</div>
+                            <div style="display: flex; align-items: center; justify-content: center;">
+                                <div style="font-size: 1.25rem; color: var(--text); font-weight: 800;">${formatMoney(categoryTotals[cat])}</div>
+                            </div>
+                            ${showPerDay && tripDays > 0 ? `<div style="font-size: 0.8rem; color: var(--primary); font-weight: bold; margin-top: 4px;">${formatMoney(categoryTotals[cat] / tripDays)} / day</div>` : ''}
                             <div style="font-size: 0.8rem; color: var(--secondary); margin-top: 8px; border-top: 1px solid ${info.color}30; padding-top: 8px; width: 100%; text-align: center;">
                                 <strong>Avg: ${formatMoney(avgPerPerson)}</strong> / person
                             </div>
@@ -1723,7 +1839,10 @@
                                     <div title="📊 ${cat} Insights:&#10;• Total Activities: ${catActCount}&#10;• Total Spent: ${formatMoney(amt)}&#10;• Avg / Activity: ${catAvg}" style="display:flex; justify-content:space-between; align-items: center; background: ${catBg}; border: 1px solid ${catColor}40; padding: 8px 12px; border-radius: 8px; cursor: help; transition: transform 0.2s;">
                                         <span style="color: ${catColor}; font-weight: 800; font-size: 0.9rem;">${icon} ${cat}</span> 
                                         <div style="text-align: right; line-height: 1.3;">
-                                            <span style="color: var(--text); font-weight: 800; font-size: 1rem;">${formatMoney(amt)}</span><br>
+                                            <div style="display: flex; justify-content: flex-end; align-items: center;">
+                                                <span style="color: var(--text); font-weight: 800; font-size: 1rem;">${formatMoney(amt)}</span>
+                                                ${getPerDayTextSmall(amt)}
+                                            </div>
                                             <span style="font-size: 0.75rem; color: var(--secondary); font-weight: 600;">Avg: ${catAvg}/act</span>
                                         </div>
                                     </div>`;
@@ -1734,7 +1853,10 @@
                                     <div style="display:flex; justify-content:space-between; align-items: center; background: ${catBg}; border: 1px solid ${catColor}40; padding: 8px 12px; border-radius: 8px;">
                                         <span style="color: ${catColor}; font-weight: 800; font-size: 0.9rem;">${icon} ${cat} (Paid)</span> 
                                         <div style="text-align: right; line-height: 1.3;">
-                                            <span style="color: var(--text); font-weight: 800; font-size: 1rem;">${formatMoney(paidAmt)}</span>
+                                            <div style="display: flex; justify-content: flex-end; align-items: center;">
+                                                <span style="color: var(--text); font-weight: 800; font-size: 1rem;">${formatMoney(paidAmt)}</span>
+                                                ${getPerDayTextSmall(paidAmt)}
+                                            </div>
                                         </div>
                                     </div>`;
                             }
@@ -1743,7 +1865,10 @@
                                     <div style="display:flex; justify-content:space-between; align-items: center; background: #fef2f2; border: 1px solid #fecdd3; padding: 8px 12px; border-radius: 8px;">
                                         <span style="color: var(--danger); font-weight: 800; font-size: 0.9rem;">${icon} ${cat} (Received)</span> 
                                         <div style="text-align: right; line-height: 1.3;">
-                                            <span style="color: var(--danger); font-weight: 800; font-size: 1rem;">+${formatMoney(amt)}</span>
+                                            <div style="display: flex; justify-content: flex-end; align-items: center;">
+                                                <span style="color: var(--danger); font-weight: 800; font-size: 1rem;">+${formatMoney(amt)}</span>
+                                                ${getPerDayTextSmall(amt)}
+                                            </div>
                                         </div>
                                     </div>`;
                             }
@@ -1765,14 +1890,14 @@
                                     
                                     if (cat !== 'Transfer') {
                                         if (amt > 0) {
-                                            mCatHtml += `<span style="display: inline-block; background: var(--bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); font-size: 0.7rem; color: var(--secondary);">${icon} ${formatMoney(amt)}</span>`;
+                                            mCatHtml += `<span style="display: inline-block; background: var(--bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); font-size: 0.7rem; color: var(--secondary);">${icon} ${formatMoney(amt)}${getPerDayTextSmall(amt)}</span>`;
                                         }
                                     } else {
                                         if (paidAmt > 0) {
-                                            mCatHtml += `<span style="display: inline-block; background: var(--bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); font-size: 0.7rem; color: var(--text); font-weight: bold;">${icon} ${formatMoney(paidAmt)}</span>`;
+                                            mCatHtml += `<span style="display: inline-block; background: var(--bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); font-size: 0.7rem; color: var(--text); font-weight: bold;">${icon} ${formatMoney(paidAmt)}${getPerDayTextSmall(paidAmt)}</span>`;
                                         }
                                         if (amt > 0) {
-                                            mCatHtml += `<span style="display: inline-block; background: #fef2f2; padding: 2px 6px; border-radius: 4px; border: 1px solid #fecdd3; font-size: 0.7rem; color: var(--danger); font-weight: bold;">${icon} +${formatMoney(amt)}</span>`;
+                                            mCatHtml += `<span style="display: inline-block; background: #fef2f2; padding: 2px 6px; border-radius: 4px; border: 1px solid #fecdd3; font-size: 0.7rem; color: var(--danger); font-weight: bold;">${icon} +${formatMoney(amt)}${getPerDayTextSmall(amt)}</span>`;
                                         }
                                     }
                                 });
@@ -1781,8 +1906,8 @@
                                         <div style="display:flex; justify-content:space-between; align-items: center; font-size: 0.85rem; margin-bottom: 6px;">
                                             <span style="color: ${getColor(m)}; font-weight: 800; font-size: 0.95rem;">${m}</span>
                                             <div style="text-align: right; line-height: 1.3;">
-                                                <span style="color: var(--secondary); font-size: 0.75rem; margin-right: 4px;">Share:</span><strong style="color: var(--text);">${formatMoney(mStats.owed)}</strong><br>
-                                                <span style="color: var(--secondary); font-size: 0.75rem; margin-right: 4px;">Net Paid:</span><strong style="color: var(--text);">${formatMoney(mStats.paid)}</strong>
+                                                <span style="color: var(--secondary); font-size: 0.75rem; margin-right: 4px;">Share:</span><strong style="color: var(--text);">${formatMoney(mStats.owed)}</strong>${getPerDayTextSmall(mStats.owed)}<br>
+                                                <span style="color: var(--secondary); font-size: 0.75rem; margin-right: 4px;">Net Paid:</span><strong style="color: var(--text);">${formatMoney(mStats.paid)}</strong>${getPerDayTextSmall(mStats.paid)}
                                             </div>
                                         </div>
                                         <div style="display:flex; flex-wrap: wrap; gap: 4px;">${mCatHtml}</div>
@@ -1811,11 +1936,19 @@
                                 </div>
                             </div>
                             <div style="display:flex; justify-content:space-between; margin-bottom: 12px; font-size: 1.05rem; align-items: center;">
-                                <span style="font-weight: 600; color: var(--secondary);">Net Paid:</span> <strong style="color: var(--text); font-size: 1.15rem;">${formatMoney(stats.paid)}</strong>
+                                <span style="font-weight: 600; color: var(--secondary);">Net Paid:</span> 
+                                <div style="display: flex; align-items: center;">
+                                    <strong style="color: var(--text); font-size: 1.15rem;">${formatMoney(stats.paid)}</strong>
+                                    ${getPerDayText(stats.paid)}
+                                </div>
                             </div>
                             <div style="border-top: 2px dotted var(--border); padding-top: 16px;">
-                                <div style="display:flex; justify-content:space-between; font-weight: 800; font-size: 1.15rem; margin-bottom: 4px;">
-                                    <span>Total Share:</span> <span>${formatMoney(stats.owed)}</span>
+                                <div style="display:flex; justify-content:space-between; font-weight: 800; font-size: 1.15rem; margin-bottom: 4px; align-items: center;">
+                                    <span>Total Share:</span> 
+                                    <div style="display: flex; align-items: center;">
+                                        <span>${formatMoney(stats.owed)}</span>
+                                        ${getPerDayText(stats.owed)}
+                                    </div>
                                 </div>
                                 ${catBreakdownHtml}
                                 ${individualBreakdownHtml}
