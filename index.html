@@ -4,40 +4,53 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Trip Splitter Pro Max</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         :root {
-            --primary: #2563eb;
-            --primary-hover: #1d4ed8;
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
             --secondary: #64748b;
             --secondary-hover: #475569;
             --danger: #ef4444;
             --danger-hover: #dc2626;
-            --bg: #f0f4f8;
+            --bg: #f1f5f9; 
             --card-bg: #ffffff;
             --text: #0f172a;
-            --border: #e2e8f0;
-            --green: #16a34a;
-            --red: #dc2626;
-            --radius: 12px;
+            --border: #cbd5e1; 
+            --green: #10b981;
+            --red: #ef4444;
+            
+            --radius: 16px; 
+            --radius-sm: 8px;
+            
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
+            --shadow-focus: 0 0 0 3px rgba(79, 70, 229, 0.15);
         }
 
         html { scroll-behavior: smooth; }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background-color: var(--bg);
             color: var(--text);
             margin: 0;
-            padding: 12px 20px;
+            padding: 12px 16px;
             line-height: 1.4;
             box-sizing: border-box;
+            -webkit-font-smoothing: antialiased;
         }
+
+        .tabular-nums { font-variant-numeric: tabular-nums; }
 
         .app-container {
             display: grid;
             grid-template-columns: 1fr;
-            gap: 20px;
+            gap: 16px;
             width: 100%;
             max-width: 1800px;
             margin: 0 auto;
@@ -47,8 +60,8 @@
             grid-column: 1 / -1;
             display: flex;
             flex-direction: column;
-            gap: 10px;
-            margin-bottom: 5px;
+            gap: 8px;
+            margin-bottom: 4px;
         }
         
         .mobile-quick-nav { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-bottom: 4px; }
@@ -56,13 +69,13 @@
         details.participants-dropdown {
             background: var(--card-bg);
             border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 10px 16px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.03);
+            border-radius: var(--radius-sm);
+            padding: 8px 16px;
+            box-shadow: var(--shadow-sm);
         }
         
         details.participants-dropdown summary {
-            font-weight: 700; font-size: 1rem; color: var(--primary); cursor: pointer; list-style: none;
+            font-weight: 700; font-size: 0.95rem; color: var(--primary); cursor: pointer; list-style: none;
             display: flex; justify-content: space-between; align-items: center; user-select: none;
         }
         details.participants-dropdown summary::-webkit-details-marker { display: none; }
@@ -70,18 +83,13 @@
         details.participants-dropdown[open] summary::after { transform: rotate(180deg); }
         details.participants-dropdown[open] { padding-bottom: 16px; }
 
-        .header-top-row {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            align-items: center;
-        }
+        .header-top-row { display: flex; flex-direction: column; gap: 10px; align-items: center; }
 
         @media (min-width: 1024px) {
             body { height: 100vh; overflow: hidden; display: flex; flex-direction: column; padding-bottom: 0; }
             .mobile-quick-nav { display: none !important; }
             .header-top-row { flex-direction: row; justify-content: space-between; align-items: center; }
-            .app-container { grid-template-columns: 400px 1fr; flex: 1; min-height: 0; overflow: hidden; }
+            .app-container { grid-template-columns: 400px 1fr; flex: 1; min-height: 0; overflow: hidden; gap: 20px; }
             .col-right { grid-column: 1 / -1; }
             .col-left, .col-mid, .col-right {
                 height: 100%; overflow-y: auto; padding-right: 10px; padding-bottom: 40px; 
@@ -89,43 +97,51 @@
             }
             .col-left::-webkit-scrollbar, .col-mid::-webkit-scrollbar, .col-right::-webkit-scrollbar { width: 6px; }
             .col-left::-webkit-scrollbar-track, .col-mid::-webkit-scrollbar-track, .col-right::-webkit-scrollbar-track { background: transparent; }
-            .col-left::-webkit-scrollbar-thumb, .col-mid::-webkit-scrollbar-thumb, .col-right::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-            .col-left::-webkit-scrollbar-thumb:hover, .col-mid::-webkit-scrollbar-thumb:hover, .col-right::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+            .col-left::-webkit-scrollbar-thumb, .col-mid::-webkit-scrollbar-thumb, .col-right::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
             .trip-name-input { text-align: left; margin-bottom: 0; width: auto; }
         }
         
         @media (min-width: 1400px) {
-            .app-container { grid-template-columns: 400px 1fr 1fr; }
+            .app-container { grid-template-columns: 380px 1fr 1fr; }
             .col-left { grid-column: 1; }
             .col-mid { grid-column: 2; }
             .col-right { grid-column: 3; }
         }
 
-        .header-controls { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; align-items: center;}
+        .glass-toolbar {
+            display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; align-items: center;
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(10px);
+            padding: 4px 10px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow-sm);
+        }
 
         .trip-name-input {
-            font-size: 1.5rem; font-weight: 800; color: var(--text);
+            font-size: 1.5rem; font-weight: 900; color: var(--text); letter-spacing: -0.02em;
             text-align: center; border: 2px dashed transparent; background: transparent;
-            padding: 2px 8px; box-sizing: border-box; transition: all 0.2s; border-radius: 6px;
+            padding: 2px 8px; box-sizing: border-box; transition: all 0.2s ease; border-radius: var(--radius-sm);
         }
-        .trip-name-input:focus, .trip-name-input:hover { border-color: var(--primary); outline: none; background: rgba(37, 99, 235, 0.05); color: var(--primary); }
+        .trip-name-input:focus, .trip-name-input:hover { border-color: var(--primary); outline: none; background: rgba(79, 70, 229, 0.05); color: var(--primary); }
 
         .next-payer-badge {
             background: #fff1f2; border: 1px solid #fecdd3; color: #be123c;
-            padding: 6px 12px; border-radius: 8px; font-size: 0.9rem; font-weight: 700;
-            display: flex; align-items: center; gap: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            padding: 4px 10px; border-radius: 8px; font-size: 0.85rem; font-weight: 700;
+            display: flex; align-items: center; gap: 6px; box-shadow: var(--shadow-sm);
             white-space: nowrap;
         }
 
         .card {
-            background: var(--card-bg); border: 1px solid var(--border);
+            background: var(--card-bg); 
+            border: 1px solid var(--border);
             border-radius: var(--radius); padding: 16px; margin-bottom: 16px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.02);
-            transition: background-color 0.3s ease, border-color 0.3s ease;
+            box-shadow: var(--shadow-md);
         }
         
         .card.edit-mode {
-            box-shadow: 0 4px 15px rgba(37, 99, 235, 0.1);
+            box-shadow: 0 8px 25px -5px rgba(79, 70, 229, 0.25);
+            border-color: var(--primary);
         }
 
         #activity-card {
@@ -136,81 +152,83 @@
         .activity-collapsed #activity-content-wrapper { display: none !important; }
         .activity-collapsed #activity-toggle-icon { transform: rotate(-90deg); }
         
-        .activity-form-scrollable {
-            overflow-y: auto; padding-right: 5px; scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent;
-        }
+        .activity-form-scrollable { overflow-y: auto; padding-right: 6px; padding-bottom: 8px; scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
         .activity-form-scrollable::-webkit-scrollbar { width: 4px; }
-        .activity-form-scrollable::-webkit-scrollbar-track { background: transparent; }
         .activity-form-scrollable::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         
         .sticky-action-buttons {
-            position: sticky; bottom: 0; background: inherit; padding-top: 12px;
-            border-top: 1px solid var(--border); margin-top: auto; z-index: 10;
+            position: sticky; bottom: -16px; 
+            background: rgba(255, 255, 255, 0.95);
+            padding: 12px 16px; margin: 0 -16px -16px -16px;
+            border-top: 1px solid var(--border);
+            border-radius: 0 0 var(--radius) var(--radius);
+            z-index: 10;
         }
 
-        h2 { margin: 0 0 12px 0; font-size: 1.1rem; font-weight: 700; color: #1e293b; border-bottom: 1px solid var(--border); padding-bottom: 8px;}
+        h2 { margin: 0 0 12px 0; font-size: 1.1rem; font-weight: 800; color: #0f172a; border-bottom: 1px solid var(--border); padding-bottom: 8px;}
 
-        .form-row { display: flex; gap: 10px; margin-bottom: 10px; }
+        .form-row { display: flex; gap: 8px; margin-bottom: 10px; }
         
         input, select { 
-            width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 6px; 
-            font-size: 0.95rem; box-sizing: border-box; transition: border-color 0.2s; box-shadow: inset 0 1px 2px rgba(0,0,0,0.02);
+            width: 100%; padding: 8px 12px; 
+            background: #f8fafc; border: 1px solid var(--border); 
+            border-radius: var(--radius-sm); 
+            font-size: 0.9rem; font-family: inherit; font-weight: 500; color: var(--text);
+            box-sizing: border-box; transition: all 0.2s ease; 
         }
-        input:focus, select:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); }
+        input:focus, select:focus { background: #ffffff; border-color: var(--primary); outline: none; box-shadow: var(--shadow-focus); }
         
         .amount-currency-group { display: flex; align-items: stretch; width: 100%; }
-        .amount-currency-group input { border-radius: 6px 0 0 6px; border-right: 1px solid #cbd5e1; flex: 1; min-width: 0; padding-right: 8px;}
-        .amount-currency-group select { 
-            border-radius: 0 6px 6px 0; border-left: none; background: #f8fafc; 
-            color: var(--secondary); font-weight: 800; padding: 0 10px; width: auto; flex: none;
-        }
+        .amount-currency-group input { border-radius: var(--radius-sm) 0 0 var(--radius-sm); border-right: 1px solid var(--border); flex: 1; min-width: 0;}
+        .amount-currency-group select { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; border-left: none; background: #e2e8f0; color: var(--secondary); font-weight: 800; padding: 0 8px; width: auto; flex: none; }
 
         button {
-            background-color: var(--primary); color: white; border: none; padding: 8px 14px;
-            border-radius: 6px; font-size: 0.9rem; cursor: pointer; font-weight: 600;
-            display: flex; align-items: center; justify-content: center; gap: 6px; flex: 1;
-            transition: all 0.2s; box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
+            background-color: var(--primary); color: white; border: none; padding: 8px 12px;
+            border-radius: var(--radius-sm); font-size: 0.9rem; font-family: inherit; cursor: pointer; font-weight: 600;
+            display: flex; align-items: center; justify-content: center; gap: 6px; flex: 1; box-shadow: var(--shadow-sm);
         }
-        button:hover { background-color: var(--primary-hover); transform: translateY(-1px); box-shadow: 0 4px 6px rgba(37, 99, 235, 0.3); }
+        button:hover { background-color: var(--primary-hover); transform: translateY(-1px); }
         button:active { transform: translateY(0); }
-        button.secondary { background-color: var(--secondary); box-shadow: 0 2px 4px rgba(100, 116, 139, 0.2); }
-        button.secondary:hover { background-color: var(--secondary-hover); box-shadow: 0 4px 6px rgba(100, 116, 139, 0.3);}
-        button.danger { background-color: var(--danger); box-shadow: 0 2px 4px rgba(239, 68, 68, 0.2); }
+        
+        button.secondary { background-color: var(--secondary); }
+        button.secondary:hover { background-color: var(--secondary-hover); }
+        button.danger { background-color: var(--danger); }
         button.danger:hover { background-color: var(--danger-hover); }
-        button.warning { background-color: #f59e0b; box-shadow: 0 2px 4px rgba(245, 158, 11, 0.2); color: white;}
+        button.warning { background-color: #f59e0b; color: white;}
         button.warning:hover { background-color: #d97706; }
-        button.cloud { background-color: #0ea5e9; box-shadow: 0 2px 4px rgba(14, 165, 233, 0.2); color: white;}
+        button.cloud { background-color: #0ea5e9; color: white;}
         button.cloud:hover { background-color: #0284c7; }
+        
         button.small { padding: 4px 10px; font-size: 0.8rem; flex: none; box-shadow: none;}
-        button.outline { background: transparent; color: var(--secondary); border: 1px solid var(--border); box-shadow: none;}
-        button.outline:hover { background: #f8fafc; color: var(--text); border-color: #cbd5e1;}
+        button.outline { background: #ffffff; color: var(--secondary); border: 1px solid var(--border); box-shadow: var(--shadow-sm);}
+        button.outline:hover { background: #f8fafc; color: var(--text); border-color: #94a3b8;}
 
         .flex-1 { flex: 1; }
         
         .tag {
             display: inline-flex; align-items: center; 
-            padding: 4px 12px; border-radius: 16px; margin: 4px; font-weight: bold; gap: 6px;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.05); font-size: 0.85rem;
+            padding: 4px 10px; border-radius: 16px; margin: 2px; font-weight: 700; gap: 6px;
+            box-shadow: var(--shadow-sm); font-size: 0.8rem; border: 1px solid var(--border); background: #fff;
         }
-        .tag-name { cursor: pointer; border-right: 1px solid currentColor; padding-right: 6px; }
+        .tag-name { cursor: pointer; border-right: 1px solid var(--border); padding-right: 6px; }
         .tag-name:hover { text-decoration: underline; }
-        .tag-group-btn { cursor: pointer; font-size: 0.7rem; font-weight: normal; border-right: 1px solid currentColor; padding-right: 6px; opacity: 0.8;}
+        .tag-group-btn { cursor: pointer; font-size: 0.7rem; font-weight: 500; border-right: 1px solid var(--border); padding-right: 6px; opacity: 0.8;}
         .tag-group-btn:hover { text-decoration: underline; opacity: 1; }
-        .tag-del { cursor: pointer; font-size: 1.1rem; line-height: 1; opacity: 0.7; }
+        .tag-del { cursor: pointer; font-size: 1rem; line-height: 1; opacity: 0.6; }
         .tag-del:hover { opacity: 1; color: var(--danger); }
 
-        .participant-selector { background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 12px; margin-top: 16px; }
-        
-        .participant-row { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px; background: #fff; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.02);}
-        .participant-row input[type="number"] { width: 100px; padding: 6px 8px; margin: 0; font-size: 0.9rem; text-align: right; }
-        .checkbox-item { display: flex; align-items: center; gap: 8px; font-size: 0.95rem; cursor: pointer; font-weight: bold; flex: 1;}
-        .checkbox-item input[type="checkbox"] { width: auto; margin: 0; transform: scale(1.1); cursor: pointer;}
+        .participant-selector { background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 10px; margin-top: 16px; }
+        .participant-row { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px; background: #fff; border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 6px; box-shadow: var(--shadow-sm);}
+        .participant-row input[type="number"] { width: 90px; padding: 6px 8px; margin: 0; font-size: 0.85rem; text-align: right; }
+        .checkbox-item { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; cursor: pointer; font-weight: 700; flex: 1;}
+        .checkbox-item input[type="checkbox"] { width: 16px; height: 16px; margin: 0; cursor: pointer; accent-color: var(--primary);}
 
         .ledger-card { padding-top: 0; display: flex; flex-direction: column; min-height: 400px; position: relative; }
+        
         .sticky-ledger-header {
-            position: sticky; top: 0; background: var(--card-bg); z-index: 10;
-            padding: 16px 0 12px 0; border-bottom: 1px solid var(--border);
-            margin-bottom: 12px; border-radius: var(--radius) var(--radius) 0 0;
+            position: sticky; top: 0; background: rgba(255,255,255,0.95); backdrop-filter: blur(8px); z-index: 10;
+            padding: 12px 0 8px 0; border-bottom: 1px solid var(--border);
+            margin-bottom: 10px; border-radius: var(--radius) var(--radius) 0 0;
         }
 
         #ledger-toggle-icon { display: inline-block; transition: transform 0.2s; font-size: 0.8rem; margin-left: 8px; }
@@ -219,75 +237,59 @@
 
         .expense-item { 
             display: flex; justify-content: space-between; align-items: flex-start; 
-            padding: 14px; border-radius: 10px; margin-bottom: 10px; gap: 10px; 
-            transition: all 0.3s ease; box-shadow: 0 2px 5px rgba(0,0,0,0.04); 
-            background: var(--card-bg);
-            flex-wrap: wrap; /* Helps items behave on extremely small screens */
+            padding: 12px 14px; border-radius: var(--radius-sm); margin-bottom: 10px; gap: 10px; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.03); 
+            flex-wrap: wrap; 
         }
         .expense-item:last-child { margin-bottom: 0; }
-        .expense-item.ignored { opacity: 0.4; filter: grayscale(0.8); }
-        
-        .expense-item.is-editing {
-            outline: 3px solid var(--primary) !important;
-            background-color: #eff6ff !important;
-            transform: scale(1.02);
-            box-shadow: 0 10px 25px -5px rgba(37, 99, 235, 0.25) !important;
-            z-index: 5; position: relative; animation: pulse-border 2s infinite;
-        }
-        @keyframes pulse-border {
-            0% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.4); }
-            70% { box-shadow: 0 0 0 10px rgba(37, 99, 235, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
-        }
+        .expense-item.ignored { opacity: 0.5; filter: grayscale(0.8); background: #f8fafc !important; border-color: var(--border) !important;}
+        .expense-item.is-editing { border: 2px solid var(--primary) !important; background-color: #ffffff !important; box-shadow: var(--shadow-md) !important;}
 
-        .expense-details { flex: 1; min-width: 200px; }
+        .expense-details { flex: 1; min-width: 180px; }
         .expense-amount-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; min-width: 90px; }
-        .expense-amount { font-weight: 800; text-align: right; font-size: 1.15rem; color: #0f172a;}
+        .expense-amount { font-weight: 900; text-align: right; font-size: 1.15rem; color: #0f172a; letter-spacing: -0.02em;}
         .expense-item.ignored .expense-amount { text-decoration: line-through; color: var(--secondary); }
         .expense-actions { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end;}
         
-        .owed { color: var(--green); font-weight: bold; }
-        .owes { color: var(--red); font-weight: bold; }
-        .balance-item { display: flex; justify-content: space-between; padding: 8px 0; font-size: 1rem; border-bottom: 1px solid var(--border);}
+        .owed { color: var(--green); font-weight: 800; }
+        .owes { color: var(--red); font-weight: 800; }
+        .balance-item { display: flex; justify-content: space-between; padding: 10px 0; font-size: 1rem; border-bottom: 1px solid var(--border);}
         .balance-item:last-child { border-bottom: none; }
         
-        .settlement-box { background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-top: 15px;}
-        .settlement-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 1rem;}
+        .settlement-box { background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; margin-top: 16px;}
+        .settlement-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed var(--border); font-size: 1rem;}
         .settlement-item:last-child { border-bottom: none; }
-        .section-label { font-size: 0.85rem; text-transform: uppercase; color: var(--secondary); font-weight: 800; letter-spacing: 0.5px; margin-bottom: 10px; margin-top: 15px;}
+        .section-label { font-size: 0.8rem; text-transform: uppercase; color: var(--secondary); font-weight: 800; letter-spacing: 0.05em; margin-bottom: 10px; margin-top: 16px;}
         
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; margin-bottom: 15px; }
-        .stat-card { background: var(--card-bg); padding: 20px; border-radius: 12px; border: 1px solid var(--border); font-size: 0.95rem; box-shadow: 0 4px 10px rgba(0,0,0,0.03); transition: transform 0.2s;}
-        .stat-card:hover { transform: translateY(-2px); box-shadow: 0 6px 15px rgba(0,0,0,0.05); }
-        .stat-name { font-weight: 800; margin-bottom: 4px; font-size: 1.2rem; }
-        .stat-members { font-size: 0.8rem; color: var(--secondary); font-weight: normal; margin-bottom: 12px; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;}
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-bottom: 16px; }
+        .stat-card { background: var(--card-bg); padding: 16px; border-radius: var(--radius-sm); border: 1px solid var(--border); font-size: 0.9rem; box-shadow: var(--shadow-sm);}
+        .stat-name { font-weight: 900; margin-bottom: 4px; font-size: 1.15rem; letter-spacing: -0.01em;}
+        .stat-members { font-size: 0.8rem; color: var(--secondary); font-weight: 500; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px;}
         
-        .global-stat-box { background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 12px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);}
-        .global-stat-label { font-size: 0.8rem; color: var(--secondary); text-transform: uppercase; font-weight: 800; letter-spacing: 0.5px;}
-        .global-stat-value { font-size: 1.25rem; font-weight: 800; color: var(--text); }
+        .global-stat-box { background: #fff; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; box-shadow: var(--shadow-sm);}
+        .global-stat-label { font-size: 0.8rem; color: var(--secondary); text-transform: uppercase; font-weight: 800; letter-spacing: 0.05em;}
+        .global-stat-value { font-size: 1.25rem; font-weight: 900; color: var(--text); letter-spacing: -0.02em;}
         
-        .split-type-select { padding: 4px 8px; font-size: 0.85rem; margin: 0; width: auto; font-weight: bold; color: var(--primary); border-color: var(--primary); background: #eff6ff; box-shadow: none;}
+        .split-type-select { padding: 4px 8px; font-size: 0.85rem; margin: 0; width: auto; font-weight: 700; color: var(--primary); border-color: var(--border); background: #ffffff; box-shadow: none;}
         
-        .cat-filter-btn { border: none; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 700; cursor: pointer; transition: all 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
-        .cat-filter-btn:hover { transform: scale(1.05); }
+        .cat-filter-btn { border: 1px solid var(--border); padding: 4px 10px; border-radius: 16px; font-size: 0.8rem; font-weight: 700; cursor: pointer; transition: all 0.2s; background: #fff;}
 
         .currency-selector {
-            background: #eff6ff; border: 1px solid #bfdbfe; color: var(--primary);
-            padding: 6px 10px; border-radius: 6px; font-weight: bold; font-size: 0.9rem; width: auto;
+            background: #ffffff; border: 1px solid var(--border); color: var(--primary);
+            padding: 6px 10px; border-radius: var(--radius-sm); font-weight: 800; font-size: 0.85rem; width: auto;
             text-transform: uppercase;
         }
-        .currency-selector::placeholder { color: #93c5fd; font-weight: normal; }
-        .rate-display { font-size: 0.8rem; color: var(--secondary); margin-left: 8px; }
+        .rate-display { font-size: 0.75rem; color: var(--secondary); margin-left: 8px; font-weight: 500; }
         
         .display-toggle-container {
             display: flex; justify-content: space-between; align-items: center;
-            background: #f8fafc; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 15px;
+            background: #f8fafc; padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); margin-bottom: 16px;
         }
 
-        details.indiv-details { margin-top: 16px; padding-top: 12px; border-top: 2px dotted var(--border); }
+        details.indiv-details { margin-top: 16px; padding-top: 12px; border-top: 1px dashed var(--border); }
         details.indiv-details summary { font-size: 0.8rem; font-weight: 800; text-transform: uppercase; color: var(--secondary); cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; }
         details.indiv-details summary::-webkit-details-marker { display: none; }
-        details.indiv-details summary::after { content: '▼'; font-size: 0.7rem; transition: transform 0.2s; }
+        details.indiv-details summary::after { content: '▼'; font-size: 0.7rem; }
         details.indiv-details[open] summary::after { transform: rotate(180deg); }
         .indiv-content { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
     </style>
@@ -301,55 +303,50 @@
                 
                 <div style="display: flex; flex-direction: column; justify-content: center; gap: 2px;">
                     <input type="text" id="trip-name" class="trip-name-input" value="My Trip" onchange="updateTripName()">
-                    <span id="cloud-status" style="font-size: 0.75rem; color: var(--secondary); font-weight: bold; min-height: 16px; text-align: center;"></span>
+                    <span id="cloud-status" style="font-size: 0.75rem; color: var(--secondary); font-weight: 600; min-height: 16px; text-align: center;"></span>
                 </div>
 
                 <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; flex: 1;">
-                    
-                    <div style="display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px;">
+                    <div style="display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px;">
                         <div id="next-payer-container"></div>
-
-                        <div style="display: flex; align-items: center; background: white; padding: 4px 12px; border-radius: 8px; border: 1px solid var(--border); box-shadow: 0 1px 3px rgba(0,0,0,0.05); min-height: 32px;">
-                            <span style="font-size: 0.85rem; font-weight: bold; margin-right: 8px;" title="Leave blank for USD only">Trip Currency:</span>
-                            <input type="text" id="global-currency" class="currency-selector" style="width: 60px; text-align: center; padding: 4px 6px; font-size: 0.85rem;" placeholder="EUR" maxlength="3" onchange="handleCurrencyChange()">
-                            <span id="rate-display" class="rate-display" style="font-size: 0.75rem;"></span>
+                        <div class="glass-toolbar" style="border-radius: var(--radius-sm);">
+                            <span style="font-size: 0.85rem; font-weight: 700; margin-right: 6px; color: var(--secondary);" title="Leave blank for USD only">Currency:</span>
+                            <input type="text" id="global-currency" class="currency-selector" style="width: 60px; text-align: center; padding: 4px 6px;" placeholder="EUR" maxlength="3" onchange="handleCurrencyChange()">
+                            <span id="rate-display" class="rate-display tabular-nums"></span>
                         </div>
                     </div>
-
-                    <div style="display: flex; gap: 6px; flex-wrap: wrap; justify-content: center;">
+                    <div class="glass-toolbar">
                         <button class="danger outline small" onclick="resetTrip()">🆕 New</button>
-                        <button class="secondary small" onclick="exportTrip()">💾 Save Local</button>
-                        <button class="warning small" onclick="exportSecureTrip()" title="Save with Password Encryption">🔐 Secure</button>
-                        <button class="secondary small" onclick="document.getElementById('file-import').click()">📂 Load Local</button>
+                        <button class="secondary outline small" onclick="exportTrip()">💾 Save Local</button>
+                        <button class="warning outline small" onclick="exportSecureTrip()">🔐 Secure</button>
+                        <button class="secondary outline small" onclick="document.getElementById('file-import').click()">📂 Load Local</button>
                         <input type="file" id="file-import" accept=".json, .tsplit" style="display:none;" onchange="importTrip(event)">
                     </div>
-
                 </div>
 
                 <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
-                    
-                    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; background: white; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border); width: 130px;">
-                        <span style="font-size: 0.65rem; font-weight: 800; color: var(--secondary); text-transform: uppercase; letter-spacing: 0.5px;">Manual 1</span>
+                    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; background: white; padding: 6px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border); width: 130px;">
+                        <span style="font-size: 0.65rem; font-weight: 800; color: var(--secondary); text-transform: uppercase;">Manual 1</span>
                         <div style="display: flex; gap: 4px; width: 100%;">
-                            <button id="cloud-save-btn-1" class="cloud small" onclick="saveToSupabase('manual_trip')" style="flex: 1; padding: 4px 2px;">☁️ Save</button>
-                            <button id="cloud-load-btn-1" class="cloud small" onclick="loadFromSupabase('manual_trip')" style="flex: 1; padding: 4px 2px;">☁️ Load</button>
+                            <button id="cloud-save-btn-1" class="cloud small" onclick="saveToSupabase('manual_trip')" style="flex: 1; padding: 4px;">☁️ Save</button>
+                            <button id="cloud-load-btn-1" class="cloud small" onclick="loadFromSupabase('manual_trip')" style="flex: 1; padding: 4px;">☁️ Load</button>
                         </div>
-                        <span id="manual-cloud-name-1" style="font-size: 0.7rem; color: var(--primary); font-weight: bold; text-align: center; margin-top: auto; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 120px;">Checking...</span>
+                        <span id="manual-cloud-name-1" style="font-size: 0.7rem; color: var(--primary); font-weight: 700; text-align: center; margin-top: auto; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 120px;">Checking...</span>
                     </div>
 
-                    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; background: white; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border); width: 130px;">
-                        <span style="font-size: 0.65rem; font-weight: 800; color: var(--secondary); text-transform: uppercase; letter-spacing: 0.5px;">Manual 2</span>
+                    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; background: white; padding: 6px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border); width: 130px;">
+                        <span style="font-size: 0.65rem; font-weight: 800; color: var(--secondary); text-transform: uppercase;">Manual 2</span>
                         <div style="display: flex; gap: 4px; width: 100%;">
-                            <button id="cloud-save-btn-2" class="cloud small" onclick="saveToSupabase('manual_trip_2')" style="flex: 1; padding: 4px 2px;">☁️ Save</button>
-                            <button id="cloud-load-btn-2" class="cloud small" onclick="loadFromSupabase('manual_trip_2')" style="flex: 1; padding: 4px 2px;">☁️ Load</button>
+                            <button id="cloud-save-btn-2" class="cloud small" onclick="saveToSupabase('manual_trip_2')" style="flex: 1; padding: 4px;">☁️ Save</button>
+                            <button id="cloud-load-btn-2" class="cloud small" onclick="loadFromSupabase('manual_trip_2')" style="flex: 1; padding: 4px;">☁️ Load</button>
                         </div>
-                        <span id="manual-cloud-name-2" style="font-size: 0.7rem; color: var(--primary); font-weight: bold; text-align: center; margin-top: auto; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 120px;">Checking...</span>
+                        <span id="manual-cloud-name-2" style="font-size: 0.7rem; color: var(--primary); font-weight: 700; text-align: center; margin-top: auto; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 120px;">Checking...</span>
                     </div>
                     
-                    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; background: #f0f9ff; padding: 6px 8px; border-radius: 8px; border: 1px solid #bae6fd; width: 130px;">
-                        <span style="font-size: 0.65rem; font-weight: 800; color: #0284c7; text-transform: uppercase; letter-spacing: 0.5px;">Auto-Backup</span>
-                        <button id="cloud-load-auto-btn" class="cloud small" onclick="loadFromSupabase('auto_trip')" style="background-color: #0284c7; width: 100%; padding: 4px 2px;">☁️ Load Backup</button>
-                        <span id="auto-cloud-name" style="font-size: 0.7rem; color: #0284c7; font-weight: bold; text-align: center; margin-top: auto; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 120px;">Checking...</span>
+                    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; background: #e0f2fe; padding: 6px 8px; border-radius: var(--radius-sm); border: 1px solid #7dd3fc; width: 130px;">
+                        <span style="font-size: 0.65rem; font-weight: 800; color: #0284c7; text-transform: uppercase;">Auto-Backup</span>
+                        <button id="cloud-load-auto-btn" class="cloud small" onclick="loadFromSupabase('auto_trip')" style="background-color: #0284c7; width: 100%; padding: 4px;">☁️ Load Backup</button>
+                        <span id="auto-cloud-name" style="font-size: 0.7rem; color: #0284c7; font-weight: 700; text-align: center; margin-top: auto; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 120px;">Checking...</span>
                     </div>
                 </div>
 
@@ -365,13 +362,13 @@
                         <input type="text" id="new-participant-group" placeholder="Family/Group Name (Optional)" style="flex: 2;" onkeypress="handleParticipantKeyPress(event)">
                         <button onclick="addParticipant()" style="flex: none;">Add Person</button>
                     </div>
-                    <div id="participant-list" style="margin-bottom: 10px;"></div>
-                    <div style="display:flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-                        <div style="display:flex; gap: 10px; align-items: center;">
-                            <span style="font-size: 0.8rem; color: var(--secondary);"><em>Click names to rename. Click 👥 to bundle into families.</em></span>
-                            <span style="font-size: 0.75rem; color: var(--danger); cursor: pointer; font-weight: bold;" onclick="resetSupabaseConfig()">⚙️ Reset Cloud Sync</span>
+                    <div id="participant-list" style="margin-bottom: 8px;"></div>
+                    <div style="display:flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                        <div style="display:flex; gap: 8px; align-items: center;">
+                            <span style="font-size: 0.8rem; color: var(--secondary); font-weight: 500;"><em>Click names to rename. Click 👥 to bundle into families.</em></span>
+                            <span style="font-size: 0.75rem; color: var(--danger); cursor: pointer; font-weight: 700; padding: 2px 6px; background: #fef2f2; border-radius: 4px;" onclick="resetSupabaseConfig()">⚙️ Reset Cloud Sync</span>
                         </div>
-                        <div style="display:flex; gap: 5px;">
+                        <div style="display:flex; gap: 6px;">
                             <button class="outline small" onclick="saveGroupTemplate()">Save Setup Memory</button>
                             <button class="outline small" onclick="loadGroupTemplate()">Load Setup Memory</button>
                         </div>
@@ -417,7 +414,7 @@
                         
                         <div class="form-row">
                             <div class="amount-currency-group" style="flex: 1.2;">
-                                <input type="number" id="exp-amount" placeholder="Amount" step="0.01">
+                                <input type="number" id="exp-amount" class="tabular-nums" placeholder="Amount" step="0.01">
                                 <select id="exp-currency">
                                     <option value="USD">USD</option>
                                 </select>
@@ -432,7 +429,7 @@
                         </div>
 
                         <div class="participant-selector">
-                            <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 6px; flex-wrap: wrap; gap: 10px;">
+                            <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
                                 <label class="checkbox-item" style="flex: none; color: var(--primary);">
                                     <input type="checkbox" id="master-participant-checkbox" checked onchange="toggleAllCheckboxes(this.checked)">
                                     <strong id="participant-count-display" style="font-size: 0.9rem;">Who participates?</strong>
@@ -445,7 +442,7 @@
                                     </select>
                                 </div>
                             </div>
-                            <div id="split-helper-text" style="font-size: 0.8rem; color: var(--secondary); margin-bottom: 8px;">
+                            <div id="split-helper-text" style="font-size: 0.8rem; color: var(--secondary); margin-bottom: 8px; font-weight: 500;">
                                 <em>Add personal items to be excluded from the equal split.</em>
                             </div>
                             
@@ -463,12 +460,12 @@
         <div class="col-mid">
             <div class="card ledger-card" id="ledger-card-wrapper">
                 <div class="sticky-ledger-header">
-                    <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 10px;">
+                    <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
                         <h2 style="margin: 0; border: none; padding: 0; cursor: pointer; display: flex; align-items: center; user-select: none;" onclick="toggleLedger()" title="Click to expand/collapse">
-                            📜 Activity Ledger <span id="ledger-count" style="font-size: 0.85rem; color: var(--secondary); margin-left: 8px; font-weight: 600;">(0)</span> <span id="ledger-toggle-icon">▼</span>
+                            📜 Activity Ledger <span id="ledger-count" class="tabular-nums" style="font-size: 0.9rem; color: var(--secondary); margin-left: 8px; font-weight: 700;">(0)</span> <span id="ledger-toggle-icon">▼</span>
                         </h2>
-                        <div style="display:flex; gap: 5px; align-items: center; flex-wrap: wrap;">
-                            <select id="ledger-sort" class="split-type-select" style="font-weight: 600; padding: 4px 8px; border-color: #cbd5e1; color: var(--secondary); background: white;" onchange="handleSortChange()">
+                        <div style="display:flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+                            <select id="ledger-sort" class="split-type-select" onchange="handleSortChange()">
                                 <option value="date-desc">📅 Date (Newest)</option>
                                 <option value="date-asc">📅 Date (Oldest)</option>
                                 <option value="amt-desc">💰 Amt (High-Low)</option>
@@ -479,8 +476,9 @@
                             <button class="outline small" onclick="toggleAllExpenses(true)" title="Ignore All in Math">🚫 All</button>
                         </div>
                     </div>
-                    <div style="margin-bottom: 10px;">
-                        <input type="text" id="search-filter" placeholder="🔍 Search activities, people, or notes..." oninput="handleSearchChange()" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border); box-shadow: inset 0 1px 2px rgba(0,0,0,0.02);">
+                    <div style="margin-bottom: 8px; position: relative; display: flex; align-items: center;">
+                        <input type="text" id="search-filter" placeholder="🔍 Search activities, people, or notes..." oninput="handleSearchChange()" style="width: 100%; background: #fff; padding: 8px 36px 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: inset 0 1px 2px rgba(0,0,0,0.02);">
+                        <button id="clear-search-btn" onclick="clearSearch()" style="position: absolute; right: 4px; background: transparent; border: none; color: var(--secondary); font-size: 1.2rem; cursor: pointer; display: none; padding: 4px 8px; box-shadow: none; width: auto; flex: none; min-width: auto; line-height: 1;" title="Clear search">&times;</button>
                     </div>
                     <div id="category-filters" style="display: flex; gap: 6px; flex-wrap: wrap;"></div>
                 </div>
@@ -491,25 +489,25 @@
 
         <div class="col-right">
             <div class="card" id="analytics-section">
-                <div style="display:flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; border-bottom: 1px solid var(--border); padding-bottom: 10px;">
+                <div style="display:flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 12px;">
                     <h2 style="margin: 0; border: none; padding: 0;">📊 Trip Analytics</h2>
-                    <div style="display: flex; align-items: center; gap: 8px; background: #f8fafc; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border);">
-                        <label style="font-size: 0.85rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 4px; margin: 0; color: var(--secondary);">
-                            <input type="checkbox" id="per-day-toggle" onchange="togglePerDay()" style="width: auto; box-shadow: none;"> Per Day
+                    <div style="display: flex; align-items: center; gap: 8px; background: #f8fafc; padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border);">
+                        <label style="font-size: 0.85rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px; margin: 0; color: var(--secondary);">
+                            <input type="checkbox" id="per-day-toggle" onchange="togglePerDay()" style="margin: 0; accent-color: var(--primary);"> Per Day
                         </label>
-                        <input type="number" id="trip-days-input" placeholder="Days" min="1" style="width: 70px; padding: 4px 8px; display: none;" oninput="updateTripDays()">
+                        <input type="number" id="trip-days-input" placeholder="Days" min="1" style="width: 70px; padding: 4px 8px; display: none; background: #fff; border: 1px solid #cbd5e1;" oninput="updateTripDays()">
                     </div>
                 </div>
                 <div id="ledger-stats"></div>
             </div>
 
             <div class="card" id="settlement-section">
-                <div style="display:flex; justify-content: space-between; align-items: center;">
-                    <h2>💸 Final Settlement</h2>
+                <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <h2 style="margin: 0; border: none;">💸 Final Settlement</h2>
                 </div>
                 
                 <div class="display-toggle-container" id="dashboard-currency-toggle" style="display: none;">
-                    <strong style="font-size: 0.9rem;">View Dashboard In:</strong>
+                    <strong style="font-size: 0.9rem; color: var(--secondary);">View Dashboard In:</strong>
                     <select id="view-currency" class="currency-selector" onchange="updateUI()">
                         <option value="USD">🇺🇸 USD ($)</option>
                     </select>
@@ -547,14 +545,14 @@
         let cloudSyncTimeout = null;
 
         const CATEGORIES = {
-            'Food': { icon: '🍔', color: '#d97706', bg: '#fef3c7' },       
-            'Transport': { icon: '🚕', color: '#2563eb', bg: '#dbeafe' },  
-            'Travel': { icon: '✈️', color: '#7c3aed', bg: '#ede9fe' },     
-            'Fun': { icon: '🎟️', color: '#db2777', bg: '#fce7f3' },    
-            'Transfer': { icon: '💸', color: '#10b981', bg: '#ecfdf5' }, 
-            'Other': { icon: '📝', color: '#475569', bg: '#f1f5f9' }       
+            'Food': { icon: '🍔', color: '#b45309', bg: '#fef3c7' },       
+            'Transport': { icon: '🚕', color: '#1d4ed8', bg: '#dbeafe' },  
+            'Travel': { icon: '✈️', color: '#6d28d9', bg: '#ede9fe' },     
+            'Fun': { icon: '🎟️', color: '#be185d', bg: '#fce7f3' },    
+            'Transfer': { icon: '💸', color: '#047857', bg: '#d1fae5' }, 
+            'Other': { icon: '📝', color: '#334155', bg: '#f1f5f9' }       
         };
-        const COLORS = ['#2563eb', '#dc2626', '#16a34a', '#d97706', '#9333ea', '#db2777', '#0d9488', '#4f46e5', '#ea580c', '#0284c7'];
+        const COLORS = ['#4f46e5', '#ea580c', '#059669', '#d97706', '#7c3aed', '#db2777', '#0d9488', '#2563eb', '#c026d3', '#0284c7'];
         const CURRENCY_SYMBOLS = { USD: '$', EUR: '€', GBP: '£', CAD: 'C$', AUD: 'A$', JPY: '¥', MXN: 'M$' };
 
         let activeCategoryFilters = new Set(Object.keys(CATEGORIES));
@@ -1079,12 +1077,12 @@
         
         function getPerDayText(amount) {
             if (!showPerDay || tripDays <= 0) return '';
-            return ` <span style="font-size: 0.75rem; color: var(--primary); font-weight: 800; background: #eff6ff; padding: 2px 6px; border-radius: 4px; margin-left: 6px;">${formatMoney(amount / tripDays)}/d</span>`;
+            return ` <span style="font-size: 0.8rem; color: var(--primary); font-weight: 800; background: #eef2ff; padding: 2px 6px; border-radius: 6px; margin-left: 8px;">${formatMoney(amount / tripDays)}/d</span>`;
         }
         
         function getPerDayTextSmall(amount) {
             if (!showPerDay || tripDays <= 0) return '';
-            return ` <span style="font-size: 0.7rem; color: var(--primary); font-weight: bold; margin-left: 4px;">(${formatMoney(amount / tripDays)}/d)</span>`;
+            return ` <span class="tabular-nums" style="display: inline-block; font-size: 0.75rem; color: var(--primary); font-weight: 700; margin-left: 4px;">(${formatMoney(amount / tripDays)}/d)</span>`;
         }
 
         // --- 6. PARTICIPANTS CRUD ---
@@ -1175,9 +1173,9 @@
             const header = document.getElementById('activity-header');
 
             card.style.backgroundColor = info.bg;
-            card.style.borderColor = info.color + '60';
+            card.style.borderColor = info.color + '40';
             header.style.color = info.color;
-            header.style.borderBottomColor = info.color + '40';
+            header.style.borderBottomColor = info.color + '30';
         }
 
         function handleCategoryChange() {
@@ -1193,7 +1191,7 @@
             const pSelect = document.getElementById('exp-payer');
             const val = pSelect.value;
             if (val) { pSelect.style.color = getColor(val); pSelect.style.fontWeight = '800'; } 
-            else { pSelect.style.color = 'var(--text)'; pSelect.style.fontWeight = 'normal'; }
+            else { pSelect.style.color = 'var(--text)'; pSelect.style.fontWeight = '500'; }
         }
 
         function toggleAllCheckboxes(state) {
@@ -1238,7 +1236,7 @@
             const inputs = document.querySelectorAll('.part-personal');
             
             if (type === 'percentage') {
-                helper.innerHTML = `<em>Enter % for specific people. The rest divides equally.</em> <strong id="perc-remaining" style="margin-left: 5px; padding: 2px 6px; background: #e2e8f0; border-radius: 4px;">100% left</strong>`;
+                helper.innerHTML = `<em>Enter % for specific people. The rest divides equally.</em> <strong id="perc-remaining" style="margin-left: 5px; padding: 2px 8px; background: #e2e8f0; border-radius: 6px;">100% left</strong>`;
                 inputs.forEach(input => { input.placeholder = "Share %"; input.max = "100"; if(!editingExpenseId) input.value = ''; });
                 calculateRemainingPercentage();
             } else {
@@ -1273,7 +1271,16 @@
         // --- 8. EXPENSE CRUD ---
         function handleSortChange() { currentSort = document.getElementById('ledger-sort').value; saveState(); updateUI(); }
         
-        function handleSearchChange() { searchText = document.getElementById('search-filter').value.toLowerCase(); updateUI(); }
+        function handleSearchChange() { 
+            searchText = document.getElementById('search-filter').value.toLowerCase(); 
+            document.getElementById('clear-search-btn').style.display = searchText.length > 0 ? 'block' : 'none';
+            updateUI(); 
+        }
+
+        function clearSearch() {
+            document.getElementById('search-filter').value = '';
+            handleSearchChange();
+        }
 
         function saveExpense() {
             const category = document.getElementById('exp-category').value;
@@ -1390,7 +1397,7 @@
             
             const activityCard = document.getElementById('activity-card');
             activityCard.classList.add('edit-mode');
-            activityCard.classList.remove('activity-collapsed'); // Ensure form opens when editing
+            activityCard.classList.remove('activity-collapsed'); 
             
             document.getElementById('exp-amount').value = exp.localAmount || exp.amount;
             
@@ -1494,7 +1501,7 @@
             const container = document.getElementById('category-filters'); let html = '';
             Object.keys(CATEGORIES).forEach(cat => {
                 const info = CATEGORIES[cat]; const isActive = activeCategoryFilters.has(cat);
-                const opacity = isActive ? '1' : '0.5'; const bg = isActive ? info.bg : '#f8fafc';
+                const opacity = isActive ? '1' : '0.4'; const bg = isActive ? info.bg : '#ffffff';
                 const border = isActive ? info.color : '#cbd5e1'; const textCol = isActive ? info.color : '#64748b';
                 html += `<button class="cat-filter-btn" style="opacity: ${opacity}; background: ${bg}; border: 1px solid ${border}; color: ${textCol};" onclick="toggleCategoryFilter('${cat}')" title="Toggle ${cat}">${info.icon} ${cat}</button>`;
             });
@@ -1508,7 +1515,7 @@
                     <label class="checkbox-item" style="color: ${getColor(p)}">
                         <input type="checkbox" value="${p}" class="part-checkbox" checked onchange="checkMasterCheckboxState()"> ${p}
                     </label>
-                    <input type="number" class="part-personal" data-name="${p}" placeholder="+ Personal $" step="0.01" min="0" oninput="calculateRemainingPercentage()">
+                    <input type="number" class="part-personal tabular-nums" data-name="${p}" placeholder="+ Personal $" step="0.01" min="0" oninput="calculateRemainingPercentage()">
                 </div>
             `).join('');
             checkMasterCheckboxState();
@@ -1530,16 +1537,16 @@
                 const hasGroup = participantGroups[p] && participantGroups[p] !== p;
                 const groupText = hasGroup ? `👥 ${participantGroups[p]}` : '👤 Edit Group';
                 return `
-                <div class="tag" style="color: ${c}; background-color: ${c}15; border: 1px solid ${c}40;">
+                <div class="tag" style="color: ${c}; border-color: ${c}40;">
                     <span class="tag-name" onclick="renameParticipant('${p}')">${p}</span>
                     <span class="tag-group-btn" onclick="changeGroup('${p}')" title="Assign to a group">${groupText}</span>
                     <span class="tag-del" onclick="deleteParticipant('${p}')">&times;</span>
                 </div>`
-            }).join('') : '<em style="color:var(--secondary); font-size:0.9rem;">No participants.</em>';
+            }).join('') : '<em style="color:var(--secondary); font-size:0.9rem;">No participants added yet.</em>';
 
             const pSelect = document.getElementById('exp-payer');
             const currentPayer = pSelect.value;
-            pSelect.innerHTML = '<option value="" style="color: var(--text); font-weight: normal;">Who paid?</option>' + participants.map(p => `<option value="${p}" style="color: ${getColor(p)}; font-weight: 800;">${p}</option>`).join('');
+            pSelect.innerHTML = '<option value="" style="color: var(--text); font-weight: 500;">Who paid?</option>' + participants.map(p => `<option value="${p}" style="color: ${getColor(p)}; font-weight: 800;">${p}</option>`).join('');
             if(!editingExpenseId) pSelect.value = currentPayer; 
             updatePayerColor();
 
@@ -1695,7 +1702,7 @@
                 let displayMainAmount = `${localSym}${e.localAmount.toFixed(2)}`;
                 let displaySubAmount = '';
                 
-                if (e.localCurrency !== 'USD') displaySubAmount = `<br><span style="font-size: 0.8rem; color: var(--secondary);">($${e.amount.toFixed(2)} USD)</span>`;
+                if (e.localCurrency !== 'USD') displaySubAmount = `<br><span style="font-size: 0.85rem; color: var(--secondary);">($${e.amount.toFixed(2)} USD)</span>`;
 
                 if (e.splitType === 'percentage') {
                     let totalEnteredPerc = 0; let unenteredCount = 0;
@@ -1707,7 +1714,7 @@
                     breakdownHtml = e.involved.map(p => {
                         const pPerc = (e.percentageShares && e.percentageShares[p] !== undefined) ? e.percentageShares[p] : defaultPerc;
                         const finalShare = e.amount * (pPerc / 100);
-                        return `<span style="white-space: nowrap;"><span style="color: ${getColor(p)}; font-weight: 600;">${p}</span> <span style="font-size: 0.75rem; color: var(--text);">(${formatMoney(finalShare)} / ${pPerc.toFixed(1)}%)</span></span>`;
+                        return `<span style="white-space: nowrap;"><span style="color: ${getColor(p)}; font-weight: 700;">${p}</span> <span class="tabular-nums" style="font-size: 0.85rem; color: var(--secondary);">(${formatMoney(finalShare)} / ${pPerc.toFixed(1)}%)</span></span>`;
                     }).join(', ');
                 } else {
                     let totalPersonalForExp = 0;
@@ -1721,8 +1728,8 @@
                         const displayCur = document.getElementById('view-currency').value || 'USD';
                         if (displayCur !== 'USD') displayPersonal = personal * currentExchangeRate;
                         
-                        let personalNote = personal > 0 ? ` <span style="font-size:0.7rem; color: #b45309;">(inc. ${formatMoney(personal)} pers.)</span>` : '';
-                        return `<span style="white-space: nowrap;"><span style="color: ${getColor(p)}; font-weight: 600;">${p}</span> <span style="font-size: 0.75rem; color: var(--text);">(${formatMoney(finalShare)}${personalNote})</span></span>`;
+                        let personalNote = personal > 0 ? ` <span style="font-size:0.75rem; color: #b45309;">(inc. ${formatMoney(personal)} pers.)</span>` : '';
+                        return `<span style="white-space: nowrap;"><span style="color: ${getColor(p)}; font-weight: 700;">${p}</span> <span class="tabular-nums" style="font-size: 0.85rem; color: var(--secondary);">(${formatMoney(finalShare)}${personalNote})</span></span>`;
                     }).join(', ');
                 }
 
@@ -1730,22 +1737,23 @@
                 if (e.notes && e.notes.trim() !== '') {
                     const isUrl = e.notes.startsWith('http://') || e.notes.startsWith('https://');
                     const noteContent = isUrl ? `<a href="${e.notes}" target="_blank" style="color: var(--primary); text-decoration: underline; word-break: break-all;">${e.notes}</a>` : `<span style="word-break: break-word;">${e.notes}</span>`;
-                    notesHtml = `<div style="margin-top: 8px; padding: 6px 10px; background: rgba(0,0,0,0.02); border-radius: 6px; font-size: 0.8rem; color: var(--secondary); border-left: 3px solid ${catInfo.color}60;">${noteContent}</div>`;
+                    notesHtml = `<div style="margin-top: 8px; padding: 6px 10px; background: rgba(0,0,0,0.02); border-radius: 6px; font-size: 0.85rem; color: var(--secondary); border-left: 3px solid ${catInfo.color}60;">${noteContent}</div>`;
                 }
 
                 const isEditing = editingExpenseId === e.id; const editingClass = isEditing ? 'is-editing' : '';
-                let cardStyle = `background: ${catInfo.bg}; border: 1px solid ${catInfo.color}40;`; const ignoredClass = e.ignored ? 'ignored' : '';
+                let cardStyle = `background: ${catInfo.bg}; border: 1px solid ${catInfo.color}40; border-left: 5px solid ${catInfo.color};`; 
+                const ignoredClass = e.ignored ? 'ignored' : '';
 
                 return `
                 <div id="exp-row-${e.id}" class="expense-item ${ignoredClass} ${editingClass}" style="${cardStyle}">
                     <div class="expense-details">
-                        <span style="color:${catInfo.color}; font-weight: 900; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px;">${catInfo.icon} ${e.category}</span><br>
-                        <strong style="font-size: 1.15rem; color: #0f172a;">${e.desc}</strong>
-                        ${e.ignored ? '<span style="color: var(--danger); font-size: 0.8rem; font-weight: bold; margin-left: 5px;">[IGNORED]</span>' : ''}<br>
-                        <span style="font-size:0.9rem; color:var(--secondary)">
+                        <span style="color:${catInfo.color}; font-weight: 800; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;">${catInfo.icon} ${e.category}</span><br>
+                        <strong style="font-size: 1.15rem; color: #0f172a; letter-spacing: -0.01em;">${e.desc}</strong>
+                        ${e.ignored ? '<span style="color: var(--danger); font-size: 0.75rem; font-weight: 800; margin-left: 6px; background: #fee2e2; padding: 2px 4px; border-radius: 4px;">IGNORED</span>' : ''}<br>
+                        <span style="font-size:0.9rem; color:var(--secondary); font-weight: 500;">
                             ${formattedDate} • Paid by <span style="color:${payerColor}; font-weight:800;">${e.payer}</span> • 👥 <strong>${e.involved.length}</strong> involved<br>
-                            <div style="margin-top: 6px; padding-left: 8px; border-left: 2px solid ${catInfo.color}50; font-size: 0.85rem; line-height: 1.5;">
-                                <strong>For:</strong> ${breakdownHtml}
+                            <div style="margin-top: 6px; padding-left: 8px; border-left: 2px solid rgba(226,232,240,0.8); font-size: 0.85rem; line-height: 1.4;">
+                                <strong style="color: var(--text);">For:</strong> ${breakdownHtml}
                             </div>
                         </span>
                         ${notesHtml}
@@ -1760,7 +1768,7 @@
                         </div>
                     </div>
                 </div>`
-            }).join('') : '<div style="padding: 20px; text-align: center; color: var(--secondary); background: #f8fafc; border-radius: 8px;"><em>No activities match the current filters or search.</em></div>';
+            }).join('') : '<div style="padding: 20px 10px; text-align: center; color: var(--secondary); background: #ffffff; border-radius: var(--radius-sm); border: 1px dashed var(--border);"><em>No activities match the current filters or search.</em></div>';
 
             const badgeContainer = document.getElementById('next-payer-container');
             if (validActiveCount > 0 && participants.length > 0) {
@@ -1770,45 +1778,45 @@
                     if (diff < -maxDebt) { maxDebt = Math.abs(diff); topDebtor = gName; }
                 });
                 if (topDebtor) {
-                    badgeContainer.innerHTML = `<div class="next-payer-badge">🚨 Who Should Pay Next? <strong style="color: ${getColor(groupStats[topDebtor].members[0])};">${topDebtor}</strong> (Owes ${formatMoney(maxDebt)})</div>`;
+                    badgeContainer.innerHTML = `<div class="next-payer-badge">🚨 Who Should Pay Next? <strong style="color: ${getColor(groupStats[topDebtor].members[0])};">${topDebtor}</strong> <span class="tabular-nums">(Owes ${formatMoney(maxDebt)})</span></div>`;
                 } else {
-                    badgeContainer.innerHTML = `<div class="next-payer-badge" style="color: var(--green); border-color: #bbf7d0; background: #f0fdf4;">🎉 Everyone is perfectly settled!</div>`;
+                    badgeContainer.innerHTML = `<div class="next-payer-badge" style="color: var(--green); border-color: #bbf7d0; background: #f0fdf4;">🎉 Everyone perfectly settled!</div>`;
                 }
             } else { badgeContainer.innerHTML = ''; }
 
             const statsDiv = document.getElementById('ledger-stats');
             if (validActiveCount > 0 && participants.length > 0) {
                 let statsHtml = `
-                <div style="display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap;">
-                    <div class="global-stat-box" style="flex: 1; min-width: 200px; flex-direction: column; align-items: flex-start;">
+                <div style="display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;">
+                    <div class="global-stat-box" style="flex: 1; min-width: 180px; flex-direction: column; align-items: flex-start;">
                         <span class="global-stat-label">Filtered Trip Cost</span>
-                        <div style="display: flex; align-items: center;">
-                            <span class="global-stat-value" style="color: var(--primary);">${formatMoney(totalSpent)}</span>
+                        <div style="display: flex; align-items: center; flex-wrap: wrap;">
+                            <span class="global-stat-value tabular-nums" style="color: var(--primary);">${formatMoney(totalSpent)}</span>
                             ${getPerDayText(totalSpent)}
                         </div>
                     </div>
-                    <div class="global-stat-box" style="flex: 1.5; min-width: 200px; flex-direction: column; align-items: flex-start; background: #fff1f2; border-color: #fecdd3;">
+                    <div class="global-stat-box" style="flex: 1.5; min-width: 180px; flex-direction: column; align-items: flex-start; background: #fff1f2; border-color: #fecdd3;">
                         <span class="global-stat-label" style="color: #be123c;">Biggest Splurge (Filtered)</span>
                         <span class="global-stat-value" style="font-size: 1.1rem; color: #be123c;">
-                            ${CATEGORIES[biggestSplurge.category]?.icon || '📝'} ${biggestSplurge.desc} <strong style="font-size: 1.2rem;">(${formatMoney(biggestSplurge.amount)})</strong>
+                            ${CATEGORIES[biggestSplurge.category]?.icon || '📝'} ${biggestSplurge.desc} <strong class="tabular-nums" style="font-size: 1.15rem;">(${formatMoney(biggestSplurge.amount)})</strong>
                         </span>
                     </div>
                 </div>`;
                 
                 statsHtml += `<div class="section-label">Category Breakdown & Averages</div>`;
-                statsHtml += `<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; margin-bottom: 28px;">`;
+                statsHtml += `<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; margin-bottom: 24px;">`;
                 Object.keys(categoryTotals).forEach(cat => {
                     if (cat !== 'Transfer' && categoryTotals[cat] > 0) {
                         const info = CATEGORIES[cat]; const avgPerPerson = categoryTotals[cat] / categoryParticipations[cat];
                         statsHtml += `
-                        <div style="background:${info.bg}; border: 1px solid ${info.color}40; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
-                            <div style="font-size: 0.95rem; font-weight: 800; color: ${info.color}; margin-bottom: 6px;">${info.icon} ${cat}</div>
-                            <div style="display: flex; align-items: center; justify-content: center;">
-                                <div style="font-size: 1.25rem; color: var(--text); font-weight: 800;">${formatMoney(categoryTotals[cat])}</div>
+                        <div style="background:${info.bg}; border: 1px solid ${info.color}40; border-radius: var(--radius-sm); padding: 12px; display: flex; flex-direction: column; align-items: center; box-shadow: var(--shadow-sm); border-top: 4px solid ${info.color};">
+                            <div style="font-size: 0.9rem; font-weight: 800; color: ${info.color}; margin-bottom: 4px;">${info.icon} ${cat}</div>
+                            <div style="display: flex; align-items: center; justify-content: center; flex-direction: column;">
+                                <div class="tabular-nums" style="font-size: 1.2rem; color: var(--text); font-weight: 900;">${formatMoney(categoryTotals[cat])}</div>
+                                ${showPerDay && tripDays > 0 ? `<div class="tabular-nums" style="font-size: 0.75rem; color: var(--primary); font-weight: 700; margin-top: 2px;">${formatMoney(categoryTotals[cat] / tripDays)} / day</div>` : ''}
                             </div>
-                            ${showPerDay && tripDays > 0 ? `<div style="font-size: 0.8rem; color: var(--primary); font-weight: bold; margin-top: 4px;">${formatMoney(categoryTotals[cat] / tripDays)} / day</div>` : ''}
-                            <div style="font-size: 0.8rem; color: var(--secondary); margin-top: 8px; border-top: 1px solid ${info.color}30; padding-top: 8px; width: 100%; text-align: center;">
-                                <strong>Avg: ${formatMoney(avgPerPerson)}</strong> / person
+                            <div style="font-size: 0.8rem; color: var(--secondary); margin-top: 8px; border-top: 1px solid ${info.color}30; padding-top: 6px; width: 100%; text-align: center;">
+                                <strong class="tabular-nums">Avg: ${formatMoney(avgPerPerson)}</strong> / person
                             </div>
                         </div>`;
                     }
@@ -1836,25 +1844,25 @@
                                 const catActCount = stats.catActivitySets[cat].size; const catAvg = catActCount > 0 ? formatMoney(amt / catActCount) : '0.00';
                                 
                                 catBreakdownHtml += `
-                                    <div title="📊 ${cat} Insights:&#10;• Total Activities: ${catActCount}&#10;• Total Spent: ${formatMoney(amt)}&#10;• Avg / Activity: ${catAvg}" style="display:flex; justify-content:space-between; align-items: center; background: ${catBg}; border: 1px solid ${catColor}40; padding: 8px 12px; border-radius: 8px; cursor: help; transition: transform 0.2s;">
-                                        <span style="color: ${catColor}; font-weight: 800; font-size: 0.9rem;">${icon} ${cat}</span> 
-                                        <div style="text-align: right; line-height: 1.3;">
-                                            <div style="display: flex; justify-content: flex-end; align-items: center;">
-                                                <span style="color: var(--text); font-weight: 800; font-size: 1rem;">${formatMoney(amt)}</span>
+                                    <div title="📊 ${cat} Insights:&#10;• Total Activities: ${catActCount}&#10;• Total Spent: ${formatMoney(amt)}&#10;• Avg / Activity: ${catAvg}" style="display:flex; justify-content:space-between; align-items: center; background: ${catBg}; border: 1px solid ${catColor}40; padding: 8px 10px; border-radius: var(--radius-sm); cursor: help; transition: transform 0.2s;">
+                                        <span style="color: ${catColor}; font-weight: 800; font-size: 0.85rem;">${icon} ${cat}</span> 
+                                        <div style="text-align: right; line-height: 1.3; display: flex; flex-direction: column; align-items: flex-end;">
+                                            <div style="display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; justify-content: flex-end;">
+                                                <span class="tabular-nums" style="color: var(--text); font-weight: 800; font-size: 0.95rem;">${formatMoney(amt)}</span>
                                                 ${getPerDayTextSmall(amt)}
                                             </div>
-                                            <span style="font-size: 0.75rem; color: var(--secondary); font-weight: 600;">Avg: ${catAvg}/act</span>
+                                            <span class="tabular-nums" style="font-size: 0.75rem; color: var(--secondary); font-weight: 600;">Avg: ${catAvg}/act</span>
                                         </div>
                                     </div>`;
                             }
                         } else {
                             if (paidAmt > 0) {
                                 catBreakdownHtml += `
-                                    <div style="display:flex; justify-content:space-between; align-items: center; background: ${catBg}; border: 1px solid ${catColor}40; padding: 8px 12px; border-radius: 8px;">
-                                        <span style="color: ${catColor}; font-weight: 800; font-size: 0.9rem;">${icon} ${cat} (Paid)</span> 
+                                    <div style="display:flex; justify-content:space-between; align-items: center; background: ${catBg}; border: 1px solid ${catColor}40; padding: 8px 10px; border-radius: var(--radius-sm);">
+                                        <span style="color: ${catColor}; font-weight: 800; font-size: 0.85rem;">${icon} ${cat} (Paid)</span> 
                                         <div style="text-align: right; line-height: 1.3;">
-                                            <div style="display: flex; justify-content: flex-end; align-items: center;">
-                                                <span style="color: var(--text); font-weight: 800; font-size: 1rem;">${formatMoney(paidAmt)}</span>
+                                            <div style="display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap;">
+                                                <span class="tabular-nums" style="color: var(--text); font-weight: 800; font-size: 0.95rem;">${formatMoney(paidAmt)}</span>
                                                 ${getPerDayTextSmall(paidAmt)}
                                             </div>
                                         </div>
@@ -1862,11 +1870,11 @@
                             }
                             if (amt > 0) {
                                 catBreakdownHtml += `
-                                    <div style="display:flex; justify-content:space-between; align-items: center; background: #fef2f2; border: 1px solid #fecdd3; padding: 8px 12px; border-radius: 8px;">
-                                        <span style="color: var(--danger); font-weight: 800; font-size: 0.9rem;">${icon} ${cat} (Received)</span> 
+                                    <div style="display:flex; justify-content:space-between; align-items: center; background: #fef2f2; border: 1px solid #fecdd3; padding: 8px 10px; border-radius: var(--radius-sm);">
+                                        <span style="color: var(--danger); font-weight: 800; font-size: 0.85rem;">${icon} ${cat} (Received)</span> 
                                         <div style="text-align: right; line-height: 1.3;">
-                                            <div style="display: flex; justify-content: flex-end; align-items: center;">
-                                                <span style="color: var(--danger); font-weight: 800; font-size: 1rem;">+${formatMoney(amt)}</span>
+                                            <div style="display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap;">
+                                                <span class="tabular-nums" style="color: var(--danger); font-weight: 800; font-size: 0.95rem;">+${formatMoney(amt)}</span>
                                                 ${getPerDayTextSmall(amt)}
                                             </div>
                                         </div>
@@ -1887,27 +1895,29 @@
                                     const amt = mStats.catShares[cat];
                                     const paidAmt = mStats.catPaid[cat];
                                     const icon = CATEGORIES[cat].icon;
+                                    const catColor = CATEGORIES[cat].color;
+                                    const catBg = CATEGORIES[cat].bg;
                                     
                                     if (cat !== 'Transfer') {
                                         if (amt > 0) {
-                                            mCatHtml += `<span style="display: inline-block; background: var(--bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); font-size: 0.7rem; color: var(--secondary);">${icon} ${formatMoney(amt)}${getPerDayTextSmall(amt)}</span>`;
+                                            mCatHtml += `<span style="display: inline-flex; align-items: center; background: ${catBg}; padding: 4px 8px; border-radius: 6px; border: 1px solid ${catColor}40; font-size: 0.75rem; color: ${catColor}; font-weight: 700;">${icon} <span class="tabular-nums" style="margin-left: 4px;">${formatMoney(amt)}</span>${getPerDayTextSmall(amt)}</span>`;
                                         }
                                     } else {
                                         if (paidAmt > 0) {
-                                            mCatHtml += `<span style="display: inline-block; background: var(--bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); font-size: 0.7rem; color: var(--text); font-weight: bold;">${icon} ${formatMoney(paidAmt)}${getPerDayTextSmall(paidAmt)}</span>`;
+                                            mCatHtml += `<span style="display: inline-flex; align-items: center; background: ${catBg}; padding: 4px 8px; border-radius: 6px; border: 1px solid ${catColor}40; font-size: 0.75rem; color: ${catColor}; font-weight: 700;">${icon} <span class="tabular-nums" style="margin-left: 4px;">${formatMoney(paidAmt)}</span>${getPerDayTextSmall(paidAmt)}</span>`;
                                         }
                                         if (amt > 0) {
-                                            mCatHtml += `<span style="display: inline-block; background: #fef2f2; padding: 2px 6px; border-radius: 4px; border: 1px solid #fecdd3; font-size: 0.7rem; color: var(--danger); font-weight: bold;">${icon} +${formatMoney(amt)}${getPerDayTextSmall(amt)}</span>`;
+                                            mCatHtml += `<span style="display: inline-flex; align-items: center; background: #fef2f2; padding: 4px 8px; border-radius: 6px; border: 1px solid #fecdd3; font-size: 0.75rem; color: var(--danger); font-weight: 700;">${icon} <span class="tabular-nums" style="margin-left: 4px;">+${formatMoney(amt)}</span>${getPerDayTextSmall(amt)}</span>`;
                                         }
                                     }
                                 });
                                 individualBreakdownHtml += `
-                                    <div style="background: #ffffff; padding: 10px; border-radius: 8px; border: 1px solid var(--border);">
+                                    <div style="background: #f8fafc; padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--border);">
                                         <div style="display:flex; justify-content:space-between; align-items: center; font-size: 0.85rem; margin-bottom: 6px;">
                                             <span style="color: ${getColor(m)}; font-weight: 800; font-size: 0.95rem;">${m}</span>
-                                            <div style="text-align: right; line-height: 1.3;">
-                                                <span style="color: var(--secondary); font-size: 0.75rem; margin-right: 4px;">Share:</span><strong style="color: var(--text);">${formatMoney(mStats.owed)}</strong>${getPerDayTextSmall(mStats.owed)}<br>
-                                                <span style="color: var(--secondary); font-size: 0.75rem; margin-right: 4px;">Net Paid:</span><strong style="color: var(--text);">${formatMoney(mStats.paid)}</strong>${getPerDayTextSmall(mStats.paid)}
+                                            <div style="text-align: right; line-height: 1.4; display: flex; flex-direction: column; align-items: flex-end;">
+                                                <div style="display:flex; align-items: center; flex-wrap: wrap; justify-content: flex-end;"><span style="color: var(--secondary); font-size: 0.75rem; margin-right: 4px;">Share:</span><strong class="tabular-nums" style="color: var(--text);">${formatMoney(mStats.owed)}</strong>${getPerDayTextSmall(mStats.owed)}</div>
+                                                <div style="display:flex; align-items: center; flex-wrap: wrap; justify-content: flex-end;"><span style="color: var(--secondary); font-size: 0.75rem; margin-right: 4px;">Paid:</span><strong class="tabular-nums" style="color: var(--text);">${formatMoney(mStats.paid)}</strong>${getPerDayTextSmall(mStats.paid)}</div>
                                             </div>
                                         </div>
                                         <div style="display:flex; flex-wrap: wrap; gap: 4px;">${mCatHtml}</div>
@@ -1924,29 +1934,29 @@
                     const memberSubtext = stats.members.length > 1 ? `<div class="stat-members">Includes: ${stats.members.join(', ')}</div>` : '';
 
                     statsHtml += `
-                        <div class="stat-card" style="border-top: 4px solid ${repColor}; padding: 20px;">
-                            <div class="stat-name" style="color: ${repColor}; font-size: 1.2rem; margin-bottom: 4px;">${gName}</div>
+                        <div class="stat-card" style="border-top: 5px solid ${repColor};">
+                            <div class="stat-name" style="color: ${repColor};">${gName}</div>
                             ${memberSubtext}
-                            <div style="background: #f8fafc; padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; font-size: 0.9rem; border: 1px solid var(--border);">
-                                <div style="display:flex; justify-content:space-between; margin-bottom: 8px; align-items: center;">
-                                    <span style="color: var(--secondary); font-weight: 600;">Avg/Activity:</span> <strong style="color: var(--text); font-size: 1rem;">${avgPerActivity}</strong>
+                            <div style="background: #f8fafc; padding: 10px 14px; border-radius: var(--radius-sm); margin-bottom: 12px; font-size: 0.85rem; border: 1px solid var(--border);">
+                                <div style="display:flex; justify-content:space-between; margin-bottom: 6px; align-items: center;">
+                                    <span style="color: var(--secondary); font-weight: 600;">Avg/Activity:</span> <strong class="tabular-nums" style="color: var(--text); font-size: 0.95rem;">${avgPerActivity}</strong>
                                 </div>
                                 <div style="display:flex; justify-content:space-between; align-items: center;">
                                     <span style="color: var(--secondary); font-weight: 600;">Top Spend:</span> ${topCatDisplay}
                                 </div>
                             </div>
-                            <div style="display:flex; justify-content:space-between; margin-bottom: 12px; font-size: 1.05rem; align-items: center;">
+                            <div style="display:flex; justify-content:space-between; margin-bottom: 12px; font-size: 1rem; align-items: center;">
                                 <span style="font-weight: 600; color: var(--secondary);">Net Paid:</span> 
-                                <div style="display: flex; align-items: center;">
-                                    <strong style="color: var(--text); font-size: 1.15rem;">${formatMoney(stats.paid)}</strong>
+                                <div style="display: flex; align-items: center; flex-wrap: wrap;">
+                                    <strong class="tabular-nums" style="color: var(--text); font-size: 1.1rem;">${formatMoney(stats.paid)}</strong>
                                     ${getPerDayText(stats.paid)}
                                 </div>
                             </div>
-                            <div style="border-top: 2px dotted var(--border); padding-top: 16px;">
-                                <div style="display:flex; justify-content:space-between; font-weight: 800; font-size: 1.15rem; margin-bottom: 4px; align-items: center;">
+                            <div style="border-top: 1px solid var(--border); padding-top: 12px;">
+                                <div style="display:flex; justify-content:space-between; font-weight: 900; font-size: 1.1rem; margin-bottom: 6px; align-items: center;">
                                     <span>Total Share:</span> 
-                                    <div style="display: flex; align-items: center;">
-                                        <span>${formatMoney(stats.owed)}</span>
+                                    <div style="display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end;">
+                                        <span class="tabular-nums">${formatMoney(stats.owed)}</span>
                                         ${getPerDayText(stats.owed)}
                                     </div>
                                 </div>
@@ -1958,7 +1968,7 @@
                 statsHtml += `</div>`;
                 statsDiv.innerHTML = statsHtml;
             } else {
-                statsDiv.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--secondary); background: #f8fafc; border-radius: 8px;"><em>Ensure you have active expenses and matching filters.</em></div>';
+                statsDiv.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--secondary); background: #ffffff; border-radius: var(--radius-sm); border: 1px dashed var(--border);"><em>Ensure you have active expenses and matching filters.</em></div>';
             }
 
             renderGroupBalances(groupStats, validActiveCount);
@@ -1967,7 +1977,7 @@
         function renderGroupBalances(groupStats, activeCount) {
             const bList = document.getElementById('balances-list');
             if (!participants.length || activeCount === 0) {
-                bList.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--secondary); background: #f8fafc; border-radius: 8px;"><em>Ensure you have active expenses and matching filters.</em></div>';
+                bList.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--secondary); background: #ffffff; border-radius: var(--radius-sm); border: 1px dashed var(--border);"><em>Ensure you have active expenses and matching filters.</em></div>';
                 return;
             }
 
@@ -1978,17 +1988,17 @@
                 groupBalances.push({ name: gName, net: diff, color: getColor(groupStats[gName].members[0]) }); 
                 let txt = diff > 0.01 ? `is owed ${formatMoney(diff)}` : (diff < -0.01 ? `owes ${formatMoney(Math.abs(diff))}` : 'is settled');
                 let cls = diff > 0.01 ? 'owed' : (diff < -0.01 ? 'owes' : '');
-                const memberText = groupStats[gName].members.length > 1 ? `<div style="font-size: 0.8rem; color: var(--secondary); margin-top: 6px;">Members: ${groupStats[gName].members.join(', ')}</div>` : '';
+                const memberText = groupStats[gName].members.length > 1 ? `<div style="font-size: 0.8rem; color: var(--secondary); margin-top: 4px; font-weight: 500;">Members: ${groupStats[gName].members.join(', ')}</div>` : '';
                 html += `<div class="balance-item" style="flex-direction: column; align-items: flex-start; padding: 12px 0;">
                             <div style="display: flex; justify-content: space-between; width: 100%;">
-                                <span style="color: ${groupBalances[groupBalances.length-1].color}; font-weight: 800; font-size: 1.1rem;">${gName}</span>
-                                <span class="${cls}" style="font-size: 1.1rem;">${txt}</span>
+                                <span style="color: ${groupBalances[groupBalances.length-1].color}; font-weight: 900; font-size: 1.1rem;">${gName}</span>
+                                <span class="${cls} tabular-nums" style="font-size: 1.1rem;">${txt}</span>
                             </div>
                             ${memberText}
                          </div>`;
             });
 
-            html += '<div class="section-label" style="margin-top: 25px;">How to Settle Up</div>';
+            html += '<div class="section-label" style="margin-top: 24px;">How to Settle Up</div>';
             let debtors = groupBalances.filter(b => b.net < -0.01).map(b => ({ name: b.name, debt: Math.abs(b.net), color: b.color })).sort((a,b) => b.debt - a.debt);
             let creditors = groupBalances.filter(b => b.net > 0.01).map(b => ({ name: b.name, credit: b.net, color: b.color })).sort((a,b) => b.credit - a.credit);
             
@@ -2003,13 +2013,13 @@
             }
 
             if (settlements.length === 0) {
-                html += '<div style="padding: 20px; text-align: center; color: var(--green); font-weight: bold; background: #f0fdf4; border-radius: 8px;">🎉 Everyone is fully settled!</div>';
+                html += '<div style="padding: 16px; text-align: center; color: var(--green); font-weight: 800; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: var(--radius-sm); font-size: 1.05rem;">🎉 Everyone is fully settled!</div>';
             } else {
                 html += '<div class="settlement-box">';
                 settlements.forEach(s => {
                     html += `<div class="settlement-item">
-                                <span><strong style="color:${s.from.color}; font-size: 1.1rem;">${s.from.name}</strong> pays <strong style="color:${s.to.color}; font-size: 1.1rem;">${s.to.name}</strong></span>
-                                <span style="font-weight: 800; color: var(--text); font-size: 1.1rem;">Out: ${formatMoney(s.amount)}</span>
+                                <span><strong style="color:${s.from.color}; font-size: 1.05rem;">${s.from.name}</strong> pays <strong style="color:${s.to.color}; font-size: 1.05rem;">${s.to.name}</strong></span>
+                                <span class="tabular-nums" style="font-weight: 900; color: var(--text); font-size: 1.1rem;">Out: ${formatMoney(s.amount)}</span>
                              </div>`;
                 });
                 html += '</div>';
