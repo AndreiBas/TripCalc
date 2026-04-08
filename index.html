@@ -134,7 +134,6 @@
         }
         .trip-comment-input:focus, .trip-comment-input:hover { border-color: var(--border); outline: none; background: rgba(255, 255, 255, 0.5); color: var(--text); }
 
-
         .next-payer-badge {
             background: #fff1f2; border: 1px solid #fecdd3; color: #be123c;
             padding: 4px 10px; border-radius: 8px; font-size: 0.85rem; font-weight: 700;
@@ -435,7 +434,6 @@
                 <button class="outline small" onclick="document.getElementById('ledger-card-wrapper').scrollIntoView({behavior: 'smooth', block: 'start'})">📜 Ledger</button>
                 <button class="outline small" onclick="document.getElementById('analytics-section').scrollIntoView({behavior: 'smooth', block: 'start'})">📊 Analytics</button>
                 <button class="outline small" onclick="document.getElementById('settlement-section').scrollIntoView({behavior: 'smooth', block: 'start'})">💸 Settle</button>
-                <button class="outline small" onclick="toggleCalculator()" style="border-color: var(--primary); color: var(--primary);">🧮 Calc</button>
             </div>
             
         </div>
@@ -633,7 +631,12 @@
 
         function toggleCalculator() {
             const calc = document.getElementById('mini-calculator');
-            calc.style.display = calc.style.display === 'none' ? 'block' : 'none';
+            // Explicitly check for block to fix the double-click bug on first load
+            if (calc.style.display === 'block') {
+                calc.style.display = 'none';
+            } else {
+                calc.style.display = 'block';
+            }
         }
         
         function calcInput(val) {
@@ -687,7 +690,7 @@
                                 }
                             }
                             
-                            // Trigger events so the app knows the value changed (critical for React/Vanilla listeners)
+                            // Trigger events so the app knows the value changed
                             lastActiveInput.dispatchEvent(new Event('input', { bubbles: true }));
                             lastActiveInput.dispatchEvent(new Event('change', { bubbles: true }));
                             
@@ -1933,7 +1936,7 @@
                     if (diff < -maxDebt) { maxDebt = Math.abs(diff); topDebtor = gName; }
                 });
                 if (topDebtor) {
-                    badgeContainer.innerHTML = `<div class="next-payer-badge">🚨 Who Should Pay Next? <strong style="color: ${getColor(groupStats[topDebtor].members[0])};">${topDebtor}</strong> <span class="tabular-nums">(Owes ${formatMoney(maxDebt)})</span></div>`;
+                    badgeContainer.innerHTML = `<div class="next-payer-badge">🚨 Pay Next? <strong style="color: ${getColor(groupStats[topDebtor].members[0])};">${topDebtor}</strong> <span class="tabular-nums">(Owes ${formatMoney(maxDebt)})</span></div>`;
                 } else {
                     badgeContainer.innerHTML = `<div class="next-payer-badge" style="color: var(--green); border-color: #bbf7d0; background: #f0fdf4;">🎉 Everyone perfectly settled!</div>`;
                 }
