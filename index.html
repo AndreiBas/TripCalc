@@ -99,6 +99,7 @@
             .col-left::-webkit-scrollbar-track, .col-mid::-webkit-scrollbar-track, .col-right::-webkit-scrollbar-track { background: transparent; }
             .col-left::-webkit-scrollbar-thumb, .col-mid::-webkit-scrollbar-thumb, .col-right::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
             .trip-name-input { text-align: left; margin-bottom: 0; width: auto; }
+            .trip-comment-input { text-align: left; margin: 0; }
         }
         
         @media (min-width: 1400px) {
@@ -124,6 +125,15 @@
             padding: 2px 8px; box-sizing: border-box; transition: all 0.2s ease; border-radius: var(--radius-sm);
         }
         .trip-name-input:focus, .trip-name-input:hover { border-color: var(--primary); outline: none; background: rgba(79, 70, 229, 0.05); color: var(--primary); }
+
+        .trip-comment-input {
+            font-size: 0.9rem; font-weight: 500; color: var(--secondary);
+            text-align: center; border: 1px dashed transparent; background: transparent;
+            padding: 2px 8px; box-sizing: border-box; transition: all 0.2s ease; border-radius: var(--radius-sm);
+            width: 100%; max-width: 300px;
+        }
+        .trip-comment-input:focus, .trip-comment-input:hover { border-color: var(--border); outline: none; background: rgba(255, 255, 255, 0.5); color: var(--text); }
+
 
         .next-payer-badge {
             background: #fff1f2; border: 1px solid #fecdd3; color: #be123c;
@@ -219,7 +229,7 @@
 
         .participant-selector { background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 10px; margin-top: 16px; }
         .participant-row { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px; background: #fff; border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 6px; box-shadow: var(--shadow-sm);}
-        .participant-row input[type="number"] { width: 90px; padding: 6px 8px; margin: 0; font-size: 0.85rem; text-align: right; }
+        .participant-row input[type="number"] { width: 90px; padding: 6px 8px; margin: 0; font-size: 0.85rem; text-align: right; border-radius: var(--radius-sm); }
         .checkbox-item { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; cursor: pointer; font-weight: 700; flex: 1;}
         .checkbox-item input[type="checkbox"] { width: 16px; height: 16px; margin: 0; cursor: pointer; accent-color: var(--primary);}
 
@@ -292,9 +302,52 @@
         details.indiv-details summary::after { content: '▼'; font-size: 0.7rem; }
         details.indiv-details[open] summary::after { transform: rotate(180deg); }
         .indiv-content { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+
+        /* Floating Calculator Styling */
+        #mini-calculator {
+            display: none; position: fixed; bottom: 20px; right: 20px;
+            background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; 
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15); z-index: 9999; width: 220px;
+        }
+        @media (max-width: 1023px) {
+            #mini-calculator { bottom: 80px; right: 50%; transform: translateX(50%); }
+        }
     </style>
 </head>
 <body>
+
+    <div id="mini-calculator">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">
+            <h3 style="margin: 0; font-size: 0.9rem; font-weight: 800;">🧮 Calculator</h3>
+            <span style="cursor: pointer; font-size: 1.2rem; line-height: 1; color: var(--secondary);" onclick="toggleCalculator()">&times;</span>
+        </div>
+        <div id="calc-display" class="tabular-nums" style="background: #ffffff; border: 1px solid var(--primary); border-radius: var(--radius-sm); padding: 8px 12px; font-size: 1.2rem; font-weight: 900; text-align: right; margin-bottom: 12px; color: var(--primary); box-shadow: inset 0 2px 4px rgba(0,0,0,0.05); min-height: 24px; word-break: break-all;">0</div>
+        
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;">
+            <button class="outline small" onclick="calcInput('7')">7</button>
+            <button class="outline small" onclick="calcInput('8')">8</button>
+            <button class="outline small" onclick="calcInput('9')">9</button>
+            <button class="secondary small" onclick="calcInput('/')">÷</button>
+            
+            <button class="outline small" onclick="calcInput('4')">4</button>
+            <button class="outline small" onclick="calcInput('5')">5</button>
+            <button class="outline small" onclick="calcInput('6')">6</button>
+            <button class="secondary small" onclick="calcInput('*')">×</button>
+            
+            <button class="outline small" onclick="calcInput('1')">1</button>
+            <button class="outline small" onclick="calcInput('2')">2</button>
+            <button class="outline small" onclick="calcInput('3')">3</button>
+            <button class="secondary small" onclick="calcInput('-')">-</button>
+            
+            <button class="outline small" onclick="calcInput('.')">.</button>
+            <button class="outline small" onclick="calcInput('0')">0</button>
+            <button class="danger small" onclick="calcClear()">C</button>
+            <button class="secondary small" onclick="calcInput('+')">+</button>
+        </div>
+        <button onclick="calcSolve()" style="width: 100%; margin-top: 6px; font-size: 1.1rem; padding: 6px;">=</button>
+        <button class="outline small" id="calc-copy-btn" onclick="calcCopy()" style="width: 100%; margin-top: 6px;">📋 Copy & Paste Result</button>
+    </div>
 
     <div class="app-container">
         
@@ -303,6 +356,7 @@
                 
                 <div style="display: flex; flex-direction: column; justify-content: center; gap: 2px;">
                     <input type="text" id="trip-name" class="trip-name-input" value="My Trip" onchange="updateTripName()">
+                    <input type="text" id="trip-comment" class="trip-comment-input" placeholder="Add a trip comment..." onchange="updateTripComment()">
                     <span id="cloud-status" style="font-size: 0.75rem; color: var(--secondary); font-weight: 600; min-height: 16px; text-align: center;"></span>
                 </div>
 
@@ -381,6 +435,7 @@
                 <button class="outline small" onclick="document.getElementById('ledger-card-wrapper').scrollIntoView({behavior: 'smooth', block: 'start'})">📜 Ledger</button>
                 <button class="outline small" onclick="document.getElementById('analytics-section').scrollIntoView({behavior: 'smooth', block: 'start'})">📊 Analytics</button>
                 <button class="outline small" onclick="document.getElementById('settlement-section').scrollIntoView({behavior: 'smooth', block: 'start'})">💸 Settle</button>
+                <button class="outline small" onclick="toggleCalculator()" style="border-color: var(--primary); color: var(--primary);">🧮 Calc</button>
             </div>
             
         </div>
@@ -389,7 +444,10 @@
             <div class="card" id="activity-card">
                 
                 <h2 id="activity-header" style="cursor: pointer; user-select: none; display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px;" onclick="toggleActivityCard()">
-                    <span id="activity-title-text">➕ Add Activity</span>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <span id="activity-title-text">➕ Add Activity</span>
+                        <button class="outline small" onclick="event.stopPropagation(); toggleCalculator()" style="padding: 2px 8px; font-size: 0.85rem; background: var(--bg);" title="Open Calculator">🧮 Calc</button>
+                    </div>
                     <span id="activity-toggle-icon" style="transition: transform 0.2s; font-size: 0.8rem;">▼</span>
                 </h2>
                 
@@ -408,7 +466,7 @@
                         </div>
 
                         <div class="form-row">
-                            <input type="text" id="exp-desc" style="flex: 1;" placeholder="Description (e.g., Dinner)" list="desc-suggestions">
+                            <input type="text" id="exp-desc" style="flex: 1;" placeholder="Description (e.g., Dinner)" list="desc-suggestions" oninput="this.value = this.value.charAt(0).toUpperCase() + this.value.slice(1);">
                             <datalist id="desc-suggestions"></datalist>
                         </div>
                         
@@ -522,6 +580,7 @@
             <button class="outline small" onclick="document.getElementById('ledger-card-wrapper').scrollIntoView({behavior: 'smooth', block: 'start'})">📜 Ledger</button>
             <button class="outline small" onclick="document.getElementById('analytics-section').scrollIntoView({behavior: 'smooth', block: 'start'})">📊 Analytics</button>
             <button class="outline small" onclick="document.getElementById('settlement-section').scrollIntoView({behavior: 'smooth', block: 'start'})">💸 Settle</button>
+            <button class="outline small" onclick="toggleCalculator()" style="border-color: var(--primary); color: var(--primary);">🧮 Calc</button>
         </div>
 
     </div>
@@ -529,6 +588,7 @@
     <script>
         // --- 1. STATE VARIABLES ---
         let tripName = "My Trip";
+        let tripComment = ""; // New Tracking Variable
         let participants = [];
         let participantGroups = {}; 
         let expenses = [];
@@ -556,6 +616,92 @@
         const CURRENCY_SYMBOLS = { USD: '$', EUR: '€', GBP: '£', CAD: 'C$', AUD: 'A$', JPY: '¥', MXN: 'M$' };
 
         let activeCategoryFilters = new Set(Object.keys(CATEGORIES));
+
+        // --- 1B. CALCULATOR LOGIC & SMART PASTE ---
+        let calcExpr = "";
+        let lastActiveInput = null;
+
+        // Track the last active text/number input globally
+        document.addEventListener('focusin', (e) => {
+            if ((e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) {
+                // Ignore focus events inside the calculator itself
+                if (!e.target.closest('#mini-calculator')) {
+                    lastActiveInput = e.target;
+                }
+            }
+        });
+
+        function toggleCalculator() {
+            const calc = document.getElementById('mini-calculator');
+            calc.style.display = calc.style.display === 'none' ? 'block' : 'none';
+        }
+        
+        function calcInput(val) {
+            if (calcExpr === "0" && val !== ".") calcExpr = "";
+            if (calcExpr === "Error") calcExpr = "";
+            calcExpr += val;
+            document.getElementById('calc-display').innerText = calcExpr;
+        }
+        
+        function calcClear() {
+            calcExpr = "";
+            document.getElementById('calc-display').innerText = "0";
+        }
+        
+        function calcSolve() {
+            try {
+                // Strips malicious code, purely evaluates simple math characters
+                let safeExpr = calcExpr.replace(/[^-()\d/*+.]/g, '');
+                if(safeExpr === "") return;
+                let result = Function('"use strict";return (' + safeExpr + ')')();
+                result = Math.round(result * 100) / 100; // lock to 2 decimal places maximum
+                calcExpr = result.toString();
+                document.getElementById('calc-display').innerText = calcExpr;
+            } catch(e) {
+                document.getElementById('calc-display').innerText = "Error";
+                calcExpr = "";
+            }
+        }
+        
+        function calcCopy() {
+            if (calcExpr && calcExpr !== "Error") {
+                navigator.clipboard.writeText(calcExpr).then(() => {
+                    const btn = document.getElementById('calc-copy-btn');
+                    btn.innerText = "✅ Pasted!";
+                    
+                    // Smart Paste Logic
+                    if (lastActiveInput) {
+                        try {
+                            if (lastActiveInput.type === 'number') {
+                                // For number inputs, replace the entire value
+                                lastActiveInput.value = calcExpr;
+                            } else {
+                                // For text inputs, append or insert at cursor position
+                                const start = lastActiveInput.selectionStart;
+                                const end = lastActiveInput.selectionEnd;
+                                const text = lastActiveInput.value;
+                                if (start !== null && end !== null) {
+                                    lastActiveInput.value = text.slice(0, start) + calcExpr + text.slice(end);
+                                } else {
+                                    lastActiveInput.value += calcExpr;
+                                }
+                            }
+                            
+                            // Trigger events so the app knows the value changed (critical for React/Vanilla listeners)
+                            lastActiveInput.dispatchEvent(new Event('input', { bubbles: true }));
+                            lastActiveInput.dispatchEvent(new Event('change', { bubbles: true }));
+                            
+                            // If they pasted into a participant's personal share, force the % recalculator to fire
+                            if (lastActiveInput.classList.contains('part-personal')) {
+                                calculateRemainingPercentage();
+                            }
+                        } catch(e) { console.error("Could not paste into input", e); }
+                    }
+
+                    setTimeout(() => btn.innerText = "📋 Copy & Paste Result", 1500);
+                });
+            }
+        }
 
         // --- 2. INITIALIZATION & DATA REPAIR ---
         document.getElementById('exp-date').valueAsDate = new Date();
@@ -596,7 +742,7 @@
 
         function saveState() {
             localStorage.setItem('tripSplitterLatest', JSON.stringify({ 
-                tripName, participants, participantGroups, expenses, 
+                tripName, tripComment, participants, participantGroups, expenses, 
                 secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay 
             }));
 
@@ -613,6 +759,7 @@
                 try {
                     const data = JSON.parse(saved);
                     tripName = data.tripName || "My Trip";
+                    tripComment = data.tripComment || ""; // Recover Comment
                     participants = data.participants || [];
                     participantGroups = data.participantGroups || {};
                     expenses = data.expenses || [];
@@ -624,6 +771,7 @@
                     
                     repairLegacyData();
                     document.getElementById('trip-name').value = tripName;
+                    document.getElementById('trip-comment').value = tripComment;
                     document.getElementById('global-currency').value = secondaryCurrency;
                     document.getElementById('ledger-sort').value = currentSort;
                     
@@ -647,6 +795,7 @@
         function resetTrip() {
             if(confirm("Start a new trip? This wipes your current progress! Make sure you saved your file first.")) {
                 tripName = "My Trip"; 
+                tripComment = ""; 
                 participants = []; 
                 participantGroups = {}; 
                 expenses = [];
@@ -659,6 +808,7 @@
                 document.getElementById('global-currency').value = "";
                 document.getElementById('ledger-sort').value = "date-desc";
                 document.getElementById('trip-name').value = tripName;
+                document.getElementById('trip-comment').value = tripComment;
                 document.getElementById('exp-category').value = 'Other';
                 
                 document.getElementById('per-day-toggle').checked = false;
@@ -679,6 +829,7 @@
         }
 
         function updateTripName() { tripName = document.getElementById('trip-name').value; saveState(); }
+        function updateTripComment() { tripComment = document.getElementById('trip-comment').value; saveState(); }
 
         function toggleLedger() { document.getElementById('ledger-card-wrapper').classList.toggle('ledger-collapsed'); }
         
@@ -757,7 +908,7 @@
         }
 
         function exportTrip() {
-            const payload = JSON.stringify({ tripName, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay });
+            const payload = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay });
             const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(payload);
             const dl = document.createElement('a');
             dl.setAttribute("href", dataStr);
@@ -769,7 +920,7 @@
             const password = prompt("⚠️ Secure Save ⚠️\nEnter a password to encrypt this trip file.\n\nWARNING: If you forget this password, your data cannot be recovered.");
             if (!password) return; 
 
-            const payload = JSON.stringify({ tripName, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay });
+            const payload = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay });
             try {
                 const encryptedData = await encryptData(password, payload);
                 const securePayload = JSON.stringify(encryptedData);
@@ -808,6 +959,7 @@
 
                 if (parsedData) {
                     tripName = parsedData.tripName || "Imported Trip"; 
+                    tripComment = parsedData.tripComment || ""; 
                     participants = parsedData.participants || []; 
                     participantGroups = parsedData.participantGroups || {};
                     expenses = parsedData.expenses || [];
@@ -820,6 +972,7 @@
                     activeCategoryFilters = new Set(Object.keys(CATEGORIES)); 
                     repairLegacyData();
                     document.getElementById('trip-name').value = tripName;
+                    document.getElementById('trip-comment').value = tripComment;
                     document.getElementById('global-currency').value = secondaryCurrency;
                     document.getElementById('ledger-sort').value = currentSort;
                     
@@ -906,7 +1059,7 @@
         async function saveToSupabase(targetId) {
             const client = getSupabase();
             if (!client) return;
-            const payload = { tripName, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay };
+            const payload = { tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay };
             
             const btnId = targetId === 'manual_trip' ? 'cloud-save-btn-1' : 'cloud-save-btn-2';
             const btn = document.getElementById(btnId);
@@ -926,7 +1079,7 @@
             const client = getSupabase(true);
             if (!client) return;
             
-            const payload = { tripName, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay };
+            const payload = { tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay };
             const statusEl = document.getElementById('cloud-status');
             
             const { error } = await client.from('trip_sync').upsert({ id: 'auto_trip', trip_data: payload });
@@ -965,6 +1118,7 @@
                     const parsedData = typeof data.trip_data === 'string' ? JSON.parse(data.trip_data) : data.trip_data;
                     
                     tripName = parsedData.tripName || "Imported Trip"; 
+                    tripComment = parsedData.tripComment || ""; 
                     participants = parsedData.participants || []; 
                     participantGroups = parsedData.participantGroups || {};
                     expenses = parsedData.expenses || [];
@@ -977,6 +1131,7 @@
                     activeCategoryFilters = new Set(Object.keys(CATEGORIES)); 
                     repairLegacyData();
                     document.getElementById('trip-name').value = tripName;
+                    document.getElementById('trip-comment').value = tripComment;
                     document.getElementById('global-currency').value = secondaryCurrency;
                     document.getElementById('ledger-sort').value = currentSort;
                     
