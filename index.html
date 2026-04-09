@@ -586,12 +586,13 @@
     <script>
         // --- 1. STATE VARIABLES ---
         let tripName = "My Trip";
-        let tripComment = ""; // New Tracking Variable
+        let tripComment = ""; 
         let participants = [];
         let participantGroups = {}; 
         let expenses = [];
         let editingExpenseId = null; 
         let searchText = "";
+        let insightFilter = null; // NEW Interactive Filter State
         
         let tripDays = 1;
         let showPerDay = false;
@@ -631,7 +632,6 @@
 
         function toggleCalculator() {
             const calc = document.getElementById('mini-calculator');
-            // Explicitly check for block to fix the double-click bug on first load
             if (calc.style.display === 'block') {
                 calc.style.display = 'none';
             } else {
@@ -676,10 +676,8 @@
                     if (lastActiveInput) {
                         try {
                             if (lastActiveInput.type === 'number') {
-                                // For number inputs, replace the entire value
                                 lastActiveInput.value = calcExpr;
                             } else {
-                                // For text inputs, append or insert at cursor position
                                 const start = lastActiveInput.selectionStart;
                                 const end = lastActiveInput.selectionEnd;
                                 const text = lastActiveInput.value;
@@ -704,6 +702,13 @@
                     setTimeout(() => btn.innerText = "📋 Copy & Paste Result", 1500);
                 });
             }
+        }
+
+        // --- 1C. INSIGHT FILTERING ---
+        function filterByInsight(name, cat) {
+            insightFilter = { name, cat };
+            document.getElementById('search-filter').scrollIntoView({behavior: 'smooth', block: 'center'});
+            updateUI();
         }
 
         // --- 2. INITIALIZATION & DATA REPAIR ---
@@ -762,7 +767,7 @@
                 try {
                     const data = JSON.parse(saved);
                     tripName = data.tripName || "My Trip";
-                    tripComment = data.tripComment || ""; // Recover Comment
+                    tripComment = data.tripComment || ""; 
                     participants = data.participants || [];
                     participantGroups = data.participantGroups || {};
                     expenses = data.expenses || [];
@@ -1436,7 +1441,13 @@
         }
 
         function clearSearch() {
-            document.getElementById('search-filter').value = '';
+            insightFilter = null;
+            const searchInput = document.getElementById('search-filter');
+            searchInput.value = '';
+            searchInput.readOnly = false;
+            searchInput.style.color = 'var(--text)';
+            searchInput.style.fontWeight = '500';
+            searchText = '';
             handleSearchChange();
         }
 
@@ -1750,13 +1761,18 @@
             expenses.forEach(e => {
                 const cat = e.category || 'Other';
                 
-                // Search filtering check
-                const searchMatch = !searchText || 
-                                    e.desc.toLowerCase().includes(searchText) || 
-                                    e.payer.toLowerCase().includes(searchText) || 
-                                    (e.notes && e.notes.toLowerCase().includes(searchText));
+                // Search & Insight filtering check
+                let passesFilter = true;
+                if (insightFilter) {
+                    const groupMembers = groupsMap[insightFilter.name] || [insightFilter.name];
+                    const involvesTarget = groupMembers.includes(e.payer) || e.involved.some(p => groupMembers.includes(p));
+                    if (cat !== insightFilter.cat || !involvesTarget) passesFilter = false;
+                } else {
+                    const searchMatch = !searchText || e.desc.toLowerCase().includes(searchText) || e.payer.toLowerCase().includes(searchText) || (e.notes && e.notes.toLowerCase().includes(searchText));
+                    if (!activeCategoryFilters.has(cat) || !searchMatch) passesFilter = false;
+                }
 
-                if (e.ignored || !activeCategoryFilters.has(cat) || !searchMatch) return; 
+                if (e.ignored || !passesFilter) return; 
                 
                 validActiveCount++;
                 const payerGroup = participantGroups[e.payer] || e.payer;
@@ -1841,13 +1857,29 @@
 
             const filteredExpenses = sorted.filter(e => {
                 const cat = e.category || 'Other';
-                const searchMatch = !searchText || 
-                                    e.desc.toLowerCase().includes(searchText) || 
-                                    e.payer.toLowerCase().includes(searchText) || 
-                                    (e.notes && e.notes.toLowerCase().includes(searchText));
-                return activeCategoryFilters.has(cat) && searchMatch;
+                let passesFilter = true;
+                if (insightFilter) {
+                    const groupMembers = groupsMap[insightFilter.name] || [insightFilter.name];
+                    const involvesTarget = groupMembers.includes(e.payer) || e.involved.some(p => groupMembers.includes(p));
+                    if (cat !== insightFilter.cat || !involvesTarget) passesFilter = false;
+                } else {
+                    const searchMatch = !searchText || e.desc.toLowerCase().includes(searchText) || e.payer.toLowerCase().includes(searchText) || (e.notes && e.notes.toLowerCase().includes(searchText));
+                    if (!activeCategoryFilters.has(cat) || !searchMatch) passesFilter = false;
+                }
+                return passesFilter;
             });
             
+            // Immediately update the search bar UI to reflect the lock
+            const searchInput = document.getElementById('search-filter');
+            const clearBtn = document.getElementById('clear-search-btn');
+            if (insightFilter) {
+                searchInput.value = `Filtered by ${insightFilter.name} (${insightFilter.cat})`;
+                searchInput.style.color = "var(--primary)";
+                searchInput.style.fontWeight = "700";
+                searchInput.readOnly = true;
+                clearBtn.style.display = 'block';
+            }
+
             // Update the visual counter
             const ledgerCountEl = document.getElementById('ledger-count');
             if(ledgerCountEl) ledgerCountEl.innerText = `(${filteredExpenses.length})`;
@@ -1974,7 +2006,7 @@
                                 ${showPerDay && tripDays > 0 ? `<div class="tabular-nums" style="font-size: 0.75rem; color: var(--primary); font-weight: 700; margin-top: 2px;">${formatMoney(categoryTotals[cat] / tripDays)} / day</div>` : ''}
                             </div>
                             <div style="font-size: 0.8rem; color: var(--secondary); margin-top: 8px; border-top: 1px solid ${info.color}30; padding-top: 6px; width: 100%; text-align: center;">
-                               <strong class="tabular-nums">Avg Act: ${formatMoney(avgPerPerson)}</strong> / person
+                                <strong class="tabular-nums">Avg Act: ${formatMoney(avgPerPerson)}</strong> / person
                             </div>
                         </div>`;
                     }
@@ -2002,7 +2034,7 @@
                                 const catActCount = stats.catActivitySets[cat].size; const catAvg = catActCount > 0 ? formatMoney(amt / catActCount) : '0.00';
                                 
                                 catBreakdownHtml += `
-                                    <div title="📊 ${cat} Insights:&#10;• Total Activities: ${catActCount}&#10;• Total Spent: ${formatMoney(amt)}&#10;• Avg / Activity: ${catAvg}" style="display:flex; justify-content:space-between; align-items: center; background: ${catBg}; border: 1px solid ${catColor}40; padding: 8px 10px; border-radius: var(--radius-sm); cursor: help; transition: transform 0.2s;">
+                                    <div onclick="filterByInsight('${gName}', '${cat}')" title="📊 ${cat} Insights:&#10;• Total Activities: ${catActCount}&#10;• Total Spent: ${formatMoney(amt)}&#10;• Avg / Activity: ${catAvg}" style="cursor: pointer; display:flex; justify-content:space-between; align-items: center; background: ${catBg}; border: 1px solid ${catColor}40; padding: 8px 10px; border-radius: var(--radius-sm); transition: transform 0.2s;">
                                         <span style="color: ${catColor}; font-weight: 800; font-size: 0.85rem;">${icon} ${cat}</span> 
                                         <div style="text-align: right; line-height: 1.3; display: flex; flex-direction: column; align-items: flex-end;">
                                             <div style="display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; justify-content: flex-end;">
@@ -2016,7 +2048,7 @@
                         } else {
                             if (paidAmt > 0) {
                                 catBreakdownHtml += `
-                                    <div style="display:flex; justify-content:space-between; align-items: center; background: ${catBg}; border: 1px solid ${catColor}40; padding: 8px 10px; border-radius: var(--radius-sm);">
+                                    <div onclick="filterByInsight('${gName}', '${cat}')" style="cursor: pointer; display:flex; justify-content:space-between; align-items: center; background: ${catBg}; border: 1px solid ${catColor}40; padding: 8px 10px; border-radius: var(--radius-sm);">
                                         <span style="color: ${catColor}; font-weight: 800; font-size: 0.85rem;">${icon} ${cat} (Paid)</span> 
                                         <div style="text-align: right; line-height: 1.3;">
                                             <div style="display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap;">
@@ -2028,7 +2060,7 @@
                             }
                             if (amt > 0) {
                                 catBreakdownHtml += `
-                                    <div style="display:flex; justify-content:space-between; align-items: center; background: #fef2f2; border: 1px solid #fecdd3; padding: 8px 10px; border-radius: var(--radius-sm);">
+                                    <div onclick="filterByInsight('${gName}', '${cat}')" style="cursor: pointer; display:flex; justify-content:space-between; align-items: center; background: #fef2f2; border: 1px solid #fecdd3; padding: 8px 10px; border-radius: var(--radius-sm);">
                                         <span style="color: var(--danger); font-weight: 800; font-size: 0.85rem;">${icon} ${cat} (Received)</span> 
                                         <div style="text-align: right; line-height: 1.3;">
                                             <div style="display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap;">
@@ -2058,14 +2090,14 @@
                                     
                                     if (cat !== 'Transfer') {
                                         if (amt > 0) {
-                                            mCatHtml += `<span style="display: inline-flex; align-items: center; background: ${catBg}; padding: 4px 8px; border-radius: 6px; border: 1px solid ${catColor}40; font-size: 0.75rem; color: ${catColor}; font-weight: 700;">${icon} <span class="tabular-nums" style="margin-left: 4px;">${formatMoney(amt)}</span>${getPerDayTextSmall(amt)}</span>`;
+                                            mCatHtml += `<span onclick="filterByInsight('${m}', '${cat}')" style="cursor: pointer; display: inline-flex; align-items: center; background: ${catBg}; padding: 4px 8px; border-radius: 6px; border: 1px solid ${catColor}40; font-size: 0.75rem; color: ${catColor}; font-weight: 700;">${icon} <span class="tabular-nums" style="margin-left: 4px;">${formatMoney(amt)}</span>${getPerDayTextSmall(amt)}</span>`;
                                         }
                                     } else {
                                         if (paidAmt > 0) {
-                                            mCatHtml += `<span style="display: inline-flex; align-items: center; background: ${catBg}; padding: 4px 8px; border-radius: 6px; border: 1px solid ${catColor}40; font-size: 0.75rem; color: ${catColor}; font-weight: 700;">${icon} <span class="tabular-nums" style="margin-left: 4px;">${formatMoney(paidAmt)}</span>${getPerDayTextSmall(paidAmt)}</span>`;
+                                            mCatHtml += `<span onclick="filterByInsight('${m}', '${cat}')" style="cursor: pointer; display: inline-flex; align-items: center; background: ${catBg}; padding: 4px 8px; border-radius: 6px; border: 1px solid ${catColor}40; font-size: 0.75rem; color: ${catColor}; font-weight: 700;">${icon} <span class="tabular-nums" style="margin-left: 4px;">${formatMoney(paidAmt)}</span>${getPerDayTextSmall(paidAmt)}</span>`;
                                         }
                                         if (amt > 0) {
-                                            mCatHtml += `<span style="display: inline-flex; align-items: center; background: #fef2f2; padding: 4px 8px; border-radius: 6px; border: 1px solid #fecdd3; font-size: 0.75rem; color: var(--danger); font-weight: 700;">${icon} <span class="tabular-nums" style="margin-left: 4px;">+${formatMoney(amt)}</span>${getPerDayTextSmall(amt)}</span>`;
+                                            mCatHtml += `<span onclick="filterByInsight('${m}', '${cat}')" style="cursor: pointer; display: inline-flex; align-items: center; background: #fef2f2; padding: 4px 8px; border-radius: 6px; border: 1px solid #fecdd3; font-size: 0.75rem; color: var(--danger); font-weight: 700;">${icon} <span class="tabular-nums" style="margin-left: 4px;">+${formatMoney(amt)}</span>${getPerDayTextSmall(amt)}</span>`;
                                         }
                                     }
                                 });
