@@ -270,14 +270,16 @@
         .settlement-item:last-child { border-bottom: none; }
         .section-label { font-size: 0.8rem; text-transform: uppercase; color: var(--secondary); font-weight: 800; letter-spacing: 0.05em; margin-bottom: 10px; margin-top: 16px;}
         
+        /* Global Stats Grid */
+        .global-stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 24px; }
+        .global-stat-box { background: #fff; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; box-shadow: var(--shadow-sm); position: relative; overflow: hidden;}
+        .global-stat-label { font-size: 0.75rem; color: var(--secondary); text-transform: uppercase; font-weight: 800; letter-spacing: 0.05em; margin-bottom: 4px;}
+        .global-stat-value { font-size: 1.35rem; font-weight: 900; color: var(--text); letter-spacing: -0.02em; line-height: 1.2;}
+        
         .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-bottom: 16px; }
         .stat-card { background: var(--card-bg); padding: 16px; border-radius: var(--radius-sm); border: 1px solid var(--border); font-size: 0.9rem; box-shadow: var(--shadow-sm);}
         .stat-name { font-weight: 900; margin-bottom: 4px; font-size: 1.15rem; letter-spacing: -0.01em;}
         .stat-members { font-size: 0.8rem; color: var(--secondary); font-weight: 500; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px;}
-        
-        .global-stat-box { background: #fff; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; box-shadow: var(--shadow-sm);}
-        .global-stat-label { font-size: 0.8rem; color: var(--secondary); text-transform: uppercase; font-weight: 800; letter-spacing: 0.05em;}
-        .global-stat-value { font-size: 1.25rem; font-weight: 900; color: var(--text); letter-spacing: -0.02em;}
         
         .split-type-select { padding: 4px 8px; font-size: 0.85rem; margin: 0; width: auto; font-weight: 700; color: var(--primary); border-color: var(--border); background: #ffffff; box-shadow: none;}
         
@@ -324,6 +326,14 @@
         <div id="calc-display" class="tabular-nums" style="background: #ffffff; border: 1px solid var(--primary); border-radius: var(--radius-sm); padding: 8px 12px; font-size: 1.2rem; font-weight: 900; text-align: right; margin-bottom: 12px; color: var(--primary); box-shadow: inset 0 2px 4px rgba(0,0,0,0.05); min-height: 24px; word-break: break-all;">0</div>
         
         <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;">
+            <div style="display: flex; gap: 4px;">
+                <button class="danger small" onclick="calcClear()" style="flex: 1; padding: 4px 0;" title="Clear All">C</button>
+                <button class="warning small" onclick="calcDelete()" style="flex: 1; padding: 4px 0; background: #f97316; color: white;" title="Backspace">⌫</button>
+            </div>
+            <button class="outline small" onclick="calcInput('(')">(</button>
+            <button class="outline small" onclick="calcInput(')')">)</button>
+            <button class="secondary small" onclick="calcInput('%')">%</button>
+            
             <button class="outline small" onclick="calcInput('7')">7</button>
             <button class="outline small" onclick="calcInput('8')">8</button>
             <button class="outline small" onclick="calcInput('9')">9</button>
@@ -339,9 +349,8 @@
             <button class="outline small" onclick="calcInput('3')">3</button>
             <button class="secondary small" onclick="calcInput('-')">-</button>
             
+            <button class="outline small" onclick="calcInput('0')" style="grid-column: span 2;">0</button>
             <button class="outline small" onclick="calcInput('.')">.</button>
-            <button class="outline small" onclick="calcInput('0')">0</button>
-            <button class="danger small" onclick="calcClear()">C</button>
             <button class="secondary small" onclick="calcInput('+')">+</button>
         </div>
         <button onclick="calcSolve()" style="width: 100%; margin-top: 6px; font-size: 1.1rem; padding: 6px;">=</button>
@@ -573,14 +582,6 @@
             </div>
         </div>
 
-        <div class="mobile-quick-nav" style="grid-column: 1 / -1; margin-top: 10px; margin-bottom: 20px;">
-            <button class="outline small" onclick="document.getElementById('activity-card').scrollIntoView({behavior: 'smooth', block: 'start'})">➕ Add</button>
-            <button class="outline small" onclick="document.getElementById('ledger-card-wrapper').scrollIntoView({behavior: 'smooth', block: 'start'})">📜 Ledger</button>
-            <button class="outline small" onclick="document.getElementById('analytics-section').scrollIntoView({behavior: 'smooth', block: 'start'})">📊 Analytics</button>
-            <button class="outline small" onclick="document.getElementById('settlement-section').scrollIntoView({behavior: 'smooth', block: 'start'})">💸 Settle</button>
-            <button class="outline small" onclick="toggleCalculator()" style="border-color: var(--primary); color: var(--primary);">🧮 Calc</button>
-        </div>
-
     </div>
 
     <script>
@@ -592,7 +593,8 @@
         let expenses = [];
         let editingExpenseId = null; 
         let searchText = "";
-        let insightFilter = null; // NEW Interactive Filter State
+        let insightFilter = null; 
+        let searchTimeout; 
         
         let tripDays = 1;
         let showPerDay = false;
@@ -620,10 +622,8 @@
         let calcExpr = "";
         let lastActiveInput = null;
 
-        // Track the last active text/number input globally
         document.addEventListener('focusin', (e) => {
             if ((e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) {
-                // Ignore focus events inside the calculator itself
                 if (!e.target.closest('#mini-calculator')) {
                     lastActiveInput = e.target;
                 }
@@ -645,6 +645,17 @@
             calcExpr += val;
             document.getElementById('calc-display').innerText = calcExpr;
         }
+
+        // New Delete function
+        function calcDelete() {
+            if (calcExpr === "Error" || calcExpr === "0") {
+                calcClear();
+                return;
+            }
+            calcExpr = calcExpr.toString().slice(0, -1);
+            if (calcExpr === "") calcExpr = "0";
+            document.getElementById('calc-display').innerText = calcExpr;
+        }
         
         function calcClear() {
             calcExpr = "";
@@ -653,11 +664,14 @@
         
         function calcSolve() {
             try {
-                // Strips malicious code, purely evaluates simple math characters
-                let safeExpr = calcExpr.replace(/[^-()\d/*+.]/g, '');
+                let safeExpr = calcExpr.replace(/[^-()\d/*+.%]/g, '');
                 if(safeExpr === "") return;
+
+                safeExpr = safeExpr.replace(/(\d+(?:\.\d+)?)[\s]*([+-])[\s]*(\d+(?:\.\d+)?)%/g, '$1$2($1*$3/100)');
+                safeExpr = safeExpr.replace(/(\d+(?:\.\d+)?)%/g, '($1/100)');
+
                 let result = Function('"use strict";return (' + safeExpr + ')')();
-                result = Math.round(result * 100) / 100; // lock to 2 decimal places maximum
+                result = Math.round(result * 100) / 100;
                 calcExpr = result.toString();
                 document.getElementById('calc-display').innerText = calcExpr;
             } catch(e) {
@@ -672,7 +686,10 @@
                     const btn = document.getElementById('calc-copy-btn');
                     btn.innerText = "✅ Pasted!";
                     
-                    // Smart Paste Logic
+                    if (lastActiveInput && !document.body.contains(lastActiveInput)) {
+                        lastActiveInput = null;
+                    }
+                    
                     if (lastActiveInput) {
                         try {
                             if (lastActiveInput.type === 'number') {
@@ -687,18 +704,14 @@
                                     lastActiveInput.value += calcExpr;
                                 }
                             }
-                            
-                            // Trigger events so the app knows the value changed
                             lastActiveInput.dispatchEvent(new Event('input', { bubbles: true }));
                             lastActiveInput.dispatchEvent(new Event('change', { bubbles: true }));
                             
-                            // If they pasted into a participant's personal share, force the % recalculator to fire
                             if (lastActiveInput.classList.contains('part-personal')) {
                                 calculateRemainingPercentage();
                             }
                         } catch(e) { console.error("Could not paste into input", e); }
                     }
-
                     setTimeout(() => btn.innerText = "📋 Copy & Paste Result", 1500);
                 });
             }
@@ -1435,9 +1448,12 @@
         function handleSortChange() { currentSort = document.getElementById('ledger-sort').value; saveState(); updateUI(); }
         
         function handleSearchChange() { 
-            searchText = document.getElementById('search-filter').value.toLowerCase(); 
-            document.getElementById('clear-search-btn').style.display = searchText.length > 0 ? 'block' : 'none';
-            updateUI(); 
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                searchText = document.getElementById('search-filter').value.toLowerCase(); 
+                document.getElementById('clear-search-btn').style.display = searchText.length > 0 ? 'block' : 'none';
+                updateUI(); 
+            }, 200);
         }
 
         function clearSearch() {
@@ -1448,7 +1464,9 @@
             searchInput.style.color = 'var(--text)';
             searchInput.style.fontWeight = '500';
             searchText = '';
-            handleSearchChange();
+            clearTimeout(searchTimeout);
+            document.getElementById('clear-search-btn').style.display = 'none';
+            updateUI();
         }
 
         function saveExpense() {
@@ -1734,6 +1752,7 @@
 
             const categoryTotals = {};
             const categoryParticipations = {}; 
+            const categoryActivityCounts = {}; 
             
             const groupStats = {};
             Object.keys(groupsMap).forEach(g => {
@@ -1752,11 +1771,14 @@
                 });
             });
 
-            Object.keys(CATEGORIES).forEach(c => { categoryTotals[c] = 0; categoryParticipations[c] = 0; });
+            Object.keys(CATEGORIES).forEach(c => { categoryTotals[c] = 0; categoryParticipations[c] = 0; categoryActivityCounts[c] = 0; });
             
             let totalSpent = 0;
             let biggestSplurge = { desc: 'None', amount: 0, category: 'Other' };
             let validActiveCount = 0;
+            
+            let dateTotals = {};
+            let payerCounts = {};
 
             expenses.forEach(e => {
                 const cat = e.category || 'Other';
@@ -1777,21 +1799,22 @@
                 validActiveCount++;
                 const payerGroup = participantGroups[e.payer] || e.payer;
                 
-                // Exclude transfers from global totals, but keep them in group stats
                 if (cat !== 'Transfer') {
                     totalSpent += e.amount;
                     if (e.amount > biggestSplurge.amount) biggestSplurge = { desc: e.desc, amount: e.amount, category: e.category };
+                    dateTotals[e.date] = (dateTotals[e.date] || 0) + e.amount;
                 }
                 
                 categoryTotals[cat] += e.amount;
                 categoryParticipations[cat] += e.involved.length;
+                categoryActivityCounts[cat] += 1;
 
                 groupStats[payerGroup].paid += e.amount;
                 groupStats[payerGroup].memberStats[e.payer].paid += e.amount;
                 
-                // Track explicitly what was paid per category
                 groupStats[payerGroup].catPaid[cat] += e.amount;
                 groupStats[payerGroup].memberStats[e.payer].catPaid[cat] += e.amount;
+                payerCounts[e.payer] = (payerCounts[e.payer] || 0) + 1;
                 
                 if (e.splitType === 'percentage') {
                     let totalEnteredPerc = 0; let unenteredCount = 0;
@@ -1845,6 +1868,26 @@
                     });
                 }
             });
+            
+            // Calculate Most Expensive Day
+            let mostExpensiveDay = { date: '', amount: 0 };
+            Object.keys(dateTotals).forEach(d => {
+                if (dateTotals[d] > mostExpensiveDay.amount) mostExpensiveDay = { date: d, amount: dateTotals[d] };
+            });
+            
+            // Calculate Trip Banker
+            let tripBanker = { name: 'None', paid: 0, count: 0 };
+            Object.keys(groupStats).forEach(gName => {
+                groupStats[gName].members.forEach(m => {
+                    if (groupStats[gName].memberStats[m].paid > tripBanker.paid) {
+                        tripBanker = { 
+                            name: m, 
+                            paid: groupStats[gName].memberStats[m].paid,
+                            count: payerCounts[m] || 0
+                        };
+                    }
+                });
+            });
 
             // Ledger Output
             const eList = document.getElementById('expense-list');
@@ -1869,7 +1912,6 @@
                 return passesFilter;
             });
             
-            // Immediately update the search bar UI to reflect the lock
             const searchInput = document.getElementById('search-filter');
             const clearBtn = document.getElementById('clear-search-btn');
             if (insightFilter) {
@@ -1880,7 +1922,6 @@
                 clearBtn.style.display = 'block';
             }
 
-            // Update the visual counter
             const ledgerCountEl = document.getElementById('ledger-count');
             if(ledgerCountEl) ledgerCountEl.innerText = `(${filteredExpenses.length})`;
 
@@ -1976,31 +2017,56 @@
 
             const statsDiv = document.getElementById('ledger-stats');
             if (validActiveCount > 0 && participants.length > 0) {
+                
+                let burnRateHtml = '';
+                if (showPerDay && tripDays > 0 && participants.length > 0) {
+                    const burnRate = totalSpent / tripDays / participants.length;
+                    burnRateHtml = `<div style="font-size: 0.85rem; color: var(--secondary); margin-top: 6px;">🔥 Burn Rate: <strong class="tabular-nums" style="color: var(--danger);">${formatMoney(burnRate)}</strong> / pers / day</div>`;
+                }
+
                 let statsHtml = `
-                <div style="display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;">
-                    <div class="global-stat-box" style="flex: 1; min-width: 180px; flex-direction: column; align-items: flex-start;">
+                <div class="global-stats-grid">
+                    <div class="global-stat-box">
                         <span class="global-stat-label">Filtered Trip Cost</span>
                         <div style="display: flex; align-items: center; flex-wrap: wrap;">
                             <span class="global-stat-value tabular-nums" style="color: var(--primary);">${formatMoney(totalSpent)}</span>
                             ${getPerDayText(totalSpent)}
                         </div>
+                        ${burnRateHtml}
                     </div>
-                    <div class="global-stat-box" style="flex: 1.5; min-width: 180px; flex-direction: column; align-items: flex-start; background: #fff1f2; border-color: #fecdd3;">
-                        <span class="global-stat-label" style="color: #be123c;">Biggest Splurge (Filtered)</span>
+                    <div class="global-stat-box" style="background: #fff1f2; border-color: #fecdd3;">
+                        <span class="global-stat-label" style="color: #be123c;">Biggest Splurge</span>
                         <span class="global-stat-value" style="font-size: 1.1rem; color: #be123c;">
                             ${CATEGORIES[biggestSplurge.category]?.icon || '📝'} ${biggestSplurge.desc} <strong class="tabular-nums" style="font-size: 1.15rem;">(${formatMoney(biggestSplurge.amount)})</strong>
                         </span>
                     </div>
+                    <div class="global-stat-box">
+                        <span class="global-stat-label">📅 Most Exp. Day</span>
+                        <span class="global-stat-value" style="font-size: 1.1rem;">
+                            ${mostExpensiveDay.date ? formatDateDisplay(mostExpensiveDay.date) : 'N/A'} <strong class="tabular-nums">(${formatMoney(mostExpensiveDay.amount)})</strong>
+                        </span>
+                    </div>
+                    <div class="global-stat-box">
+                        <span class="global-stat-label">🏆 Trip Banker</span>
+                        <span class="global-stat-value" style="font-size: 1.1rem; color: ${getColor(tripBanker.name)}">
+                            ${tripBanker.name} <strong class="tabular-nums" style="color: var(--text);">(${formatMoney(tripBanker.paid)})</strong>
+                        </span>
+                        <div style="font-size: 0.8rem; color: var(--secondary); margin-top: 2px;">Fronted money for ${tripBanker.count} acts</div>
+                    </div>
                 </div>`;
                 
                 statsHtml += `<div class="section-label">Category Breakdown & Averages</div>`;
-                statsHtml += `<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; margin-bottom: 24px;">`;
+                statsHtml += `<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-bottom: 24px;">`;
                 Object.keys(categoryTotals).forEach(cat => {
                     if (cat !== 'Transfer' && categoryTotals[cat] > 0) {
-                        const info = CATEGORIES[cat]; const avgPerPerson = categoryTotals[cat] / categoryParticipations[cat];
+                        const info = CATEGORIES[cat]; 
+                        const avgPerPerson = categoryTotals[cat] / categoryParticipations[cat];
+                        const catPerc = totalSpent > 0 ? ((categoryTotals[cat] / totalSpent) * 100).toFixed(1) : 0;
+                        
                         statsHtml += `
                         <div style="background:${info.bg}; border: 1px solid ${info.color}40; border-radius: var(--radius-sm); padding: 12px; display: flex; flex-direction: column; align-items: center; box-shadow: var(--shadow-sm); border-top: 4px solid ${info.color};">
-                            <div style="font-size: 0.9rem; font-weight: 800; color: ${info.color}; margin-bottom: 4px;">${info.icon} ${cat}</div>
+                            <div style="font-size: 0.9rem; font-weight: 800; color: ${info.color};">${info.icon} ${cat}</div>
+                            <div style="font-size: 0.75rem; color: var(--secondary); font-weight: 600; margin-bottom: 6px;">${categoryActivityCounts[cat]} Acts • ${catPerc}% of total</div>
                             <div style="display: flex; align-items: center; justify-content: center; flex-direction: column;">
                                 <div class="tabular-nums" style="font-size: 1.2rem; color: var(--text); font-weight: 900;">${formatMoney(categoryTotals[cat])}</div>
                                 ${showPerDay && tripDays > 0 ? `<div class="tabular-nums" style="font-size: 0.75rem; color: var(--primary); font-weight: 700; margin-top: 2px;">${formatMoney(categoryTotals[cat] / tripDays)} / day</div>` : ''}
