@@ -11,6 +11,8 @@
     <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
     <script src="https://cdn.quilljs.com/1.3.6/quill.min.js"></script>
     
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         :root {
@@ -313,7 +315,7 @@
             display: none; position: fixed; bottom: 20px; right: 20px;
             background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
             border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; 
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15); z-index: 9999; width: 220px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15); z-index: 10001; width: 220px;
         }
         @media (max-width: 1023px) {
             #mini-calculator { bottom: 80px; right: 50%; transform: translateX(50%); }
@@ -413,6 +415,7 @@
                     </div>
                     <div class="glass-toolbar">
                         <button class="outline small" onclick="openNotesModal()" style="background: #f0fdf4; border-color: #bbf7d0; color: var(--green);">📝 Notes</button>
+                        <button id="export-pdf-btn" class="outline small" onclick="generatePDF()" style="background: #eff6ff; border-color: #bfdbfe; color: #1d4ed8;">📄 Export PDF</button>
                         <button class="danger outline small" onclick="resetTrip()">🆕 New</button>
                         <button class="secondary outline small" onclick="exportTrip()">💾 Save Local</button>
                         <button class="warning outline small" onclick="exportSecureTrip()">🔐 Secure</button>
@@ -438,6 +441,15 @@
                             <button id="cloud-load-btn-2" class="cloud small" onclick="loadFromSupabase('manual_trip_2')" style="flex: 1; padding: 4px;">☁️ Load</button>
                         </div>
                         <span id="manual-cloud-name-2" style="font-size: 0.7rem; color: var(--primary); font-weight: 700; text-align: center; margin-top: auto; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 120px;">Checking...</span>
+                    </div>
+
+                    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; background: white; padding: 6px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border); width: 130px;">
+                        <span style="font-size: 0.65rem; font-weight: 800; color: var(--secondary); text-transform: uppercase;">Manual 3</span>
+                        <div style="display: flex; gap: 4px; width: 100%;">
+                            <button id="cloud-save-btn-3" class="cloud small" onclick="saveToSupabase('manual_trip_3')" style="flex: 1; padding: 4px;">☁️ Save</button>
+                            <button id="cloud-load-btn-3" class="cloud small" onclick="loadFromSupabase('manual_trip_3')" style="flex: 1; padding: 4px;">☁️ Load</button>
+                        </div>
+                        <span id="manual-cloud-name-3" style="font-size: 0.7rem; color: var(--primary); font-weight: 700; text-align: center; margin-top: auto; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 120px;">Checking...</span>
                     </div>
                     
                     <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; background: #e0f2fe; padding: 6px 8px; border-radius: var(--radius-sm); border: 1px solid #7dd3fc; width: 130px;">
@@ -622,8 +634,16 @@
     <div class="modal-overlay" id="notes-overlay">
         <div class="notes-modal">
             <div class="notes-header">
-                <h2 style="margin:0; border:none; padding:0; display:flex; align-items:center; gap:8px; color: var(--primary);">📝 Trip Notes</h2>
-                <div style="display:flex; gap: 16px; align-items: center;">
+                <div style="display:flex; align-items:center; gap: 12px; flex-wrap: wrap;">
+                    <h2 style="margin:0; border:none; padding:0; display:flex; align-items:center; gap:8px; color: var(--primary);">📝 Trip Notes</h2>
+                    <div style="display:flex; align-items: center; gap: 6px; background: #fff; padding: 2px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border); position: relative;">
+                        <input type="text" id="notes-search" placeholder="🔍 Search..." oninput="searchNotes()" style="border: none; background: transparent; padding: 4px; width: 120px; font-size: 0.85rem; outline: none; padding-right: 16px;">
+                        <span id="clear-notes-search-btn" onclick="clearNotesSearchField()" style="position: absolute; right: 35px; color: var(--secondary); font-size: 1.2rem; cursor: pointer; display: none; line-height: 1;">&times;</span>
+                        <span id="notes-search-count" style="font-size: 0.75rem; color: var(--secondary); font-weight: 700; min-width: 15px; text-align: right;"></span>
+                    </div>
+                </div>
+                <div style="display:flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                    <button class="outline small" onclick="toggleCalculator()" title="Open Calculator">🧮 Calc</button>
                     <label style="font-size: 0.85rem; font-weight: 700; display:flex; align-items:center; gap:6px; cursor: pointer; color: var(--secondary);">
                         <input type="checkbox" id="auto-color-toggle" onchange="toggleAutoColor()" style="width: 16px; height: 16px; accent-color: var(--primary);"> Auto-Color
                     </label>
@@ -656,12 +676,26 @@
         let currentSort = 'date-desc';
         let supabaseClient = null;
         let cloudSyncTimeout = null;
+        let cloudTripNames = { manual_trip: "", manual_trip_2: "", manual_trip_3: "", auto_trip: "" };
+
+        // Globals explicitly for PDF Export parsing
+        let currentSettlements = [];
+        let currentFilteredExpenses = [];
+        let currentTotalSpent = 0;
+        let currentStats = {
+            groupStats: {}, categoryTotals: {}, categoryParticipations: {}, categoryActivityCounts: {},
+            biggestSplurge: {desc: '', amount: 0, category: ''}, mostExpensiveDay: {date: '', amount: 0}, tripBanker: {name: '', paid: 0}, totalSpent: 0, validActiveCount: 0
+        };
+        let currentGroupBalances = [];
 
         // Notes Phase 3 Additions
         let tripNotes = "";
         let autoColorNotes = false;
         let quill = null;
         let notesDebounceTimer;
+        let activeSearchTerm = "";
+        let lastQuillRange = null; // Track cursor for smart paste
+        let isNotesDirty = false; // Strictly track if user typed anything
         
         // Define Auto-Colors so we can track and safely remove them
         const AUTO_COLORS = { currency: '#059669', date: '#0284c7', number: '#7c3aed' };
@@ -697,14 +731,31 @@
                 }
             });
 
+            // Track cursor and strip highlights when user interacts with editor
+            quill.on('selection-change', function(range, oldRange, source) {
+                if (range) {
+                    lastQuillRange = range;
+                }
+                if (range && source === 'user') {
+                    const searchInput = document.getElementById('notes-search');
+                    if (searchInput.value) {
+                        clearNotesSearchField();
+                    }
+                }
+            });
+
             // Auto-save logic
             quill.on('text-change', function(delta, oldDelta, source) {
                 if (source === 'user') {
+                    isNotesDirty = true;
                     clearTimeout(notesDebounceTimer);
                     notesDebounceTimer = setTimeout(() => {
-                        applyAutoColor(); // This will clear formats if toggled off, or apply if toggled on
-                        tripNotes = quill.root.innerHTML;
-                        saveState();
+                        if (quill.root.innerHTML !== tripNotes) {
+                            applyAutoColor(); 
+                            tripNotes = quill.root.innerHTML;
+                            saveState();
+                        }
+                        isNotesDirty = false; // Reset after auto-save
                     }, 1000);
                 }
             });
@@ -714,15 +765,35 @@
             document.getElementById('notes-overlay').classList.add('active');
             document.getElementById('auto-color-toggle').checked = autoColorNotes;
             if (quill) {
-                quill.root.innerHTML = tripNotes || "";
+                const currentHTML = quill.root.innerHTML;
+                const targetHTML = tripNotes || "";
+                
+                // Only paste if there's an actual mismatch, ignoring Quill's default <p><br></p> empty state logic
+                if (currentHTML !== targetHTML && !(currentHTML === '<p><br></p>' && targetHTML === '')) {
+                    // Using dangerouslyPasteHTML circumvents internal mutation observers that trigger false "user" text-changes
+                    quill.clipboard.dangerouslyPasteHTML(targetHTML);
+                }
+                isNotesDirty = false; // Force reset after programmatic change
             }
         }
 
         function closeNotesModal() {
             document.getElementById('notes-overlay').classList.remove('active');
             if (quill) {
-                tripNotes = quill.root.innerHTML;
-                saveState();
+                clearNotesSearchField(); 
+                
+                const currentHTML = quill.root.innerHTML;
+                const targetHTML = tripNotes || "";
+                const isDefaultEmpty = currentHTML === '<p><br></p>' && targetHTML === '';
+                
+                // Strictly evaluate if content diverged from state to avoid phantom auto-saves
+                if (currentHTML !== targetHTML && !isDefaultEmpty) {
+                    clearTimeout(notesDebounceTimer); // Prevent double save
+                    applyAutoColor();
+                    tripNotes = quill.root.innerHTML;
+                    saveState();
+                }
+                isNotesDirty = false;
             }
         }
 
@@ -752,7 +823,7 @@
             
             const currentSelection = quill.getSelection(); // Save user's cursor
             
-            // 1. Clear previous auto-colors (Fixes permanence & continuation bugs)
+            // 1. Clear previous auto-colors
             clearAutoColors();
 
             // If toggled off, we are done. Stop here.
@@ -780,12 +851,11 @@
                     
                     if (!overlap) {
                         const format = quill.getFormat(match.index, match[0].length);
-                        // Only apply if user hasn't explicitly set a custom color/link
                         if (!format.link && (!format.color || AUTO_COLOR_VALUES.includes(format.color.toLowerCase()))) {
                             quill.formatText(match.index, match[0].length, {
                                 'color': rule.color,
                                 'bold': true
-                            }, 'silent'); // 'silent' prevents triggering infinite loop
+                            }, 'silent');
                         }
                         for (let i = match.index; i < match.index + match[0].length; i++) {
                             formattedIndices.add(i);
@@ -794,7 +864,7 @@
                 }
             });
 
-            // Restore cursor and ensure new typing doesn't inherit the format
+            // Restore cursor
             if (currentSelection) {
                 quill.setSelection(currentSelection.index, currentSelection.length, 'silent');
                 const cursorFormat = quill.getFormat(currentSelection.index, 0);
@@ -805,13 +875,61 @@
             }
         }
 
+        // --- SEARCH NOTES LOGIC ---
+        function searchNotes() {
+            clearSearchHighlights();
+            const term = document.getElementById('notes-search').value.trim().toLowerCase();
+            const countEl = document.getElementById('notes-search-count');
+            const clearBtn = document.getElementById('clear-notes-search-btn');
+            
+            if (!term) {
+                countEl.innerText = "";
+                clearBtn.style.display = "none";
+                return;
+            }
+            
+            clearBtn.style.display = "block";
+            activeSearchTerm = term;
+            const text = quill.getText().toLowerCase();
+            let count = 0;
+            let index = text.indexOf(term);
+            while (index !== -1) {
+                quill.formatText(index, term.length, { 'background': '#fef08a' }, 'silent');
+                count++;
+                index = text.indexOf(term, index + term.length);
+            }
+            countEl.innerText = count > 0 ? `${count}` : "0";
+        }
+
+        function clearSearchHighlights() {
+            if (!activeSearchTerm) return;
+            const text = quill.getText().toLowerCase();
+            let index = text.indexOf(activeSearchTerm);
+            while (index !== -1) {
+                const currentFormat = quill.getFormat(index, activeSearchTerm.length);
+                if (currentFormat.background === '#fef08a') {
+                    quill.formatText(index, activeSearchTerm.length, 'background', false, 'silent');
+                }
+                index = text.indexOf(activeSearchTerm, index + activeSearchTerm.length);
+            }
+            activeSearchTerm = "";
+        }
+        
+        function clearNotesSearchField() {
+            const searchInput = document.getElementById('notes-search');
+            searchInput.value = '';
+            clearSearchHighlights();
+            document.getElementById('clear-notes-search-btn').style.display = 'none';
+            document.getElementById('notes-search-count').innerText = "";
+        }
 
         // --- 1B. CALCULATOR LOGIC & SMART PASTE ---
         let calcExpr = "";
         let lastActiveInput = null;
 
+        // Taught Focus tracker to recognize Quill
         document.addEventListener('focusin', (e) => {
-            if ((e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) {
+            if ((e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.classList.contains('ql-editor'))) {
                 if (!e.target.closest('#mini-calculator')) {
                     lastActiveInput = e.target;
                 }
@@ -879,7 +997,14 @@
                     
                     if (lastActiveInput) {
                         try {
-                            if (lastActiveInput.type === 'number') {
+                            if (lastActiveInput.classList.contains('ql-editor')) {
+                                if (quill) {
+                                    // Paste exactly where the cursor was in Quill
+                                    const insertIndex = lastQuillRange ? lastQuillRange.index : quill.getLength() - 1;
+                                    quill.insertText(insertIndex, calcExpr, 'user');
+                                    quill.setSelection(insertIndex + calcExpr.length);
+                                }
+                            } else if (lastActiveInput.type === 'number') {
                                 lastActiveInput.value = calcExpr;
                             } else {
                                 const start = lastActiveInput.selectionStart;
@@ -948,7 +1073,7 @@
             });
         }
 
-        function saveState() {
+        function saveState(skipAutoSync = false) {
             const payload = { 
                 tripName, tripComment, participants, participantGroups, expenses, 
                 secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay,
@@ -957,7 +1082,7 @@
 
             localStorage.setItem('tripSplitterLatest', JSON.stringify(payload));
 
-            if (supabaseClient) {
+            if (supabaseClient && !skipAutoSync) {
                 document.getElementById('cloud-status').innerText = "⏳ Syncing...";
                 clearTimeout(cloudSyncTimeout);
                 cloudSyncTimeout = setTimeout(silentCloudSave, 3000); 
@@ -1065,7 +1190,7 @@
             if (!isNaN(val) && val > 0) { tripDays = val; saveState(); updateUI(); }
         }
 
-        // --- 3. EXPORT / IMPORT / CRYPTO ---
+        // --- 3. EXPORT / IMPORT / CRYPTO / PDF ---
         const enc = new TextEncoder();
         const dec = new TextDecoder();
 
@@ -1197,11 +1322,208 @@
                     document.getElementById('trip-days-input').style.display = showPerDay ? 'block' : 'none';
                     document.getElementById('trip-days-input').value = tripDays;
                     
-                    saveState(); updateCurrencySelectors(); updateUI(); cancelEdit();
+                    saveState(true); // Pass true to skip auto-sync
+                    updateCurrencySelectors(); updateUI(); cancelEdit();
                 }
                 document.getElementById('file-import').value = "";
             };
             reader.readAsText(file);
+        }
+
+        function generatePDF() {
+            const btn = document.getElementById('export-pdf-btn');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = "⏳ Generating...";
+            btn.disabled = true;
+
+            // Use exact pixel width (680px) to guarantee it fits on an 8.5" page with margins.
+            // Explicitly set box-sizing on everything.
+            let html = `
+            <div style="width: 680px; padding: 20px; font-family: Helvetica, Arial, sans-serif; color: #0f172a; background-color: #ffffff; box-sizing: border-box;">
+                <style>
+                    * { box-sizing: border-box !important; }
+                    table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 12px; margin-bottom: 20px; }
+                    th, td { padding: 8px; border: 1px solid #cbd5e1; word-wrap: break-word; overflow-wrap: break-word; }
+                    .pdf-header { font-size: 18px; border-bottom: 2px solid #f1f5f9; padding-bottom: 4px; margin-top: 20px; margin-bottom: 10px; color: #0f172a; page-break-after: avoid; }
+                    .pdf-subheader { font-size: 14px; margin-bottom: 8px; color: #475569; page-break-after: avoid; }
+                </style>
+                
+                <h1 style="text-align:center; color: #4f46e5; margin-bottom: 5px; font-size: 26px;">${tripName}</h1>
+                ${tripComment ? `<p style="text-align:center; color: #64748b; margin-top: 0; font-size: 14px;">${tripComment}</p>` : ''}
+                <p style="text-align:center; color: #94a3b8; font-size: 12px; margin-bottom: 20px;">Generated on: ${new Date().toLocaleDateString()}</p>
+                <hr style="border: 0; border-bottom: 1px solid #cbd5e1; margin-bottom: 20px;">
+            `;
+
+            // ---- ANALYTICS SECTION ----
+            if (currentStats && currentStats.validActiveCount > 0) {
+                html += `<h2 class="pdf-header">📊 Trip Analytics</h2>`;
+                
+                // Global Stats Table
+                html += `
+                <table>
+                    <tr>
+                        <td style="background: #f8fafc; width: 25%;">
+                            <strong style="color: #64748b; text-transform: uppercase; font-size: 10px;">Filtered Trip Cost</strong><br>
+                            <span style="font-size: 16px; color: #4f46e5; font-weight: bold;">${formatMoney(currentStats.totalSpent)}</span>
+                            ${showPerDay && tripDays > 0 ? `<br><span style="color: #4f46e5; font-size: 10px;">(${formatMoney(currentStats.totalSpent / tripDays)}/d)</span>` : ''}
+                        </td>
+                        <td style="background: #fff1f2; border-color: #fecdd3; width: 25%;">
+                            <strong style="color: #be123c; text-transform: uppercase; font-size: 10px;">Biggest Splurge</strong><br>
+                            <span style="font-size: 12px; color: #be123c;">${currentStats.biggestSplurge.desc}</span><br>
+                            <strong style="font-size: 14px; color: #be123c;">${formatMoney(currentStats.biggestSplurge.amount)}</strong>
+                        </td>
+                        <td style="background: #f8fafc; width: 25%;">
+                            <strong style="color: #64748b; text-transform: uppercase; font-size: 10px;">Most Exp. Day</strong><br>
+                            <span style="font-size: 12px;">${currentStats.mostExpensiveDay.date ? formatDateDisplay(currentStats.mostExpensiveDay.date) : 'N/A'}</span><br>
+                            <strong style="font-size: 14px;">${formatMoney(currentStats.mostExpensiveDay.amount)}</strong>
+                        </td>
+                        <td style="background: #f8fafc; width: 25%;">
+                            <strong style="color: #64748b; text-transform: uppercase; font-size: 10px;">Trip Banker</strong><br>
+                            <span style="font-size: 12px;">${currentStats.tripBanker.name}</span><br>
+                            <strong style="font-size: 14px;">${formatMoney(currentStats.tripBanker.paid)}</strong>
+                        </td>
+                    </tr>
+                </table>`;
+
+                // Category Breakdown Table
+                html += `<h3 class="pdf-subheader">Category Breakdown</h3>`;
+                html += `<table>
+                            <thead style="background: #f1f5f9;">
+                                <tr>
+                                    <th style="width: 35%; text-align: left;">Category</th>
+                                    <th style="width: 20%; text-align: center;">Activities</th>
+                                    <th style="width: 25%; text-align: right;">Total Spent</th>
+                                    <th style="width: 20%; text-align: right;">Avg / Person</th>
+                                </tr>
+                            </thead>
+                            <tbody>`;
+                Object.keys(currentStats.categoryTotals).forEach(cat => {
+                    if (cat !== 'Transfer' && currentStats.categoryTotals[cat] > 0) {
+                        const total = currentStats.categoryTotals[cat];
+                        const acts = currentStats.categoryActivityCounts[cat];
+                        const avgPerPerson = total / currentStats.categoryParticipations[cat];
+                        html += `<tr>
+                                    <td>${CATEGORIES[cat]?.icon || ''} ${cat}</td>
+                                    <td style="text-align: center;">${acts}</td>
+                                    <td style="text-align: right;"><strong>${formatMoney(total)}</strong></td>
+                                    <td style="text-align: right;">${formatMoney(avgPerPerson)}</td>
+                                 </tr>`;
+                    }
+                });
+                html += `</tbody></table>`;
+
+                // Group Insights Table
+                html += `<h3 class="pdf-subheader">Group / Personal Insights</h3>`;
+                html += `<table>
+                            <thead style="background: #f1f5f9;">
+                                <tr>
+                                    <th style="width: 30%; text-align: left;">Group / Person</th>
+                                    <th style="width: 25%; text-align: right;">Net Paid</th>
+                                    <th style="width: 25%; text-align: right;">Total Share (Owed)</th>
+                                    <th style="width: 20%; text-align: right;">Balance</th>
+                                </tr>
+                            </thead>
+                            <tbody>`;
+                Object.keys(currentStats.groupStats).forEach(gName => {
+                    const stats = currentStats.groupStats[gName];
+                    if (stats.owed === 0 && stats.paid === 0) return;
+                    const diff = stats.paid - stats.owed;
+                    const diffText = diff > 0.01 ? `<span style="color: #10b981;">+${formatMoney(diff)}</span>` : (diff < -0.01 ? `<span style="color: #ef4444;">${formatMoney(diff)}</span>` : '<span style="color: #64748b;">$0.00</span>');
+                    
+                    html += `<tr>
+                                <td>
+                                    <strong>${gName}</strong>
+                                    ${stats.members.length > 1 ? `<br><span style="font-size: 10px; color: #64748b;">(${stats.members.join(', ')})</span>` : ''}
+                                </td>
+                                <td style="text-align: right;">${formatMoney(stats.paid)}</td>
+                                <td style="text-align: right;">${formatMoney(stats.owed)}</td>
+                                <td style="text-align: right; font-weight: bold;">${diffText}</td>
+                             </tr>`;
+                });
+                html += `</tbody></table>`;
+            }
+
+            // ---- SETTLEMENTS SECTION ----
+            if (currentGroupBalances && currentGroupBalances.length > 0) {
+                html += `<div style="page-break-inside: avoid;">`;
+                html += `<h2 class="pdf-header">💸 Final Settlement</h2>`;
+                
+                html += `<h3 class="pdf-subheader">Overall Standing</h3>`;
+                html += `<ul style="font-size: 13px; line-height: 1.6; padding-left: 20px;">`;
+                currentGroupBalances.forEach(b => {
+                    let txt = b.net > 0.01 ? `is owed <strong>${formatMoney(b.net)}</strong>` : (b.net < -0.01 ? `owes <strong style="color:#ef4444;">${formatMoney(Math.abs(b.net))}</strong>` : '<span style="color:#10b981;">is perfectly settled</span>');
+                    html += `<li><strong>${b.name}</strong> ${txt}</li>`;
+                });
+                html += `</ul>`;
+
+                html += `<h3 class="pdf-subheader" style="margin-top: 15px;">How to Settle Up</h3>`;
+                if (currentSettlements.length === 0) {
+                    html += `<p style="font-size: 14px; color: #10b981; font-weight: bold; background: #f0fdf4; padding: 10px; border: 1px solid #bbf7d0; border-radius: 6px; text-align: center;">🎉 Everyone is fully settled!</p>`;
+                } else {
+                    html += `<ul style="font-size: 14px; line-height: 1.8; padding-left: 20px;">`;
+                    currentSettlements.forEach(s => {
+                        html += `<li><strong>${s.from.name}</strong> pays <strong>${s.to.name}</strong>: <strong>${formatMoney(s.amount)}</strong></li>`;
+                    });
+                    html += `</ul>`;
+                }
+                html += `</div>`;
+            }
+
+            // ---- ACTIVITY LEDGER SECTION ----
+            if (currentFilteredExpenses.length > 0) {
+                html += `<h2 class="pdf-header">📜 Activity Ledger</h2>`;
+                html += `<table>`;
+                html += `   <thead style="background: #f1f5f9; display: table-header-group;">
+                                <tr>
+                                    <th style="width: 15%; text-align: left;">Date</th>
+                                    <th style="width: 30%; text-align: left;">Description</th>
+                                    <th style="width: 18%; text-align: left;">Category</th>
+                                    <th style="width: 17%; text-align: left;">Paid By</th>
+                                    <th style="width: 20%; text-align: right;">Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody>`;
+                currentFilteredExpenses.forEach(e => {
+                    html += `<tr style="page-break-inside: avoid;">
+                                <td>${e.date}</td>
+                                <td><strong>${e.desc}</strong></td>
+                                <td>${CATEGORIES[e.category]?.icon || ''} ${e.category}</td>
+                                <td>${e.payer}</td>
+                                <td style="text-align: right; font-weight: bold;">${formatMoney(e.amount)}</td>
+                             </tr>`;
+                });
+                html += `</tbody></table>`;
+            }
+
+            // ---- NOTES SECTION ----
+            if (tripNotes && tripNotes.trim() !== '' && tripNotes !== '<p><br></p>') {
+                html += `<div style="page-break-before: always;">
+                            <h2 class="pdf-header">📝 Trip Notes</h2>
+                            <div style="font-size: 14px; line-height: 1.6;">${tripNotes}</div>
+                         </div>`;
+            }
+            
+            html += `</div>`;
+
+            // Use html2pdf options
+            const opt = {
+                margin:       [0.4, 0.4, 0.4, 0.4], 
+                filename:     tripName.replace(/\s+/g, '_') + '_Report.pdf',
+                image:        { type: 'jpeg', quality: 0.98 },
+                html2canvas:  { scale: 2, useCORS: true, letterRendering: true, scrollY: 0, scrollX: 0 },
+                jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' },
+                pagebreak:    { mode: ['css', 'legacy'] }
+            };
+
+            html2pdf().set(opt).from(html).save().then(() => {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }).catch(err => {
+                console.error("PDF generation failed", err);
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+                alert("Failed to generate PDF.");
+            });
         }
 
         // --- 4. SUPABASE INTEGRATION ---
@@ -1241,44 +1563,58 @@
             
             document.getElementById('manual-cloud-name-1').innerText = "Checking...";
             document.getElementById('manual-cloud-name-2').innerText = "Checking...";
+            document.getElementById('manual-cloud-name-3').innerText = "Checking...";
             document.getElementById('auto-cloud-name').innerText = "Checking...";
             
-            const { data, error } = await client.from('trip_sync').select('id, trip_data').in('id', ['manual_trip', 'manual_trip_2', 'auto_trip']);
+            const { data, error } = await client.from('trip_sync').select('id, trip_data').in('id', ['manual_trip', 'manual_trip_2', 'manual_trip_3', 'auto_trip']);
             
             if (error) {
                 console.error("Fetch names error:", error);
                 document.getElementById('manual-cloud-name-1').innerText = "Sync Error";
                 document.getElementById('manual-cloud-name-2').innerText = "Sync Error";
+                document.getElementById('manual-cloud-name-3').innerText = "Sync Error";
                 document.getElementById('auto-cloud-name').innerText = "Sync Error";
                 return;
             }
 
             let manualName1 = "Empty";
             let manualName2 = "Empty";
+            let manualName3 = "Empty";
             let autoName = "Empty";
             
             if (data) {
                 data.forEach(row => {
                     try {
                         let parsed = typeof row.trip_data === 'string' ? JSON.parse(row.trip_data) : row.trip_data;
-                        if (row.id === 'manual_trip' && parsed && parsed.tripName) manualName1 = parsed.tripName;
-                        if (row.id === 'manual_trip_2' && parsed && parsed.tripName) manualName2 = parsed.tripName;
-                        if (row.id === 'auto_trip' && parsed && parsed.tripName) autoName = parsed.tripName;
+                        if (parsed && parsed.tripName) {
+                            cloudTripNames[row.id] = parsed.tripName; // Update global state
+                            if (row.id === 'manual_trip') manualName1 = parsed.tripName;
+                            if (row.id === 'manual_trip_2') manualName2 = parsed.tripName;
+                            if (row.id === 'manual_trip_3') manualName3 = parsed.tripName;
+                            if (row.id === 'auto_trip') autoName = parsed.tripName;
+                        }
                     } catch(e) { console.error("Parse error", e); }
                 });
             }
             
             document.getElementById('manual-cloud-name-1').innerText = manualName1;
             document.getElementById('manual-cloud-name-2').innerText = manualName2;
+            document.getElementById('manual-cloud-name-3').innerText = manualName3;
             document.getElementById('auto-cloud-name').innerText = autoName;
         }
 
         async function saveToSupabase(targetId) {
+            if (cloudTripNames[targetId] && cloudTripNames[targetId] !== "Empty" && cloudTripNames[targetId] !== tripName) {
+                if (!confirm(`⚠️ Warning: Cloud slot currently holds a different trip ("${cloudTripNames[targetId]}").\n\nAre you sure you want to overwrite it with "${tripName}"?`)) {
+                    return;
+                }
+            }
+
             const client = getSupabase();
             if (!client) return;
             const payload = { tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, autoColorNotes };
             
-            const btnId = targetId === 'manual_trip' ? 'cloud-save-btn-1' : 'cloud-save-btn-2';
+            const btnId = targetId === 'manual_trip' ? 'cloud-save-btn-1' : (targetId === 'manual_trip_2' ? 'cloud-save-btn-2' : 'cloud-save-btn-3');
             const btn = document.getElementById(btnId);
             btn.innerText = "⏳";
             
@@ -1286,7 +1622,8 @@
             
             if (error) { console.error(error); alert("Error saving to cloud: " + error.message); } 
             else { 
-                alert(`✅ Trip saved to ${targetId === 'manual_trip' ? 'Manual 1' : 'Manual 2'} slot in the cloud!`); 
+                let slotName = targetId === 'manual_trip' ? 'Manual 1' : (targetId === 'manual_trip_2' ? 'Manual 2' : 'Manual 3');
+                alert(`✅ Trip saved to ${slotName} slot in the cloud!`); 
                 fetchCloudTripNames(); 
             }
             btn.innerText = "☁️ Save";
@@ -1321,6 +1658,7 @@
             let btnId = 'cloud-load-auto-btn';
             if (targetId === 'manual_trip') btnId = 'cloud-load-btn-1';
             if (targetId === 'manual_trip_2') btnId = 'cloud-load-btn-2';
+            if (targetId === 'manual_trip_3') btnId = 'cloud-load-btn-3';
             
             const btn = document.getElementById(btnId);
             const originalText = btn.innerText;
@@ -1358,11 +1696,13 @@
                     document.getElementById('trip-days-input').style.display = showPerDay ? 'block' : 'none';
                     document.getElementById('trip-days-input').value = tripDays;
                     
-                    saveState(); updateCurrencySelectors(); updateUI(); cancelEdit();
+                    saveState(true); // Pass true to skip auto-sync
+                    updateCurrencySelectors(); updateUI(); cancelEdit();
                     
                     let slotName = "Autosave";
                     if(targetId === 'manual_trip') slotName = "Manual 1";
                     if(targetId === 'manual_trip_2') slotName = "Manual 2";
+                    if(targetId === 'manual_trip_3') slotName = "Manual 3";
                     alert(`✅ Trip loaded from the ${slotName} slot!`);
                 } catch(e) {
                     alert("Error parsing cloud data."); console.error(e);
@@ -2425,6 +2765,18 @@
                 statsDiv.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--secondary); background: #ffffff; border-radius: var(--radius-sm); border: 1px dashed var(--border);"><em>Ensure you have active expenses and matching filters.</em></div>';
             }
 
+            // Capture metrics globally for PDF export
+            currentStats = {
+                groupStats,
+                categoryTotals,
+                categoryParticipations,
+                categoryActivityCounts,
+                biggestSplurge,
+                mostExpensiveDay,
+                tripBanker,
+                totalSpent,
+                validActiveCount
+            };
             renderGroupBalances(groupStats, validActiveCount);
         }
 
@@ -2452,25 +2804,27 @@
                          </div>`;
             });
 
+            currentGroupBalances = groupBalances; // Global save for PDF
+            
             html += '<div class="section-label" style="margin-top: 24px;">How to Settle Up</div>';
             let debtors = groupBalances.filter(b => b.net < -0.01).map(b => ({ name: b.name, debt: Math.abs(b.net), color: b.color })).sort((a,b) => b.debt - a.debt);
             let creditors = groupBalances.filter(b => b.net > 0.01).map(b => ({ name: b.name, credit: b.net, color: b.color })).sort((a,b) => b.credit - a.credit);
             
-            let settlements = []; let d = 0, c = 0; 
+            currentSettlements = []; let d = 0, c = 0; 
             while (d < debtors.length && c < creditors.length) {
                 let debtor = debtors[d]; let creditor = creditors[c];
                 let amount = Math.min(debtor.debt, creditor.credit);
-                if (amount > 0.01) { settlements.push({ from: debtor, to: creditor, amount: amount }); }
+                if (amount > 0.01) { currentSettlements.push({ from: debtor, to: creditor, amount: amount }); }
                 debtor.debt -= amount; creditor.credit -= amount;
                 if (debtor.debt < 0.01) d++;
                 if (creditor.credit < 0.01) c++;
             }
 
-            if (settlements.length === 0) {
+            if (currentSettlements.length === 0) {
                 html += '<div style="padding: 16px; text-align: center; color: var(--green); font-weight: 800; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: var(--radius-sm); font-size: 1.05rem;">🎉 Everyone is fully settled!</div>';
             } else {
                 html += '<div class="settlement-box">';
-                settlements.forEach(s => {
+                currentSettlements.forEach(s => {
                     html += `<div class="settlement-item">
                                 <span><strong style="color:${s.from.color}; font-size: 1.05rem;">${s.from.name}</strong> pays <strong style="color:${s.to.color}; font-size: 1.05rem;">${s.to.name}</strong></span>
                                 <span class="tabular-nums" style="font-weight: 900; color: var(--text); font-size: 1.1rem;">Out: ${formatMoney(s.amount)}</span>
