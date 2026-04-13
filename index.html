@@ -7,6 +7,10 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    
+    <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
+    <script src="https://cdn.quilljs.com/1.3.6/quill.min.js"></script>
+    
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         :root {
@@ -314,6 +318,36 @@
         @media (max-width: 1023px) {
             #mini-calculator { bottom: 80px; right: 50%; transform: translateX(50%); }
         }
+
+        /* --- NOTES MODAL STYLES --- */
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(4px);
+            z-index: 10000; align-items: center; justify-content: center;
+        }
+        .modal-overlay.active { display: flex; animation: fadeIn 0.2s ease; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        
+        .notes-modal {
+            background: var(--card-bg); border-radius: var(--radius);
+            width: 90%; max-width: 800px; height: 80vh; max-height: 800px;
+            display: flex; flex-direction: column; box-shadow: var(--shadow-lg);
+            overflow: hidden; border: 1px solid var(--border);
+        }
+        .notes-header {
+            padding: 16px; border-bottom: 1px solid var(--border);
+            display: flex; justify-content: space-between; align-items: center;
+            background: #f8fafc; flex-wrap: wrap; gap: 10px;
+        }
+        .notes-body { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: #fff; position: relative;}
+        #quill-editor { flex: 1; overflow-y: auto; font-family: 'Inter', sans-serif; font-size: 1rem; color: var(--text); }
+        .ql-toolbar.ql-snow { border: none !important; border-bottom: 1px solid var(--border) !important; font-family: 'Inter', sans-serif; padding: 8px 16px !important; background: #f8fafc;}
+        .ql-container.ql-snow { border: none !important; font-family: 'Inter', sans-serif; font-size: 1rem;}
+        .ql-editor p { margin-bottom: 8px; }
+        
+        /* Ensure tooltip stays visible within modal boundaries */
+        .ql-tooltip { max-width: 90vw; box-sizing: border-box; z-index: 10; }
+        .ql-snow .ql-tooltip[data-mode="link"]::before { content: "Link:"; }
     </style>
 </head>
 <body>
@@ -378,6 +412,7 @@
                         </div>
                     </div>
                     <div class="glass-toolbar">
+                        <button class="outline small" onclick="openNotesModal()" style="background: #f0fdf4; border-color: #bbf7d0; color: var(--green);">📝 Notes</button>
                         <button class="danger outline small" onclick="resetTrip()">🆕 New</button>
                         <button class="secondary outline small" onclick="exportTrip()">💾 Save Local</button>
                         <button class="warning outline small" onclick="exportSecureTrip()">🔐 Secure</button>
@@ -584,6 +619,23 @@
 
     </div>
 
+    <div class="modal-overlay" id="notes-overlay">
+        <div class="notes-modal">
+            <div class="notes-header">
+                <h2 style="margin:0; border:none; padding:0; display:flex; align-items:center; gap:8px; color: var(--primary);">📝 Trip Notes</h2>
+                <div style="display:flex; gap: 16px; align-items: center;">
+                    <label style="font-size: 0.85rem; font-weight: 700; display:flex; align-items:center; gap:6px; cursor: pointer; color: var(--secondary);">
+                        <input type="checkbox" id="auto-color-toggle" onchange="toggleAutoColor()" style="width: 16px; height: 16px; accent-color: var(--primary);"> Auto-Color
+                    </label>
+                    <button class="primary small" onclick="closeNotesModal()" style="padding: 6px 16px;">Done</button>
+                </div>
+            </div>
+            <div class="notes-body">
+                <div id="quill-editor"></div>
+            </div>
+        </div>
+    </div>
+
     <script>
         // --- 1. STATE VARIABLES ---
         let tripName = "My Trip";
@@ -605,6 +657,16 @@
         let supabaseClient = null;
         let cloudSyncTimeout = null;
 
+        // Notes Phase 3 Additions
+        let tripNotes = "";
+        let autoColorNotes = false;
+        let quill = null;
+        let notesDebounceTimer;
+        
+        // Define Auto-Colors so we can track and safely remove them
+        const AUTO_COLORS = { currency: '#059669', date: '#0284c7', number: '#7c3aed' };
+        const AUTO_COLOR_VALUES = Object.values(AUTO_COLORS);
+
         const CATEGORIES = {
             'Food': { icon: '🍔', color: '#b45309', bg: '#fef3c7' },       
             'Transport': { icon: '🚕', color: '#1d4ed8', bg: '#dbeafe' },  
@@ -617,6 +679,132 @@
         const CURRENCY_SYMBOLS = { USD: '$', EUR: '€', GBP: '£', CAD: 'C$', AUD: 'A$', JPY: '¥', MXN: 'M$' };
 
         let activeCategoryFilters = new Set(Object.keys(CATEGORIES));
+
+        // --- QUILL INIT (Notes Phase 3) ---
+        window.addEventListener('DOMContentLoaded', () => {
+            quill = new Quill('#quill-editor', {
+                theme: 'snow',
+                bounds: '.notes-body', // Fixes Tooltip cutoff bug
+                placeholder: 'Jot down trip ideas, itineraries, packing lists, or links here...',
+                modules: {
+                    toolbar: [
+                        [{ 'header': [1, 2, 3, false] }],
+                        ['bold', 'italic', 'underline', 'strike'],
+                        [{ 'color': [] }, { 'background': [] }],
+                        [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+                        ['link', 'clean']
+                    ]
+                }
+            });
+
+            // Auto-save logic
+            quill.on('text-change', function(delta, oldDelta, source) {
+                if (source === 'user') {
+                    clearTimeout(notesDebounceTimer);
+                    notesDebounceTimer = setTimeout(() => {
+                        applyAutoColor(); // This will clear formats if toggled off, or apply if toggled on
+                        tripNotes = quill.root.innerHTML;
+                        saveState();
+                    }, 1000);
+                }
+            });
+        });
+
+        function openNotesModal() {
+            document.getElementById('notes-overlay').classList.add('active');
+            document.getElementById('auto-color-toggle').checked = autoColorNotes;
+            if (quill) {
+                quill.root.innerHTML = tripNotes || "";
+            }
+        }
+
+        function closeNotesModal() {
+            document.getElementById('notes-overlay').classList.remove('active');
+            if (quill) {
+                tripNotes = quill.root.innerHTML;
+                saveState();
+            }
+        }
+
+        function toggleAutoColor() {
+            autoColorNotes = document.getElementById('auto-color-toggle').checked;
+            saveState();
+            applyAutoColor();
+        }
+        
+        function clearAutoColors() {
+            if (!quill) return;
+            const contents = quill.getContents();
+            let currIndex = 0;
+            contents.ops.forEach(op => {
+                if (typeof op.insert === 'string') {
+                    // If the text has one of our specific auto-colors, strip it silently
+                    if (op.attributes && op.attributes.color && AUTO_COLOR_VALUES.includes(op.attributes.color.toLowerCase())) {
+                        quill.formatText(currIndex, op.insert.length, { color: false, bold: false }, 'silent');
+                    }
+                    currIndex += op.insert.length;
+                }
+            });
+        }
+
+        function applyAutoColor() {
+            if (!quill) return;
+            
+            const currentSelection = quill.getSelection(); // Save user's cursor
+            
+            // 1. Clear previous auto-colors (Fixes permanence & continuation bugs)
+            clearAutoColors();
+
+            // If toggled off, we are done. Stop here.
+            if (!autoColorNotes) {
+                if (currentSelection) quill.setSelection(currentSelection.index, currentSelection.length, 'silent');
+                return; 
+            }
+
+            const text = quill.getText();
+            const formattedIndices = new Set(); 
+
+            const rules = [
+                { regex: /(?:[$€£]|USD|EUR)\s*\d+(?:,\d{3})*(?:\.\d{2})?/gi, color: AUTO_COLORS.currency }, 
+                { regex: /\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{1,2}(?:st|nd|rd|th)?,? \d{2,4}\b|\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b/gi, color: AUTO_COLORS.date }, 
+                { regex: /\b\d+(?:,\d{3})*(?:\.\d+)?\b/g, color: AUTO_COLORS.number } 
+            ];
+
+            rules.forEach(rule => {
+                let match;
+                while ((match = rule.regex.exec(text)) !== null) {
+                    let overlap = false;
+                    for (let i = match.index; i < match.index + match[0].length; i++) {
+                        if (formattedIndices.has(i)) { overlap = true; break; }
+                    }
+                    
+                    if (!overlap) {
+                        const format = quill.getFormat(match.index, match[0].length);
+                        // Only apply if user hasn't explicitly set a custom color/link
+                        if (!format.link && (!format.color || AUTO_COLOR_VALUES.includes(format.color.toLowerCase()))) {
+                            quill.formatText(match.index, match[0].length, {
+                                'color': rule.color,
+                                'bold': true
+                            }, 'silent'); // 'silent' prevents triggering infinite loop
+                        }
+                        for (let i = match.index; i < match.index + match[0].length; i++) {
+                            formattedIndices.add(i);
+                        }
+                    }
+                }
+            });
+
+            // Restore cursor and ensure new typing doesn't inherit the format
+            if (currentSelection) {
+                quill.setSelection(currentSelection.index, currentSelection.length, 'silent');
+                const cursorFormat = quill.getFormat(currentSelection.index, 0);
+                if (cursorFormat.color && AUTO_COLOR_VALUES.includes(cursorFormat.color.toLowerCase())) {
+                     quill.format('color', false, 'silent');
+                     quill.format('bold', false, 'silent');
+                }
+            }
+        }
+
 
         // --- 1B. CALCULATOR LOGIC & SMART PASTE ---
         let calcExpr = "";
@@ -646,7 +834,6 @@
             document.getElementById('calc-display').innerText = calcExpr;
         }
 
-        // New Delete function
         function calcDelete() {
             if (calcExpr === "Error" || calcExpr === "0") {
                 calcClear();
@@ -762,10 +949,13 @@
         }
 
         function saveState() {
-            localStorage.setItem('tripSplitterLatest', JSON.stringify({ 
+            const payload = { 
                 tripName, tripComment, participants, participantGroups, expenses, 
-                secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay 
-            }));
+                secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay,
+                tripNotes, autoColorNotes
+            };
+
+            localStorage.setItem('tripSplitterLatest', JSON.stringify(payload));
 
             if (supabaseClient) {
                 document.getElementById('cloud-status').innerText = "⏳ Syncing...";
@@ -789,6 +979,8 @@
                     currentSort = data.currentSort || 'date-desc';
                     tripDays = data.tripDays || 1;
                     showPerDay = data.showPerDay || false;
+                    tripNotes = data.tripNotes || "";
+                    autoColorNotes = data.autoColorNotes || false;
                     
                     repairLegacyData();
                     document.getElementById('trip-name').value = tripName;
@@ -825,6 +1017,8 @@
                 currentSort = 'date-desc';
                 tripDays = 1;
                 showPerDay = false;
+                tripNotes = "";
+                autoColorNotes = false;
                 
                 document.getElementById('global-currency').value = "";
                 document.getElementById('ledger-sort').value = "date-desc";
@@ -929,7 +1123,7 @@
         }
 
         function exportTrip() {
-            const payload = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay });
+            const payload = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, autoColorNotes });
             const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(payload);
             const dl = document.createElement('a');
             dl.setAttribute("href", dataStr);
@@ -941,7 +1135,7 @@
             const password = prompt("⚠️ Secure Save ⚠️\nEnter a password to encrypt this trip file.\n\nWARNING: If you forget this password, your data cannot be recovered.");
             if (!password) return; 
 
-            const payload = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay });
+            const payload = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, autoColorNotes });
             try {
                 const encryptedData = await encryptData(password, payload);
                 const securePayload = JSON.stringify(encryptedData);
@@ -989,6 +1183,8 @@
                     currentSort = parsedData.currentSort || 'date-desc';
                     tripDays = parsedData.tripDays || 1;
                     showPerDay = parsedData.showPerDay || false;
+                    tripNotes = parsedData.tripNotes || "";
+                    autoColorNotes = parsedData.autoColorNotes || false;
                     
                     activeCategoryFilters = new Set(Object.keys(CATEGORIES)); 
                     repairLegacyData();
@@ -1080,7 +1276,7 @@
         async function saveToSupabase(targetId) {
             const client = getSupabase();
             if (!client) return;
-            const payload = { tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay };
+            const payload = { tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, autoColorNotes };
             
             const btnId = targetId === 'manual_trip' ? 'cloud-save-btn-1' : 'cloud-save-btn-2';
             const btn = document.getElementById(btnId);
@@ -1100,7 +1296,7 @@
             const client = getSupabase(true);
             if (!client) return;
             
-            const payload = { tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay };
+            const payload = { tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, autoColorNotes };
             const statusEl = document.getElementById('cloud-status');
             
             const { error } = await client.from('trip_sync').upsert({ id: 'auto_trip', trip_data: payload });
@@ -1148,6 +1344,8 @@
                     currentSort = parsedData.currentSort || 'date-desc';
                     tripDays = parsedData.tripDays || 1;
                     showPerDay = parsedData.showPerDay || false;
+                    tripNotes = parsedData.tripNotes || "";
+                    autoColorNotes = parsedData.autoColorNotes || false;
                     
                     activeCategoryFilters = new Set(Object.keys(CATEGORIES)); 
                     repairLegacyData();
