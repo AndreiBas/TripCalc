@@ -321,7 +321,7 @@
             #mini-calculator { bottom: 80px; right: 50%; transform: translateX(50%); }
         }
 
-        /* --- NOTES MODAL STYLES --- */
+        /* --- MODAL STYLES --- */
         .modal-overlay {
             display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(4px);
@@ -330,9 +330,10 @@
         .modal-overlay.active { display: flex; animation: fadeIn 0.2s ease; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         
-        .notes-modal {
+       .notes-modal {
             background: var(--card-bg); border-radius: var(--radius);
-            width: 90%; max-width: 800px; height: 80vh; max-height: 800px;
+            width: 90%; max-width: 1600px; /* Increased from 800px to allow wide PC viewing */
+            height: 80vh; max-height: 800px;
             display: flex; flex-direction: column; box-shadow: var(--shadow-lg);
             overflow: hidden; border: 1px solid var(--border);
         }
@@ -409,16 +410,15 @@
                         <div id="next-payer-container"></div>
                         <div class="glass-toolbar" style="border-radius: var(--radius-sm);">
                             <span style="font-size: 0.85rem; font-weight: 700; margin-right: 6px; color: var(--secondary);" title="Leave blank for USD only">Currency:</span>
-                            <input type="text" id="global-currency" class="currency-selector" style="width: 60px; text-align: center; padding: 4px 6px;" placeholder="EUR" maxlength="3" onchange="handleCurrencyChange()">
+                            <input type="text" id="global-currency" class="currency-selector" style="width: 60px; text-align: center; padding: 4px 6px;" placeholder="..." maxlength="3" onchange="handleCurrencyChange()">
                             <span id="rate-display" class="rate-display tabular-nums"></span>
                         </div>
                     </div>
                     <div class="glass-toolbar">
                         <button class="outline small" onclick="openNotesModal()" style="background: #f0fdf4; border-color: #bbf7d0; color: var(--green);">📝 Notes</button>
-                        <button id="export-pdf-btn" class="outline small" onclick="generatePDF()" style="background: #eff6ff; border-color: #bfdbfe; color: #1d4ed8;">📄 Export PDF</button>
+                        <button id="master-sync-btn" class="outline small" onclick="manageCloudSync()" style="font-weight: 700;">☁️ Connect Cloud</button>
                         <button class="danger outline small" onclick="resetTrip()">🆕 New</button>
                         <button class="secondary outline small" onclick="exportTrip()">💾 Save Local</button>
-                        <button class="warning outline small" onclick="exportSecureTrip()">🔐 Secure</button>
                         <button class="secondary outline small" onclick="document.getElementById('file-import').click()">📂 Load Local</button>
                         <input type="file" id="file-import" accept=".json, .tsplit" style="display:none;" onchange="importTrip(event)">
                     </div>
@@ -472,12 +472,15 @@
                         <button onclick="addParticipant()" style="flex: none;">Add Person</button>
                     </div>
                     <div id="participant-list" style="margin-bottom: 8px;"></div>
-                    <div style="display:flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-                        <div style="display:flex; gap: 8px; align-items: center;">
-                            <span style="font-size: 0.8rem; color: var(--secondary); font-weight: 500;"><em>Click names to rename. Click 👥 to bundle into families.</em></span>
+                    
+                    <div style="display:flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border);">
+                        <div style="display:flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                            <span style="font-size: 0.8rem; color: var(--secondary); font-weight: 500;"><em>Click names to rename. Click 👥 to group.</em></span>
                             <span style="font-size: 0.75rem; color: var(--danger); cursor: pointer; font-weight: 700; padding: 2px 6px; background: #fef2f2; border-radius: 4px;" onclick="resetSupabaseConfig()">⚙️ Reset Cloud Sync</span>
                         </div>
-                        <div style="display:flex; gap: 6px;">
+                        <div style="display:flex; gap: 6px; flex-wrap: wrap;">
+                            <button id="export-pdf-btn" class="outline small" onclick="generatePDF()" style="background: #eff6ff; border-color: #bfdbfe; color: #1d4ed8;">📄 Export PDF</button>
+                            <button class="warning outline small" onclick="exportSecureTrip()">🔐 Secure Save</button>
                             <button class="outline small" onclick="saveGroupTemplate()">Save Setup Memory</button>
                             <button class="outline small" onclick="loadGroupTemplate()">Load Setup Memory</button>
                         </div>
@@ -656,6 +659,57 @@
         </div>
     </div>
 
+    <div class="modal-overlay" id="cloud-setup-overlay">
+        <div class="notes-modal" style="max-width: 450px; height: auto;">
+            <div class="notes-header">
+                <h2 style="margin:0; color: var(--primary);">☁️ Setup Secure Sync</h2>
+            </div>
+            <div style="padding: 20px; display: flex; flex-direction: column; gap: 15px;">
+                <p style="font-size: 0.85rem; color: var(--secondary); margin: 0; line-height: 1.4;">Connect to Supabase with end-to-end encryption. Your long Device Key stays permanently on this device. You will only need to enter your short Session PIN when you open the app.</p>
+                
+                <div>
+                    <label style="font-size: 0.8rem; font-weight: 700; color: var(--text);">Supabase Access Code (Base64)</label>
+                    <input type="text" id="setup-access-code" placeholder="http://...|eyJh...">
+                </div>
+                <div>
+                    <label style="font-size: 0.8rem; font-weight: 700; color: var(--text);">Device Key (Long Password)</label>
+                    <input type="password" id="setup-device-key" placeholder="e.g. GeerToniFoli">
+                    <span style="font-size: 0.7rem; color: var(--secondary);">Saved permanently on this browser.</span>
+                </div>
+                <div>
+                    <label style="font-size: 0.8rem; font-weight: 700; color: var(--text);">Session PIN (Short Code)</label>
+                    <input type="password" id="setup-session-pin" placeholder="e.g. 2025" onkeypress="if(event.key === 'Enter') submitCloudSetup()">
+                    <span style="font-size: 0.7rem; color: var(--secondary);">Required once every time you open the app.</span>
+                </div>
+                
+                <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
+                    <button class="secondary outline" onclick="cancelCloudAuth()">Cancel</button>
+                    <button onclick="submitCloudSetup()">Connect & Secure</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="cloud-pin-overlay">
+        <div class="notes-modal" style="max-width: 350px; height: auto;">
+            <div class="notes-header">
+                <h2 style="margin:0; color: var(--primary);">🔒 Unlock Sync</h2>
+            </div>
+            <div style="padding: 20px; display: flex; flex-direction: column; gap: 15px;">
+                <p style="font-size: 0.85rem; color: var(--secondary); margin: 0;">Enter your Session PIN to encrypt and decrypt cloud data for this session.</p>
+                
+                <div>
+                    <input type="password" id="unlock-session-pin" placeholder="Session PIN" style="font-size: 1.2rem; text-align: center; letter-spacing: 0.2em;" onkeypress="if(event.key === 'Enter') submitPinUnlock()">
+                </div>
+                
+                <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
+                    <button class="secondary outline" onclick="cancelCloudAuth()">Cancel</button>
+                    <button onclick="submitPinUnlock()">Unlock</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         // --- 1. STATE VARIABLES ---
         let tripName = "My Trip";
@@ -674,9 +728,13 @@
         let secondaryCurrency = ""; 
         let currentExchangeRate = 1; 
         let currentSort = 'date-desc';
+        
+        // Cloud & Encryption State
         let supabaseClient = null;
         let cloudSyncTimeout = null;
         let cloudTripNames = { manual_trip: "", manual_trip_2: "", manual_trip_3: "", auto_trip: "" };
+        let sessionPin = ""; // Stores the temporary PIN in memory
+        let cloudAuthPromiseResolve = null;
 
         // Globals explicitly for PDF Export parsing
         let currentSettlements = [];
@@ -694,10 +752,9 @@
         let quill = null;
         let notesDebounceTimer;
         let activeSearchTerm = "";
-        let lastQuillRange = null; // Track cursor for smart paste
-        let isNotesDirty = false; // Strictly track if user typed anything
+        let lastQuillRange = null; 
+        let isNotesDirty = false; 
         
-        // Define Auto-Colors so we can track and safely remove them
         const AUTO_COLORS = { currency: '#059669', date: '#0284c7', number: '#7c3aed' };
         const AUTO_COLOR_VALUES = Object.values(AUTO_COLORS);
 
@@ -714,11 +771,11 @@
 
         let activeCategoryFilters = new Set(Object.keys(CATEGORIES));
 
-        // --- QUILL INIT (Notes Phase 3) ---
+        // --- QUILL INIT ---
         window.addEventListener('DOMContentLoaded', () => {
             quill = new Quill('#quill-editor', {
                 theme: 'snow',
-                bounds: '.notes-body', // Fixes Tooltip cutoff bug
+                bounds: '.notes-body',
                 placeholder: 'Jot down trip ideas, itineraries, packing lists, or links here...',
                 modules: {
                     toolbar: [
@@ -731,20 +788,14 @@
                 }
             });
 
-            // Track cursor and strip highlights when user interacts with editor
             quill.on('selection-change', function(range, oldRange, source) {
-                if (range) {
-                    lastQuillRange = range;
-                }
+                if (range) lastQuillRange = range;
                 if (range && source === 'user') {
                     const searchInput = document.getElementById('notes-search');
-                    if (searchInput.value) {
-                        clearNotesSearchField();
-                    }
+                    if (searchInput.value) clearNotesSearchField();
                 }
             });
 
-            // Auto-save logic
             quill.on('text-change', function(delta, oldDelta, source) {
                 if (source === 'user') {
                     isNotesDirty = true;
@@ -755,10 +806,12 @@
                             tripNotes = quill.root.innerHTML;
                             saveState();
                         }
-                        isNotesDirty = false; // Reset after auto-save
+                        isNotesDirty = false;
                     }, 1000);
                 }
             });
+            
+            updateSyncBtnState(); // Initialize Cloud Sync Button visually
         });
 
         function openNotesModal() {
@@ -767,13 +820,10 @@
             if (quill) {
                 const currentHTML = quill.root.innerHTML;
                 const targetHTML = tripNotes || "";
-                
-                // Only paste if there's an actual mismatch, ignoring Quill's default <p><br></p> empty state logic
                 if (currentHTML !== targetHTML && !(currentHTML === '<p><br></p>' && targetHTML === '')) {
-                    // Using dangerouslyPasteHTML circumvents internal mutation observers that trigger false "user" text-changes
                     quill.clipboard.dangerouslyPasteHTML(targetHTML);
                 }
-                isNotesDirty = false; // Force reset after programmatic change
+                isNotesDirty = false;
             }
         }
 
@@ -781,14 +831,11 @@
             document.getElementById('notes-overlay').classList.remove('active');
             if (quill) {
                 clearNotesSearchField(); 
-                
                 const currentHTML = quill.root.innerHTML;
                 const targetHTML = tripNotes || "";
                 const isDefaultEmpty = currentHTML === '<p><br></p>' && targetHTML === '';
-                
-                // Strictly evaluate if content diverged from state to avoid phantom auto-saves
                 if (currentHTML !== targetHTML && !isDefaultEmpty) {
-                    clearTimeout(notesDebounceTimer); // Prevent double save
+                    clearTimeout(notesDebounceTimer);
                     applyAutoColor();
                     tripNotes = quill.root.innerHTML;
                     saveState();
@@ -799,8 +846,7 @@
 
         function toggleAutoColor() {
             autoColorNotes = document.getElementById('auto-color-toggle').checked;
-            saveState();
-            applyAutoColor();
+            saveState(); applyAutoColor();
         }
         
         function clearAutoColors() {
@@ -809,7 +855,6 @@
             let currIndex = 0;
             contents.ops.forEach(op => {
                 if (typeof op.insert === 'string') {
-                    // If the text has one of our specific auto-colors, strip it silently
                     if (op.attributes && op.attributes.color && AUTO_COLOR_VALUES.includes(op.attributes.color.toLowerCase())) {
                         quill.formatText(currIndex, op.insert.length, { color: false, bold: false }, 'silent');
                     }
@@ -820,27 +865,19 @@
 
         function applyAutoColor() {
             if (!quill) return;
-            
-            const currentSelection = quill.getSelection(); // Save user's cursor
-            
-            // 1. Clear previous auto-colors
+            const currentSelection = quill.getSelection();
             clearAutoColors();
-
-            // If toggled off, we are done. Stop here.
             if (!autoColorNotes) {
                 if (currentSelection) quill.setSelection(currentSelection.index, currentSelection.length, 'silent');
                 return; 
             }
-
             const text = quill.getText();
             const formattedIndices = new Set(); 
-
             const rules = [
                 { regex: /(?:[$€£]|USD|EUR)\s*\d+(?:,\d{3})*(?:\.\d{2})?/gi, color: AUTO_COLORS.currency }, 
                 { regex: /\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{1,2}(?:st|nd|rd|th)?,? \d{2,4}\b|\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b/gi, color: AUTO_COLORS.date }, 
                 { regex: /\b\d+(?:,\d{3})*(?:\.\d+)?\b/g, color: AUTO_COLORS.number } 
             ];
-
             rules.forEach(rule => {
                 let match;
                 while ((match = rule.regex.exec(text)) !== null) {
@@ -848,29 +885,20 @@
                     for (let i = match.index; i < match.index + match[0].length; i++) {
                         if (formattedIndices.has(i)) { overlap = true; break; }
                     }
-                    
                     if (!overlap) {
                         const format = quill.getFormat(match.index, match[0].length);
                         if (!format.link && (!format.color || AUTO_COLOR_VALUES.includes(format.color.toLowerCase()))) {
-                            quill.formatText(match.index, match[0].length, {
-                                'color': rule.color,
-                                'bold': true
-                            }, 'silent');
+                            quill.formatText(match.index, match[0].length, { 'color': rule.color, 'bold': true }, 'silent');
                         }
-                        for (let i = match.index; i < match.index + match[0].length; i++) {
-                            formattedIndices.add(i);
-                        }
+                        for (let i = match.index; i < match.index + match[0].length; i++) formattedIndices.add(i);
                     }
                 }
             });
-
-            // Restore cursor
             if (currentSelection) {
                 quill.setSelection(currentSelection.index, currentSelection.length, 'silent');
                 const cursorFormat = quill.getFormat(currentSelection.index, 0);
                 if (cursorFormat.color && AUTO_COLOR_VALUES.includes(cursorFormat.color.toLowerCase())) {
-                     quill.format('color', false, 'silent');
-                     quill.format('bold', false, 'silent');
+                     quill.format('color', false, 'silent'); quill.format('bold', false, 'silent');
                 }
             }
         }
@@ -882,21 +910,14 @@
             const countEl = document.getElementById('notes-search-count');
             const clearBtn = document.getElementById('clear-notes-search-btn');
             
-            if (!term) {
-                countEl.innerText = "";
-                clearBtn.style.display = "none";
-                return;
-            }
+            if (!term) { countEl.innerText = ""; clearBtn.style.display = "none"; return; }
             
-            clearBtn.style.display = "block";
-            activeSearchTerm = term;
+            clearBtn.style.display = "block"; activeSearchTerm = term;
             const text = quill.getText().toLowerCase();
-            let count = 0;
-            let index = text.indexOf(term);
+            let count = 0; let index = text.indexOf(term);
             while (index !== -1) {
                 quill.formatText(index, term.length, { 'background': '#fef08a' }, 'silent');
-                count++;
-                index = text.indexOf(term, index + term.length);
+                count++; index = text.indexOf(term, index + term.length);
             }
             countEl.innerText = count > 0 ? `${count}` : "0";
         }
@@ -907,121 +928,83 @@
             let index = text.indexOf(activeSearchTerm);
             while (index !== -1) {
                 const currentFormat = quill.getFormat(index, activeSearchTerm.length);
-                if (currentFormat.background === '#fef08a') {
-                    quill.formatText(index, activeSearchTerm.length, 'background', false, 'silent');
-                }
+                if (currentFormat.background === '#fef08a') quill.formatText(index, activeSearchTerm.length, 'background', false, 'silent');
                 index = text.indexOf(activeSearchTerm, index + activeSearchTerm.length);
             }
             activeSearchTerm = "";
         }
         
         function clearNotesSearchField() {
-            const searchInput = document.getElementById('notes-search');
-            searchInput.value = '';
+            const searchInput = document.getElementById('notes-search'); searchInput.value = '';
             clearSearchHighlights();
             document.getElementById('clear-notes-search-btn').style.display = 'none';
             document.getElementById('notes-search-count').innerText = "";
         }
 
         // --- 1B. CALCULATOR LOGIC & SMART PASTE ---
-        let calcExpr = "";
-        let lastActiveInput = null;
+        let calcExpr = ""; let lastActiveInput = null;
 
-        // Taught Focus tracker to recognize Quill
         document.addEventListener('focusin', (e) => {
             if ((e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.classList.contains('ql-editor'))) {
-                if (!e.target.closest('#mini-calculator')) {
-                    lastActiveInput = e.target;
-                }
+                if (!e.target.closest('#mini-calculator')) lastActiveInput = e.target;
             }
         });
 
         function toggleCalculator() {
             const calc = document.getElementById('mini-calculator');
-            if (calc.style.display === 'block') {
-                calc.style.display = 'none';
-            } else {
-                calc.style.display = 'block';
-            }
+            calc.style.display = calc.style.display === 'block' ? 'none' : 'block';
         }
         
         function calcInput(val) {
             if (calcExpr === "0" && val !== ".") calcExpr = "";
             if (calcExpr === "Error") calcExpr = "";
-            calcExpr += val;
-            document.getElementById('calc-display').innerText = calcExpr;
+            calcExpr += val; document.getElementById('calc-display').innerText = calcExpr;
         }
 
         function calcDelete() {
-            if (calcExpr === "Error" || calcExpr === "0") {
-                calcClear();
-                return;
-            }
+            if (calcExpr === "Error" || calcExpr === "0") { calcClear(); return; }
             calcExpr = calcExpr.toString().slice(0, -1);
             if (calcExpr === "") calcExpr = "0";
             document.getElementById('calc-display').innerText = calcExpr;
         }
         
-        function calcClear() {
-            calcExpr = "";
-            document.getElementById('calc-display').innerText = "0";
-        }
+        function calcClear() { calcExpr = ""; document.getElementById('calc-display').innerText = "0"; }
         
         function calcSolve() {
             try {
                 let safeExpr = calcExpr.replace(/[^-()\d/*+.%]/g, '');
                 if(safeExpr === "") return;
-
                 safeExpr = safeExpr.replace(/(\d+(?:\.\d+)?)[\s]*([+-])[\s]*(\d+(?:\.\d+)?)%/g, '$1$2($1*$3/100)');
                 safeExpr = safeExpr.replace(/(\d+(?:\.\d+)?)%/g, '($1/100)');
-
                 let result = Function('"use strict";return (' + safeExpr + ')')();
                 result = Math.round(result * 100) / 100;
                 calcExpr = result.toString();
                 document.getElementById('calc-display').innerText = calcExpr;
-            } catch(e) {
-                document.getElementById('calc-display').innerText = "Error";
-                calcExpr = "";
-            }
+            } catch(e) { document.getElementById('calc-display').innerText = "Error"; calcExpr = ""; }
         }
         
         function calcCopy() {
             if (calcExpr && calcExpr !== "Error") {
                 navigator.clipboard.writeText(calcExpr).then(() => {
-                    const btn = document.getElementById('calc-copy-btn');
-                    btn.innerText = "✅ Pasted!";
-                    
-                    if (lastActiveInput && !document.body.contains(lastActiveInput)) {
-                        lastActiveInput = null;
-                    }
-                    
+                    const btn = document.getElementById('calc-copy-btn'); btn.innerText = "✅ Pasted!";
+                    if (lastActiveInput && !document.body.contains(lastActiveInput)) lastActiveInput = null;
                     if (lastActiveInput) {
                         try {
                             if (lastActiveInput.classList.contains('ql-editor')) {
                                 if (quill) {
-                                    // Paste exactly where the cursor was in Quill
                                     const insertIndex = lastQuillRange ? lastQuillRange.index : quill.getLength() - 1;
-                                    quill.insertText(insertIndex, calcExpr, 'user');
-                                    quill.setSelection(insertIndex + calcExpr.length);
+                                    quill.insertText(insertIndex, calcExpr, 'user'); quill.setSelection(insertIndex + calcExpr.length);
                                 }
                             } else if (lastActiveInput.type === 'number') {
                                 lastActiveInput.value = calcExpr;
                             } else {
-                                const start = lastActiveInput.selectionStart;
-                                const end = lastActiveInput.selectionEnd;
+                                const start = lastActiveInput.selectionStart; const end = lastActiveInput.selectionEnd;
                                 const text = lastActiveInput.value;
-                                if (start !== null && end !== null) {
-                                    lastActiveInput.value = text.slice(0, start) + calcExpr + text.slice(end);
-                                } else {
-                                    lastActiveInput.value += calcExpr;
-                                }
+                                if (start !== null && end !== null) lastActiveInput.value = text.slice(0, start) + calcExpr + text.slice(end);
+                                else lastActiveInput.value += calcExpr;
                             }
-                            lastActiveInput.dispatchEvent(new Event('input', { bubbles: true }));
-                            lastActiveInput.dispatchEvent(new Event('change', { bubbles: true }));
-                            
-                            if (lastActiveInput.classList.contains('part-personal')) {
-                                calculateRemainingPercentage();
-                            }
+                            lastActiveInput.dispatchEvent(new Event('input', { bubbles: true })); lastActiveInput.dispatchEvent(new Event('change', { bubbles: true }));
+                            if (lastActiveInput.classList.contains('part-personal')) calculateRemainingPercentage();
                         } catch(e) { console.error("Could not paste into input", e); }
                     }
                     setTimeout(() => btn.innerText = "📋 Copy & Paste Result", 1500);
@@ -1132,39 +1115,20 @@
 
         function resetTrip() {
             if(confirm("Start a new trip? This wipes your current progress! Make sure you saved your file first.")) {
-                tripName = "My Trip"; 
-                tripComment = ""; 
-                participants = []; 
-                participantGroups = {}; 
-                expenses = [];
-                secondaryCurrency = ""; 
-                currentExchangeRate = 1; 
-                currentSort = 'date-desc';
-                tripDays = 1;
-                showPerDay = false;
-                tripNotes = "";
-                autoColorNotes = false;
+                tripName = "My Trip"; tripComment = ""; participants = []; participantGroups = {}; expenses = [];
+                secondaryCurrency = ""; currentExchangeRate = 1; currentSort = 'date-desc'; tripDays = 1;
+                showPerDay = false; tripNotes = ""; autoColorNotes = false;
                 
-                document.getElementById('global-currency').value = "";
-                document.getElementById('ledger-sort').value = "date-desc";
-                document.getElementById('trip-name').value = tripName;
-                document.getElementById('trip-comment').value = tripComment;
+                document.getElementById('global-currency').value = ""; document.getElementById('ledger-sort').value = "date-desc";
+                document.getElementById('trip-name').value = tripName; document.getElementById('trip-comment').value = tripComment;
                 document.getElementById('exp-category').value = 'Other';
-                
                 document.getElementById('per-day-toggle').checked = false;
-                document.getElementById('trip-days-input').style.display = 'none';
-                document.getElementById('trip-days-input').value = 1;
+                document.getElementById('trip-days-input').style.display = 'none'; document.getElementById('trip-days-input').value = 1;
                 
-                activeCategoryFilters = new Set(Object.keys(CATEGORIES)); 
-                cancelEdit(); 
-                
+                activeCategoryFilters = new Set(Object.keys(CATEGORIES)); cancelEdit(); 
                 localStorage.removeItem('tripSplitterLatest');
-                
-                updateCurrencySelectors();
-                updateUI();
-                
-                document.getElementById('next-payer-container').innerHTML = '';
-                document.getElementById('cloud-status').innerText = '';
+                updateCurrencySelectors(); updateUI();
+                document.getElementById('next-payer-container').innerHTML = ''; document.getElementById('cloud-status').innerText = '';
             }
         }
 
@@ -1172,7 +1136,6 @@
         function updateTripComment() { tripComment = document.getElementById('trip-comment').value; saveState(); }
 
         function toggleLedger() { document.getElementById('ledger-card-wrapper').classList.toggle('ledger-collapsed'); }
-        
         function toggleActivityCard() { document.getElementById('activity-card').classList.toggle('activity-collapsed'); }
         
         function togglePerDay() {
@@ -1181,8 +1144,7 @@
             daysInput.style.display = showPerDay ? 'block' : 'none';
             if (showPerDay && !tripDays) tripDays = 1;
             daysInput.value = tripDays;
-            saveState();
-            updateUI();
+            saveState(); updateUI();
         }
 
         function updateTripDays() {
@@ -1195,16 +1157,13 @@
         const dec = new TextDecoder();
 
         function bufferToBase64(buffer) {
-            let binary = '';
-            let bytes = new Uint8Array(buffer);
+            let binary = ''; let bytes = new Uint8Array(buffer);
             for (let i = 0; i < bytes.byteLength; i++) { binary += String.fromCharCode(bytes[i]); }
             return window.btoa(binary);
         }
 
         function base64ToBuffer(base64) {
-            let binary_string = window.atob(base64);
-            let len = binary_string.length;
-            let bytes = new Uint8Array(len);
+            let binary_string = window.atob(base64); let len = binary_string.length; let bytes = new Uint8Array(len);
             for (let i = 0; i < len; i++) { bytes[i] = binary_string.charCodeAt(i); }
             return bytes.buffer;
         }
@@ -1225,9 +1184,7 @@
             const salt = window.crypto.getRandomValues(new Uint8Array(16));
             const key = await getKey(keyMaterial, salt);
             const iv = window.crypto.getRandomValues(new Uint8Array(12));
-
             const encryptedContent = await window.crypto.subtle.encrypt({ name: "AES-GCM", iv: iv }, key, enc.encode(plainText));
-
             return { salt: bufferToBase64(salt), iv: bufferToBase64(iv), ciphertext: bufferToBase64(encryptedContent) };
         }
 
@@ -1237,47 +1194,36 @@
                 const salt = new Uint8Array(base64ToBuffer(encryptedObj.salt));
                 const iv = new Uint8Array(base64ToBuffer(encryptedObj.iv));
                 const ciphertext = new Uint8Array(base64ToBuffer(encryptedObj.ciphertext));
-
                 const key = await getKey(keyMaterial, salt);
                 const decryptedContent = await window.crypto.subtle.decrypt({ name: "AES-GCM", iv: iv }, key, ciphertext);
                 return dec.decode(decryptedContent);
             } catch (e) {
-                console.error("Decryption error", e);
-                return null;
+                console.error("Decryption error", e); return null;
             }
         }
 
         function exportTrip() {
             const payload = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, autoColorNotes });
             const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(payload);
-            const dl = document.createElement('a');
-            dl.setAttribute("href", dataStr);
-            dl.setAttribute("download", tripName.replace(/\s+/g, '_') + ".json");
-            dl.click();
+            const dl = document.createElement('a'); dl.setAttribute("href", dataStr);
+            dl.setAttribute("download", tripName.replace(/\s+/g, '_') + ".json"); dl.click();
         }
 
         async function exportSecureTrip() {
             const password = prompt("⚠️ Secure Save ⚠️\nEnter a password to encrypt this trip file.\n\nWARNING: If you forget this password, your data cannot be recovered.");
             if (!password) return; 
-
             const payload = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, autoColorNotes });
             try {
                 const encryptedData = await encryptData(password, payload);
                 const securePayload = JSON.stringify(encryptedData);
                 const dataStr = "data:text/plain;charset=utf-8," + encodeURIComponent(securePayload);
-                const dl = document.createElement('a');
-                dl.setAttribute("href", dataStr);
-                dl.setAttribute("download", tripName.replace(/\s+/g, '_') + ".tsplit");
-                dl.click();
-            } catch (err) {
-                alert("Failed to encrypt data."); console.error(err);
-            }
+                const dl = document.createElement('a'); dl.setAttribute("href", dataStr);
+                dl.setAttribute("download", tripName.replace(/\s+/g, '_') + ".tsplit"); dl.click();
+            } catch (err) { alert("Failed to encrypt data."); console.error(err); }
         }
 
         function importTrip(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-
+            const file = e.target.files[0]; if (!file) return;
             const reader = new FileReader();
             reader.onload = async (event) => {
                 let parsedData = null;
@@ -1286,44 +1232,29 @@
                     if (rawJson.ciphertext && rawJson.salt && rawJson.iv) {
                         const password = prompt("🔐 This trip file is locked.\n\nEnter password to decrypt:");
                         if (!password) { document.getElementById('file-import').value = ""; return; }
-                        
                         const decryptedText = await decryptData(password, rawJson);
                         if (!decryptedText) { alert("❌ Incorrect password or corrupted file."); document.getElementById('file-import').value = ""; return; }
                         parsedData = JSON.parse(decryptedText);
-                    } else {
-                        parsedData = rawJson;
-                    }
-                } catch (err) { 
-                    alert("Invalid file format."); document.getElementById('file-import').value = ""; return; 
-                }
+                    } else { parsedData = rawJson; }
+                } catch (err) { alert("Invalid file format."); document.getElementById('file-import').value = ""; return; }
 
                 if (parsedData) {
-                    tripName = parsedData.tripName || "Imported Trip"; 
-                    tripComment = parsedData.tripComment || ""; 
-                    participants = parsedData.participants || []; 
-                    participantGroups = parsedData.participantGroups || {};
-                    expenses = parsedData.expenses || [];
-                    secondaryCurrency = parsedData.secondaryCurrency || "";
-                    currentExchangeRate = parsedData.currentExchangeRate || 1;
-                    currentSort = parsedData.currentSort || 'date-desc';
-                    tripDays = parsedData.tripDays || 1;
-                    showPerDay = parsedData.showPerDay || false;
-                    tripNotes = parsedData.tripNotes || "";
-                    autoColorNotes = parsedData.autoColorNotes || false;
+                    tripName = parsedData.tripName || "Imported Trip"; tripComment = parsedData.tripComment || ""; 
+                    participants = parsedData.participants || []; participantGroups = parsedData.participantGroups || {};
+                    expenses = parsedData.expenses || []; secondaryCurrency = parsedData.secondaryCurrency || "";
+                    currentExchangeRate = parsedData.currentExchangeRate || 1; currentSort = parsedData.currentSort || 'date-desc';
+                    tripDays = parsedData.tripDays || 1; showPerDay = parsedData.showPerDay || false;
+                    tripNotes = parsedData.tripNotes || ""; autoColorNotes = parsedData.autoColorNotes || false;
                     
-                    activeCategoryFilters = new Set(Object.keys(CATEGORIES)); 
-                    repairLegacyData();
-                    document.getElementById('trip-name').value = tripName;
-                    document.getElementById('trip-comment').value = tripComment;
-                    document.getElementById('global-currency').value = secondaryCurrency;
-                    document.getElementById('ledger-sort').value = currentSort;
+                    activeCategoryFilters = new Set(Object.keys(CATEGORIES)); repairLegacyData();
+                    document.getElementById('trip-name').value = tripName; document.getElementById('trip-comment').value = tripComment;
+                    document.getElementById('global-currency').value = secondaryCurrency; document.getElementById('ledger-sort').value = currentSort;
                     
                     document.getElementById('per-day-toggle').checked = showPerDay;
                     document.getElementById('trip-days-input').style.display = showPerDay ? 'block' : 'none';
                     document.getElementById('trip-days-input').value = tripDays;
                     
-                    saveState(true); // Pass true to skip auto-sync
-                    updateCurrencySelectors(); updateUI(); cancelEdit();
+                    saveState(true); updateCurrencySelectors(); updateUI(); cancelEdit();
                 }
                 document.getElementById('file-import').value = "";
             };
@@ -1332,12 +1263,8 @@
 
         function generatePDF() {
             const btn = document.getElementById('export-pdf-btn');
-            const originalText = btn.innerHTML;
-            btn.innerHTML = "⏳ Generating...";
-            btn.disabled = true;
+            const originalText = btn.innerHTML; btn.innerHTML = "⏳ Generating..."; btn.disabled = true;
 
-            // Use exact pixel width (680px) to guarantee it fits on an 8.5" page with margins.
-            // Explicitly set box-sizing on everything.
             let html = `
             <div style="width: 680px; padding: 20px; font-family: Helvetica, Arial, sans-serif; color: #0f172a; background-color: #ffffff; box-sizing: border-box;">
                 <style>
@@ -1354,158 +1281,72 @@
                 <hr style="border: 0; border-bottom: 1px solid #cbd5e1; margin-bottom: 20px;">
             `;
 
-            // ---- ANALYTICS SECTION ----
             if (currentStats && currentStats.validActiveCount > 0) {
-                html += `<h2 class="pdf-header">📊 Trip Analytics</h2>`;
-                
-                // Global Stats Table
-                html += `
-                <table>
-                    <tr>
-                        <td style="background: #f8fafc; width: 25%;">
-                            <strong style="color: #64748b; text-transform: uppercase; font-size: 10px;">Filtered Trip Cost</strong><br>
-                            <span style="font-size: 16px; color: #4f46e5; font-weight: bold;">${formatMoney(currentStats.totalSpent)}</span>
-                            ${showPerDay && tripDays > 0 ? `<br><span style="color: #4f46e5; font-size: 10px;">(${formatMoney(currentStats.totalSpent / tripDays)}/d)</span>` : ''}
-                        </td>
-                        <td style="background: #fff1f2; border-color: #fecdd3; width: 25%;">
-                            <strong style="color: #be123c; text-transform: uppercase; font-size: 10px;">Biggest Splurge</strong><br>
-                            <span style="font-size: 12px; color: #be123c;">${currentStats.biggestSplurge.desc}</span><br>
-                            <strong style="font-size: 14px; color: #be123c;">${formatMoney(currentStats.biggestSplurge.amount)}</strong>
-                        </td>
-                        <td style="background: #f8fafc; width: 25%;">
-                            <strong style="color: #64748b; text-transform: uppercase; font-size: 10px;">Most Exp. Day</strong><br>
-                            <span style="font-size: 12px;">${currentStats.mostExpensiveDay.date ? formatDateDisplay(currentStats.mostExpensiveDay.date) : 'N/A'}</span><br>
-                            <strong style="font-size: 14px;">${formatMoney(currentStats.mostExpensiveDay.amount)}</strong>
-                        </td>
-                        <td style="background: #f8fafc; width: 25%;">
-                            <strong style="color: #64748b; text-transform: uppercase; font-size: 10px;">Trip Banker</strong><br>
-                            <span style="font-size: 12px;">${currentStats.tripBanker.name}</span><br>
-                            <strong style="font-size: 14px;">${formatMoney(currentStats.tripBanker.paid)}</strong>
-                        </td>
-                    </tr>
-                </table>`;
+                html += `<h2 class="pdf-header">📊 Trip Analytics</h2>
+                <table><tr>
+                        <td style="background: #f8fafc; width: 25%;"><strong style="color: #64748b; text-transform: uppercase; font-size: 10px;">Filtered Trip Cost</strong><br><span style="font-size: 16px; color: #4f46e5; font-weight: bold;">${formatMoney(currentStats.totalSpent)}</span>${showPerDay && tripDays > 0 ? `<br><span style="color: #4f46e5; font-size: 10px;">(${formatMoney(currentStats.totalSpent / tripDays)}/d)</span>` : ''}</td>
+                        <td style="background: #fff1f2; border-color: #fecdd3; width: 25%;"><strong style="color: #be123c; text-transform: uppercase; font-size: 10px;">Biggest Splurge</strong><br><span style="font-size: 12px; color: #be123c;">${currentStats.biggestSplurge.desc}</span><br><strong style="font-size: 14px; color: #be123c;">${formatMoney(currentStats.biggestSplurge.amount)}</strong></td>
+                        <td style="background: #f8fafc; width: 25%;"><strong style="color: #64748b; text-transform: uppercase; font-size: 10px;">Most Exp. Day</strong><br><span style="font-size: 12px;">${currentStats.mostExpensiveDay.date ? formatDateDisplay(currentStats.mostExpensiveDay.date) : 'N/A'}</span><br><strong style="font-size: 14px;">${formatMoney(currentStats.mostExpensiveDay.amount)}</strong></td>
+                        <td style="background: #f8fafc; width: 25%;"><strong style="color: #64748b; text-transform: uppercase; font-size: 10px;">Trip Banker</strong><br><span style="font-size: 12px;">${currentStats.tripBanker.name}</span><br><strong style="font-size: 14px;">${formatMoney(currentStats.tripBanker.paid)}</strong></td>
+                </tr></table>`;
 
-                // Category Breakdown Table
-                html += `<h3 class="pdf-subheader">Category Breakdown</h3>`;
-                html += `<table>
-                            <thead style="background: #f1f5f9;">
-                                <tr>
-                                    <th style="width: 35%; text-align: left;">Category</th>
-                                    <th style="width: 20%; text-align: center;">Activities</th>
-                                    <th style="width: 25%; text-align: right;">Total Spent</th>
-                                    <th style="width: 20%; text-align: right;">Avg / Person</th>
-                                </tr>
-                            </thead>
-                            <tbody>`;
+                html += `<h3 class="pdf-subheader">Category Breakdown</h3>
+                <table><thead style="background: #f1f5f9;"><tr><th style="width: 35%; text-align: left;">Category</th><th style="width: 20%; text-align: center;">Activities</th><th style="width: 25%; text-align: right;">Total Spent</th><th style="width: 20%; text-align: right;">Avg / Person</th></tr></thead><tbody>`;
                 Object.keys(currentStats.categoryTotals).forEach(cat => {
                     if (cat !== 'Transfer' && currentStats.categoryTotals[cat] > 0) {
-                        const total = currentStats.categoryTotals[cat];
-                        const acts = currentStats.categoryActivityCounts[cat];
-                        const avgPerPerson = total / currentStats.categoryParticipations[cat];
-                        html += `<tr>
-                                    <td>${CATEGORIES[cat]?.icon || ''} ${cat}</td>
-                                    <td style="text-align: center;">${acts}</td>
-                                    <td style="text-align: right;"><strong>${formatMoney(total)}</strong></td>
-                                    <td style="text-align: right;">${formatMoney(avgPerPerson)}</td>
-                                 </tr>`;
+                        const total = currentStats.categoryTotals[cat]; const acts = currentStats.categoryActivityCounts[cat]; const avgPerPerson = total / currentStats.categoryParticipations[cat];
+                        html += `<tr><td>${CATEGORIES[cat]?.icon || ''} ${cat}</td><td style="text-align: center;">${acts}</td><td style="text-align: right;"><strong>${formatMoney(total)}</strong></td><td style="text-align: right;">${formatMoney(avgPerPerson)}</td></tr>`;
                     }
                 });
                 html += `</tbody></table>`;
 
-                // Group Insights Table
-                html += `<h3 class="pdf-subheader">Group / Personal Insights</h3>`;
-                html += `<table>
-                            <thead style="background: #f1f5f9;">
-                                <tr>
-                                    <th style="width: 30%; text-align: left;">Group / Person</th>
-                                    <th style="width: 25%; text-align: right;">Net Paid</th>
-                                    <th style="width: 25%; text-align: right;">Total Share (Owed)</th>
-                                    <th style="width: 20%; text-align: right;">Balance</th>
-                                </tr>
-                            </thead>
-                            <tbody>`;
+                html += `<h3 class="pdf-subheader">Group / Personal Insights</h3>
+                <table><thead style="background: #f1f5f9;"><tr><th style="width: 30%; text-align: left;">Group / Person</th><th style="width: 25%; text-align: right;">Net Paid</th><th style="width: 25%; text-align: right;">Total Share (Owed)</th><th style="width: 20%; text-align: right;">Balance</th></tr></thead><tbody>`;
                 Object.keys(currentStats.groupStats).forEach(gName => {
                     const stats = currentStats.groupStats[gName];
                     if (stats.owed === 0 && stats.paid === 0) return;
                     const diff = stats.paid - stats.owed;
                     const diffText = diff > 0.01 ? `<span style="color: #10b981;">+${formatMoney(diff)}</span>` : (diff < -0.01 ? `<span style="color: #ef4444;">${formatMoney(diff)}</span>` : '<span style="color: #64748b;">$0.00</span>');
-                    
-                    html += `<tr>
-                                <td>
-                                    <strong>${gName}</strong>
-                                    ${stats.members.length > 1 ? `<br><span style="font-size: 10px; color: #64748b;">(${stats.members.join(', ')})</span>` : ''}
-                                </td>
-                                <td style="text-align: right;">${formatMoney(stats.paid)}</td>
-                                <td style="text-align: right;">${formatMoney(stats.owed)}</td>
-                                <td style="text-align: right; font-weight: bold;">${diffText}</td>
-                             </tr>`;
+                    html += `<tr><td><strong>${gName}</strong>${stats.members.length > 1 ? `<br><span style="font-size: 10px; color: #64748b;">(${stats.members.join(', ')})</span>` : ''}</td><td style="text-align: right;">${formatMoney(stats.paid)}</td><td style="text-align: right;">${formatMoney(stats.owed)}</td><td style="text-align: right; font-weight: bold;">${diffText}</td></tr>`;
                 });
                 html += `</tbody></table>`;
             }
 
-            // ---- SETTLEMENTS SECTION ----
+           // ---- SETTLEMENTS SECTION ----
             if (currentGroupBalances && currentGroupBalances.length > 0) {
-                html += `<div style="page-break-inside: avoid;">`;
-                html += `<h2 class="pdf-header">💸 Final Settlement</h2>`;
-                
-                html += `<h3 class="pdf-subheader">Overall Standing</h3>`;
-                html += `<ul style="font-size: 13px; line-height: 1.6; padding-left: 20px;">`;
+                html += `<div style="page-break-inside: avoid;"><h2 class="pdf-header">💸 Final Settlement</h2><h3 class="pdf-subheader">Overall Standing</h3><ul style="font-size: 13px; line-height: 1.6; padding-left: 20px;">`;
                 currentGroupBalances.forEach(b => {
                     let txt = b.net > 0.01 ? `is owed <strong>${formatMoney(b.net)}</strong>` : (b.net < -0.01 ? `owes <strong style="color:#ef4444;">${formatMoney(Math.abs(b.net))}</strong>` : '<span style="color:#10b981;">is perfectly settled</span>');
-                    html += `<li><strong>${b.name}</strong> ${txt}</li>`;
+                    // Applied color styling to the name
+                    html += `<li><strong style="color: ${b.color};">${b.name}</strong> ${txt}</li>`;
                 });
-                html += `</ul>`;
-
-                html += `<h3 class="pdf-subheader" style="margin-top: 15px;">How to Settle Up</h3>`;
-                if (currentSettlements.length === 0) {
+                html += `</ul><h3 class="pdf-subheader" style="margin-top: 15px;">How to Settle Up</h3>`;
+                if (currentSettlements.length === 0) { 
                     html += `<p style="font-size: 14px; color: #10b981; font-weight: bold; background: #f0fdf4; padding: 10px; border: 1px solid #bbf7d0; border-radius: 6px; text-align: center;">🎉 Everyone is fully settled!</p>`;
                 } else {
                     html += `<ul style="font-size: 14px; line-height: 1.8; padding-left: 20px;">`;
-                    currentSettlements.forEach(s => {
-                        html += `<li><strong>${s.from.name}</strong> pays <strong>${s.to.name}</strong>: <strong>${formatMoney(s.amount)}</strong></li>`;
+                    currentSettlements.forEach(s => { 
+                        // Applied color styling to both payer and payee names
+                        html += `<li><strong style="color: ${s.from.color};">${s.from.name}</strong> pays <strong style="color: ${s.to.color};">${s.to.name}</strong>: <strong>${formatMoney(s.amount)}</strong></li>`; 
                     });
                     html += `</ul>`;
                 }
                 html += `</div>`;
             }
 
-            // ---- ACTIVITY LEDGER SECTION ----
             if (currentFilteredExpenses.length > 0) {
-                html += `<h2 class="pdf-header">📜 Activity Ledger</h2>`;
-                html += `<table>`;
-                html += `   <thead style="background: #f1f5f9; display: table-header-group;">
-                                <tr>
-                                    <th style="width: 15%; text-align: left;">Date</th>
-                                    <th style="width: 30%; text-align: left;">Description</th>
-                                    <th style="width: 18%; text-align: left;">Category</th>
-                                    <th style="width: 17%; text-align: left;">Paid By</th>
-                                    <th style="width: 20%; text-align: right;">Amount</th>
-                                </tr>
-                            </thead>
-                            <tbody>`;
+                html += `<h2 class="pdf-header">📜 Activity Ledger</h2><table><thead style="background: #f1f5f9; display: table-header-group;"><tr><th style="width: 15%; text-align: left;">Date</th><th style="width: 30%; text-align: left;">Description</th><th style="width: 18%; text-align: left;">Category</th><th style="width: 17%; text-align: left;">Paid By</th><th style="width: 20%; text-align: right;">Amount</th></tr></thead><tbody>`;
                 currentFilteredExpenses.forEach(e => {
-                    html += `<tr style="page-break-inside: avoid;">
-                                <td>${e.date}</td>
-                                <td><strong>${e.desc}</strong></td>
-                                <td>${CATEGORIES[e.category]?.icon || ''} ${e.category}</td>
-                                <td>${e.payer}</td>
-                                <td style="text-align: right; font-weight: bold;">${formatMoney(e.amount)}</td>
-                             </tr>`;
+                    html += `<tr style="page-break-inside: avoid;"><td>${e.date}</td><td><strong>${e.desc}</strong></td><td>${CATEGORIES[e.category]?.icon || ''} ${e.category}</td><td>${e.payer}</td><td style="text-align: right; font-weight: bold;">${formatMoney(e.amount)}</td></tr>`;
                 });
                 html += `</tbody></table>`;
             }
 
-            // ---- NOTES SECTION ----
             if (tripNotes && tripNotes.trim() !== '' && tripNotes !== '<p><br></p>') {
-                html += `<div style="page-break-before: always;">
-                            <h2 class="pdf-header">📝 Trip Notes</h2>
-                            <div style="font-size: 14px; line-height: 1.6;">${tripNotes}</div>
-                         </div>`;
+                html += `<div style="page-break-before: always;"><h2 class="pdf-header">📝 Trip Notes</h2><div style="font-size: 14px; line-height: 1.6;">${tripNotes}</div></div>`;
             }
-            
             html += `</div>`;
 
-            // Use html2pdf options
             const opt = {
                 margin:       [0.4, 0.4, 0.4, 0.4], 
                 filename:     tripName.replace(/\s+/g, '_') + '_Report.pdf',
@@ -1515,51 +1356,213 @@
                 pagebreak:    { mode: ['css', 'legacy'] }
             };
 
-            html2pdf().set(opt).from(html).save().then(() => {
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-            }).catch(err => {
-                console.error("PDF generation failed", err);
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-                alert("Failed to generate PDF.");
-            });
+            html2pdf().set(opt).from(html).save().then(() => { btn.innerHTML = originalText; btn.disabled = false;
+            }).catch(err => { console.error(err); btn.innerHTML = originalText; btn.disabled = false; alert("Failed to generate PDF."); });
         }
 
-        // --- 4. SUPABASE INTEGRATION ---
-        function getSupabase(silent = false) {
+
+      // --- 4. SECURE SUPABASE SYNC (SPLIT KEY ARCHITECTURE) ---
+        function getSupabaseClient() {
             if (supabaseClient) return supabaseClient;
-            let storedAccessCode = localStorage.getItem('tripSplitter_cloudAccess');
-            if (!storedAccessCode) {
-                if (silent) return null; 
-                const inputCode = prompt("☁️ Setup Cloud Sync ☁️\n\nEnter your Base64 encoded Cloud Access Code:");
-                if (!inputCode) return null;
-                try {
-                    const decoded = window.atob(inputCode.trim());
-                    const parts = decoded.split('|');
-                    if (parts.length === 2 && parts[0].startsWith('http')) {
-                        localStorage.setItem('tripSplitter_cloudAccess', inputCode.trim());
-                        storedAccessCode = inputCode.trim();
-                    } else { alert("Invalid Access Code format."); return null; }
-                } catch(e) { alert("Invalid Access Code. Ensure it is properly Base64 encoded."); return null; }
+            const access = localStorage.getItem('tripSplitter_cloudAccess');
+            if (!access) return null;
+            try {
+                const decodedConfig = window.atob(access);
+                const [url, key] = decodedConfig.split('|');
+                supabaseClient = supabase.createClient(url, key);
+                return supabaseClient;
+            } catch(e) { return null; }
+        }
+
+        function updateSyncBtnState() {
+            const btn = document.getElementById('master-sync-btn');
+            if (!btn) return;
+            const hasAccess = localStorage.getItem('tripSplitter_cloudAccess');
+            if (!hasAccess) {
+                btn.innerHTML = "☁️ Connect Cloud"; btn.style.borderColor = "var(--border)"; btn.style.color = "var(--text)";
+            } else if (!sessionPin) {
+                btn.innerHTML = "🔒 Unlock Cloud"; btn.style.borderColor = "var(--danger)"; btn.style.color = "var(--danger)";
+            } else {
+                btn.innerHTML = "✅ Cloud Secured"; btn.style.borderColor = "var(--green)"; btn.style.color = "var(--green)";
             }
-            const decodedConfig = window.atob(storedAccessCode);
-            const [url, key] = decodedConfig.split('|');
-            supabaseClient = supabase.createClient(url, key);
-            return supabaseClient;
+        }
+
+        function openCloudSetupModal() {
+            document.getElementById('cloud-setup-overlay').classList.add('active');
+            document.getElementById('setup-access-code').value = '';
+            document.getElementById('setup-device-key').value = '';
+            document.getElementById('setup-session-pin').value = '';
+            return new Promise(resolve => { cloudAuthPromiseResolve = resolve; });
+        }
+
+        function openPinModal() {
+            document.getElementById('cloud-pin-overlay').classList.add('active');
+            document.getElementById('unlock-session-pin').value = '';
+            setTimeout(() => document.getElementById('unlock-session-pin').focus(), 100);
+            return new Promise(resolve => { cloudAuthPromiseResolve = resolve; });
+        }
+
+        function cancelCloudAuth() {
+            document.getElementById('cloud-setup-overlay').classList.remove('active');
+            document.getElementById('cloud-pin-overlay').classList.remove('active');
+            if (cloudAuthPromiseResolve) cloudAuthPromiseResolve(false);
+            cloudAuthPromiseResolve = null;
+        }
+
+        async function submitCloudSetup() {
+            const access = document.getElementById('setup-access-code').value.trim();
+            const devKey = document.getElementById('setup-device-key').value.trim();
+            const pin = document.getElementById('setup-session-pin').value.trim();
+            
+            if (!access || !devKey || !pin) { alert("Please fill out all fields."); return; }
+            
+            let tempClient;
+            try {
+                const decoded = window.atob(access);
+                const parts = decoded.split('|');
+                if (parts.length !== 2 || !parts[0].startsWith('http')) throw new Error();
+                tempClient = supabase.createClient(parts[0], parts[1]);
+            } catch(e) { alert("Invalid Access Code format. Ensure it is Base64 encoded."); return; }
+
+            // Verify the credentials against existing data before saving
+            const btn = document.querySelector('#cloud-setup-overlay button:last-child');
+            const origText = btn.innerText; btn.innerText = "Verifying..."; btn.disabled = true;
+
+            let isValid = true;
+            try {
+                // Fetch the actual slots to test decryption
+                const { data } = await tempClient.from('trip_sync').select('trip_data').in('id', ['manual_trip', 'manual_trip_2', 'manual_trip_3', 'auto_trip']);
+                if (data && data.length > 0) {
+                    let hasEncryptedData = false;
+                    let decryptionSucceeded = false;
+                    
+                    for (const row of data) {
+                        let parsed = typeof row.trip_data === 'string' ? JSON.parse(row.trip_data) : row.trip_data;
+                        if (parsed && parsed.ciphertext) {
+                            hasEncryptedData = true;
+                            const decrypted = await decryptData(devKey + pin, parsed);
+                            if (decrypted) decryptionSucceeded = true; // At least one file decrypted successfully
+                        }
+                    }
+                    
+                    // If we found locked files but could not open ANY of them, the password combo is wrong
+                    if (hasEncryptedData && !decryptionSucceeded) {
+                        isValid = false;
+                    }
+                }
+            } catch (e) { console.error("Verification check failed.", e); }
+
+            btn.innerText = origText; btn.disabled = false;
+
+            if (!isValid) { 
+                alert("❌ Incorrect Device Key or Session PIN for this database.\n\nDecryption failed. If you are trying to attach to an existing database, ensure your passwords are correct."); 
+                return; 
+            }
+
+            localStorage.setItem('tripSplitter_cloudAccess', access);
+            localStorage.setItem('tripSplitter_deviceKey', devKey);
+            sessionPin = pin; supabaseClient = tempClient;
+            
+            document.getElementById('cloud-setup-overlay').classList.remove('active');
+            updateSyncBtnState(); fetchCloudTripNames();
+            if (cloudAuthPromiseResolve) cloudAuthPromiseResolve(true);
+            cloudAuthPromiseResolve = null;
+        }
+
+        async function submitPinUnlock() {
+            const pin = document.getElementById('unlock-session-pin').value.trim();
+            if (!pin) return; 
+
+            // Verify the PIN against existing cloud data before accepting
+            const btn = document.querySelector('#cloud-pin-overlay button:last-child');
+            const origText = btn.innerText; btn.innerText = "Verifying..."; btn.disabled = true;
+
+            const client = getSupabaseClient();
+            const devKey = localStorage.getItem('tripSplitter_deviceKey');
+            let isValid = true;
+            
+            if (client && devKey) {
+                try {
+                    const { data } = await client.from('trip_sync').select('trip_data').in('id', ['manual_trip', 'manual_trip_2', 'manual_trip_3', 'auto_trip']);
+                    if (data && data.length > 0) {
+                        let hasEncryptedData = false;
+                        let decryptionSucceeded = false;
+                        
+                        for (const row of data) {
+                            let parsed = typeof row.trip_data === 'string' ? JSON.parse(row.trip_data) : row.trip_data;
+                            if (parsed && parsed.ciphertext) {
+                                hasEncryptedData = true;
+                                const decrypted = await decryptData(devKey + pin, parsed);
+                                if (decrypted) decryptionSucceeded = true; 
+                            }
+                        }
+                        if (hasEncryptedData && !decryptionSucceeded) {
+                            isValid = false;
+                        }
+                    }
+                } catch (e) { console.error("PIN check failed.", e); }
+            }
+
+            btn.innerText = origText; btn.disabled = false;
+
+            if (!isValid) { 
+                alert("❌ Incorrect Session PIN."); 
+                document.getElementById('unlock-session-pin').value = ''; 
+                setTimeout(() => document.getElementById('unlock-session-pin').focus(), 100);
+                return; // Stop right here, don't change button state
+            }
+
+            sessionPin = pin;
+            document.getElementById('cloud-pin-overlay').classList.remove('active');
+            updateSyncBtnState(); fetchCloudTripNames();
+            if (cloudAuthPromiseResolve) cloudAuthPromiseResolve(true);
+            cloudAuthPromiseResolve = null;
+        }
+
+        
+
+        async function getValidCloudKey(isAutoSave = false) {
+            const access = localStorage.getItem('tripSplitter_cloudAccess');
+            const devKey = localStorage.getItem('tripSplitter_deviceKey');
+
+            if (!access || !devKey) {
+                if (isAutoSave) {
+                    const el = document.getElementById('cloud-status');
+                    if (el) el.innerHTML = '<span style="cursor:pointer;" onclick="manageCloudSync()">🔒 Setup Sync</span>';
+                    return null;
+                }
+                return await openCloudSetupModal() ? localStorage.getItem('tripSplitter_deviceKey') + sessionPin : null;
+            }
+
+            if (!sessionPin) {
+                if (isAutoSave) {
+                    const el = document.getElementById('cloud-status');
+                    if (el) el.innerHTML = '<span style="cursor:pointer; color: var(--danger); font-weight: 800;" onclick="manageCloudSync()">🔒 Sync Paused - Click to Unlock</span>';
+                    return null;
+                }
+                return await openPinModal() ? devKey + sessionPin : null;
+            }
+            return devKey + sessionPin;
+        }
+
+        async function manageCloudSync() {
+            const access = localStorage.getItem('tripSplitter_cloudAccess');
+            if (!access) await getValidCloudKey(); 
+            else if (!sessionPin) await getValidCloudKey(); 
+            else alert("✅ Cloud Sync is actively connected and unlocked for this session.");
         }
 
         function resetSupabaseConfig() {
-            if(confirm("Clear your Cloud Access Code from this browser? You will need to re-enter it to sync to the cloud.")) {
+            if(confirm("Clear your Cloud Sync settings from this browser? This will remove your Access Code and Device Key.")) {
                 localStorage.removeItem('tripSplitter_cloudAccess');
-                supabaseClient = null;
-                alert("Cloud configuration cleared.");
+                localStorage.removeItem('tripSplitter_deviceKey');
+                sessionPin = ""; supabaseClient = null;
+                updateSyncBtnState(); alert("Cloud configuration cleared."); fetchCloudTripNames(); 
             }
         }
 
         async function fetchCloudTripNames() {
-            const client = getSupabase(true);
-            if (!client) return; 
+            const client = getSupabaseClient(); if (!client) return; 
             
             document.getElementById('manual-cloud-name-1').innerText = "Checking...";
             document.getElementById('manual-cloud-name-2').innerText = "Checking...";
@@ -1570,146 +1573,140 @@
             
             if (error) {
                 console.error("Fetch names error:", error);
-                document.getElementById('manual-cloud-name-1').innerText = "Sync Error";
-                document.getElementById('manual-cloud-name-2').innerText = "Sync Error";
-                document.getElementById('manual-cloud-name-3').innerText = "Sync Error";
-                document.getElementById('auto-cloud-name').innerText = "Sync Error";
+                document.getElementById('manual-cloud-name-1').innerText = "Sync Error"; document.getElementById('manual-cloud-name-2').innerText = "Sync Error";
+                document.getElementById('manual-cloud-name-3').innerText = "Sync Error"; document.getElementById('auto-cloud-name').innerText = "Sync Error";
                 return;
             }
 
-            let manualName1 = "Empty";
-            let manualName2 = "Empty";
-            let manualName3 = "Empty";
-            let autoName = "Empty";
+            let manualName1 = "Empty"; let manualName2 = "Empty"; let manualName3 = "Empty"; let autoName = "Empty";
             
             if (data) {
-                data.forEach(row => {
+                for (const row of data) {
                     try {
                         let parsed = typeof row.trip_data === 'string' ? JSON.parse(row.trip_data) : row.trip_data;
+                        if (parsed && parsed.ciphertext) {
+                            if (sessionPin) {
+                                const fullKey = localStorage.getItem('tripSplitter_deviceKey') + sessionPin;
+                                const decrypted = await decryptData(fullKey, parsed);
+                                if (decrypted) { parsed = JSON.parse(decrypted); } 
+                                else { parsed = { tripName: "🔒 Locked (Wrong PIN?)" }; }
+                            } else { parsed = { tripName: "🔒 Locked" }; }
+                        }
                         if (parsed && parsed.tripName) {
-                            cloudTripNames[row.id] = parsed.tripName; // Update global state
+                            cloudTripNames[row.id] = parsed.tripName; 
                             if (row.id === 'manual_trip') manualName1 = parsed.tripName;
                             if (row.id === 'manual_trip_2') manualName2 = parsed.tripName;
                             if (row.id === 'manual_trip_3') manualName3 = parsed.tripName;
                             if (row.id === 'auto_trip') autoName = parsed.tripName;
                         }
                     } catch(e) { console.error("Parse error", e); }
-                });
+                }
             }
             
-            document.getElementById('manual-cloud-name-1').innerText = manualName1;
-            document.getElementById('manual-cloud-name-2').innerText = manualName2;
-            document.getElementById('manual-cloud-name-3').innerText = manualName3;
-            document.getElementById('auto-cloud-name').innerText = autoName;
+            document.getElementById('manual-cloud-name-1').innerText = manualName1; document.getElementById('manual-cloud-name-2').innerText = manualName2;
+            document.getElementById('manual-cloud-name-3').innerText = manualName3; document.getElementById('auto-cloud-name').innerText = autoName;
         }
 
         async function saveToSupabase(targetId) {
-            if (cloudTripNames[targetId] && cloudTripNames[targetId] !== "Empty" && cloudTripNames[targetId] !== tripName) {
-                if (!confirm(`⚠️ Warning: Cloud slot currently holds a different trip ("${cloudTripNames[targetId]}").\n\nAre you sure you want to overwrite it with "${tripName}"?`)) {
-                    return;
-                }
+            if (cloudTripNames[targetId] && !cloudTripNames[targetId].includes("Locked") && cloudTripNames[targetId] !== "Empty" && cloudTripNames[targetId] !== tripName) {
+                if (!confirm(`⚠️ Warning: Cloud slot currently holds a different trip ("${cloudTripNames[targetId]}").\n\nAre you sure you want to overwrite it with "${tripName}"?`)) return;
             }
 
-            const client = getSupabase();
-            if (!client) return;
-            const payload = { tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, autoColorNotes };
+            const key = await getValidCloudKey(); if (!key) return;
+            const client = getSupabaseClient(); if (!client) return;
+
+            const payloadStr = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, autoColorNotes });
             
             const btnId = targetId === 'manual_trip' ? 'cloud-save-btn-1' : (targetId === 'manual_trip_2' ? 'cloud-save-btn-2' : 'cloud-save-btn-3');
-            const btn = document.getElementById(btnId);
-            btn.innerText = "⏳";
+            const btn = document.getElementById(btnId); btn.innerText = "⏳";
             
-            const { data, error } = await client.from('trip_sync').upsert({ id: targetId, trip_data: payload });
-            
-            if (error) { console.error(error); alert("Error saving to cloud: " + error.message); } 
-            else { 
-                let slotName = targetId === 'manual_trip' ? 'Manual 1' : (targetId === 'manual_trip_2' ? 'Manual 2' : 'Manual 3');
-                alert(`✅ Trip saved to ${slotName} slot in the cloud!`); 
-                fetchCloudTripNames(); 
-            }
+            try {
+                const encryptedData = await encryptData(key, payloadStr);
+                const { error } = await client.from('trip_sync').upsert({ id: targetId, trip_data: encryptedData });
+                if (error) { console.error(error); alert("Error saving to cloud: " + error.message); } 
+                else { 
+                    let slotName = targetId === 'manual_trip' ? 'Manual 1' : (targetId === 'manual_trip_2' ? 'Manual 2' : 'Manual 3');
+                    alert(`✅ Securely encrypted and saved to ${slotName}!`); fetchCloudTripNames(); 
+                }
+            } catch (err) { alert("Encryption failed."); console.error(err); }
             btn.innerText = "☁️ Save";
         }
 
         async function silentCloudSave() {
-            const client = getSupabase(true);
-            if (!client) return;
+            const key = await getValidCloudKey(true); if (!key) return;
+            const client = getSupabaseClient(); if (!client) return;
             
-            const payload = { tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, autoColorNotes };
+            const payloadStr = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, autoColorNotes });
             const statusEl = document.getElementById('cloud-status');
             
-            const { error } = await client.from('trip_sync').upsert({ id: 'auto_trip', trip_data: payload });
-            
-            if (error) { 
-                if(statusEl) statusEl.innerText = "❌ Auto-Sync Failed";
-            } else { 
-                if(statusEl) {
-                    const now = new Date();
-                    statusEl.innerText = "✅ Auto-Saved " + now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                    statusEl.style.color = "var(--green)";
-                    setTimeout(() => { statusEl.style.color = "var(--secondary)"; }, 5000);
-                    fetchCloudTripNames(); 
+            try {
+                const encryptedData = await encryptData(key, payloadStr);
+                const { error } = await client.from('trip_sync').upsert({ id: 'auto_trip', trip_data: encryptedData });
+                
+                if (error) { if(statusEl) statusEl.innerText = "❌ Auto-Sync Failed"; } 
+                else { 
+                    if(statusEl) {
+                        const now = new Date();
+                        statusEl.innerHTML = `✅ Secured <span class="tabular-nums">${now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>`;
+                        statusEl.style.color = "var(--green)";
+                        setTimeout(() => { statusEl.style.color = "var(--secondary)"; }, 5000);
+                        fetchCloudTripNames(); 
+                    }
                 }
-            }
+            } catch (err) { console.error("Silent save encryption failed.", err); }
         }
 
         async function loadFromSupabase(targetId) {
-            const client = getSupabase();
-            if (!client) return;
+            const key = await getValidCloudKey(); if (!key) return;
+            const client = getSupabaseClient(); if (!client) return;
             
             let btnId = 'cloud-load-auto-btn';
             if (targetId === 'manual_trip') btnId = 'cloud-load-btn-1';
             if (targetId === 'manual_trip_2') btnId = 'cloud-load-btn-2';
             if (targetId === 'manual_trip_3') btnId = 'cloud-load-btn-3';
             
-            const btn = document.getElementById(btnId);
-            const originalText = btn.innerText;
-            btn.innerText = "⏳ Load...";
+            const btn = document.getElementById(btnId); const originalText = btn.innerText; btn.innerText = "⏳ Load...";
             
             const { data, error } = await client.from('trip_sync').select('trip_data').eq('id', targetId).maybeSingle();
             
-            if (error) { 
-                console.error(error); alert("Error loading from cloud: " + error.message); 
+            if (error) { console.error(error); alert("Error loading from cloud: " + error.message); 
             } else if (data && data.trip_data) {
                 try {
-                    const parsedData = typeof data.trip_data === 'string' ? JSON.parse(data.trip_data) : data.trip_data;
+                    let parsedData = typeof data.trip_data === 'string' ? JSON.parse(data.trip_data) : data.trip_data;
                     
-                    tripName = parsedData.tripName || "Imported Trip"; 
-                    tripComment = parsedData.tripComment || ""; 
-                    participants = parsedData.participants || []; 
-                    participantGroups = parsedData.participantGroups || {};
-                    expenses = parsedData.expenses || [];
-                    secondaryCurrency = parsedData.secondaryCurrency || "";
-                    currentExchangeRate = parsedData.currentExchangeRate || 1;
-                    currentSort = parsedData.currentSort || 'date-desc';
-                    tripDays = parsedData.tripDays || 1;
-                    showPerDay = parsedData.showPerDay || false;
-                    tripNotes = parsedData.tripNotes || "";
-                    autoColorNotes = parsedData.autoColorNotes || false;
+                    if (parsedData.ciphertext) {
+                        const decryptedStr = await decryptData(key, parsedData);
+                        if (!decryptedStr) {
+                            alert("❌ Decryption failed! Incorrect Session PIN or corrupted data.");
+                            sessionPin = ""; updateSyncBtnState(); fetchCloudTripNames(); btn.innerText = originalText; return;
+                        }
+                        parsedData = JSON.parse(decryptedStr);
+                    }
                     
-                    activeCategoryFilters = new Set(Object.keys(CATEGORIES)); 
-                    repairLegacyData();
-                    document.getElementById('trip-name').value = tripName;
-                    document.getElementById('trip-comment').value = tripComment;
-                    document.getElementById('global-currency').value = secondaryCurrency;
-                    document.getElementById('ledger-sort').value = currentSort;
+                    tripName = parsedData.tripName || "Imported Trip"; tripComment = parsedData.tripComment || ""; 
+                    participants = parsedData.participants || []; participantGroups = parsedData.participantGroups || {};
+                    expenses = parsedData.expenses || []; secondaryCurrency = parsedData.secondaryCurrency || "";
+                    currentExchangeRate = parsedData.currentExchangeRate || 1; currentSort = parsedData.currentSort || 'date-desc';
+                    tripDays = parsedData.tripDays || 1; showPerDay = parsedData.showPerDay || false;
+                    tripNotes = parsedData.tripNotes || ""; autoColorNotes = parsedData.autoColorNotes || false;
+                    
+                    activeCategoryFilters = new Set(Object.keys(CATEGORIES)); repairLegacyData();
+                    document.getElementById('trip-name').value = tripName; document.getElementById('trip-comment').value = tripComment;
+                    document.getElementById('global-currency').value = secondaryCurrency; document.getElementById('ledger-sort').value = currentSort;
                     
                     document.getElementById('per-day-toggle').checked = showPerDay;
                     document.getElementById('trip-days-input').style.display = showPerDay ? 'block' : 'none';
                     document.getElementById('trip-days-input').value = tripDays;
                     
-                    saveState(true); // Pass true to skip auto-sync
-                    updateCurrencySelectors(); updateUI(); cancelEdit();
+                    saveState(true); updateCurrencySelectors(); updateUI(); cancelEdit();
                     
                     let slotName = "Autosave";
                     if(targetId === 'manual_trip') slotName = "Manual 1";
                     if(targetId === 'manual_trip_2') slotName = "Manual 2";
                     if(targetId === 'manual_trip_3') slotName = "Manual 3";
-                    alert(`✅ Trip loaded from the ${slotName} slot!`);
-                } catch(e) {
-                    alert("Error parsing cloud data."); console.error(e);
-                }
-            } else { 
-                alert("No trip data found in this slot."); 
-            }
+                    alert(`✅ Decrypted and loaded from the ${slotName} slot!`);
+                } catch(e) { alert("Error parsing cloud data."); console.error(e); }
+            } else { alert("No trip data found in this slot."); }
             btn.innerText = originalText;
         }
 
