@@ -678,6 +678,18 @@
                         <span id="clear-notes-search-btn" onclick="clearNotesSearchField()" style="position: absolute; right: 35px; color: var(--secondary); font-size: 1.2rem; cursor: pointer; display: none; line-height: 1;">&times;</span>
                         <span id="notes-search-count" style="font-size: 0.75rem; color: var(--secondary); font-weight: 700; min-width: 15px; text-align: right;"></span>
                     </div>
+                    
+                    <div id="notes-quick-convert-container" style="display: none; align-items: center; gap: 6px; border-left: 1px solid var(--border); padding-left: 8px; margin-left: 4px;">
+    <div style="display: flex; align-items: center; gap: 4px; background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 2px 6px;">
+        <span style="font-size: 0.7rem; font-weight: 800; color: var(--secondary);">USD</span>
+        <input type="number" id="qc-notes-usd" class="tabular-nums" placeholder="0.00" style="width: 80px; padding: 2px; font-size: 0.85rem; border: none; background: transparent; outline: none; text-align: right; box-shadow: none;" oninput="quickConvertNotes('usd')">
+    </div>
+    <span style="font-size: 0.9rem; color: var(--secondary); font-weight: bold; line-height: 1;">⇌</span>
+    <div style="display: flex; align-items: center; gap: 4px; background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 2px 6px;">
+        <span id="qc-notes-foreign-label" style="font-size: 0.7rem; font-weight: 800; color: var(--primary);">FX</span>
+        <input type="number" id="qc-notes-foreign" class="tabular-nums" placeholder="0.00" style="width: 80px; padding: 2px; font-size: 0.85rem; border: none; background: transparent; outline: none; text-align: right; box-shadow: none;" oninput="quickConvertNotes('foreign')">
+    </div>
+</div>
                 </div>
                 <div style="display:flex; gap: 12px; align-items: center; flex-wrap: wrap;">
                     <button class="outline small" onclick="toggleCalculator()" title="Open Calculator">🧮 Calc</button>
@@ -768,6 +780,7 @@
         let cloudSyncTimeout = null;
         let cloudTripNames = { manual_trip: "", manual_trip_2: "", manual_trip_3: "", auto_trip: "" };
         let sessionPin = ""; // Stores the temporary PIN in memory
+        let pinFailedAttempts = 0; // Security Tracker
         let cloudAuthPromiseResolve = null;
 
         // Globals explicitly for PDF Export parsing
@@ -1063,6 +1076,22 @@
             }
         }
 
+        function quickConvertNotes(source) {
+            const usdInput = document.getElementById('qc-notes-usd');
+            const fxInput = document.getElementById('qc-notes-foreign');
+            if (!currentExchangeRate || currentExchangeRate <= 0) return;
+            
+            if (source === 'usd') {
+                const usdVal = parseFloat(usdInput.value);
+                if (!isNaN(usdVal)) fxInput.value = (usdVal * currentExchangeRate).toFixed(2);
+                else fxInput.value = '';
+            } else {
+                const fxVal = parseFloat(fxInput.value);
+                if (!isNaN(fxVal)) usdInput.value = (fxVal / currentExchangeRate).toFixed(2);
+                else usdInput.value = '';
+            }
+        }
+
         // --- 1C. INSIGHT FILTERING ---
         function filterByInsight(name, cat) {
             insightFilter = { name, cat };
@@ -1176,6 +1205,7 @@
                 document.getElementById('per-day-toggle').checked = false;
                 document.getElementById('trip-days-input').style.display = 'none'; document.getElementById('trip-days-input').value = 1;
                 document.getElementById('qc-usd').value = ''; document.getElementById('qc-foreign').value = '';
+                document.getElementById('qc-notes-usd').value = ''; document.getElementById('qc-notes-foreign').value = '';
                 
                 activeCategoryFilters = new Set(Object.keys(CATEGORIES)); cancelEdit(); 
                 localStorage.removeItem('tripSplitterLatest');
@@ -1559,12 +1589,24 @@
             btn.innerText = origText; btn.disabled = false;
 
             if (!isValid) { 
-                alert("❌ Incorrect Session PIN."); 
-                document.getElementById('unlock-session-pin').value = ''; 
-                setTimeout(() => document.getElementById('unlock-session-pin').focus(), 100);
-                return; // Stop right here, don't change button state
+                pinFailedAttempts++;
+                if (pinFailedAttempts >= 5) {
+                    alert("❌ Incorrect Session PIN entered 5 times.\n\nFor your security, your Cloud Sync configuration has been completely reset.");
+                    pinFailedAttempts = 0;
+                    resetSupabaseConfig(true);
+                    document.getElementById('cloud-pin-overlay').classList.remove('active');
+                    if (cloudAuthPromiseResolve) cloudAuthPromiseResolve(false);
+                    cloudAuthPromiseResolve = null;
+                    return;
+                } else {
+                    alert(`❌ Incorrect Session PIN.\n\nAttempt ${pinFailedAttempts} of 5. After 5 failed attempts, your sync config will be reset.`); 
+                    document.getElementById('unlock-session-pin').value = ''; 
+                    setTimeout(() => document.getElementById('unlock-session-pin').focus(), 100);
+                    return;
+                }
             }
 
+            pinFailedAttempts = 0; // Reset counter on success
             sessionPin = pin;
             document.getElementById('cloud-pin-overlay').classList.remove('active');
             updateSyncBtnState(); fetchCloudTripNames();
@@ -1608,13 +1650,14 @@
             else alert("✅ Cloud Sync is actively connected and unlocked for this session.");
         }
 
-        function resetSupabaseConfig() {
-            if(confirm("Clear your Cloud Sync settings from this browser? This will remove your Access Code and Device Key.")) {
+        function resetSupabaseConfig(force = false) {
+            if(force || confirm("Clear your Cloud Sync settings from this browser? This will remove your Access Code and Device Key.")) {
                 localStorage.removeItem('tripSplitter_cloudAccess');
                 localStorage.removeItem('tripSplitter_deviceKey');
                 localStorage.removeItem('tripSplitter_hasPin');
                 sessionPin = ""; supabaseClient = null;
-                updateSyncBtnState(); alert("Cloud configuration cleared."); fetchCloudTripNames(); 
+                updateSyncBtnState(); fetchCloudTripNames(); 
+                if (!force) alert("Cloud configuration cleared."); 
             }
         }
 
@@ -1771,14 +1814,12 @@
         // --- 5. CURRENCY & FORMATTING ---
         async function fetchExchangeRate(targetCurrency, isSilent = false) {
             if (!targetCurrency || targetCurrency === 'USD') return false;
-            // if (!isSilent) document.getElementById('rate-display').innerText = 'Loading...';
             try {
                 const res = await fetch('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json');
                 const data = await res.json();
                 const rate = data.usd[targetCurrency.toLowerCase()];
                 if (rate) {
                     currentExchangeRate = rate;
-                    // document.getElementById('rate-display').innerText = `(1 USD = ${currentExchangeRate.toFixed(3)} ${targetCurrency})`;
                     return true;
                 } else {
                     if (!isSilent) alert(`Currency code "${targetCurrency}" not found on the exchange server.`);
@@ -1787,7 +1828,6 @@
             } catch (e) {
                 console.error(e);
                 if (!isSilent) alert("Failed to connect to currency API. Using offline rate if available.");
-                // document.getElementById('rate-display').innerText = `(Offline Rate: 1 USD = ${currentExchangeRate.toFixed(3)} ${targetCurrency})`;
                 return true; 
             }
         }
@@ -1798,6 +1838,7 @@
                 secondaryCurrency = ""; currentExchangeRate = 1;
                 document.getElementById('global-currency').value = "";
                 document.getElementById('qc-usd').value = ""; document.getElementById('qc-foreign').value = "";
+                document.getElementById('qc-notes-usd').value = ""; document.getElementById('qc-notes-foreign').value = "";
                 saveState(); updateCurrencySelectors(); updateUI(); return;
             }
             if (inputVal.length !== 3) { document.getElementById('global-currency').value = secondaryCurrency; return; }
@@ -1810,41 +1851,51 @@
         }
 
         function updateCurrencySelectors() {
-    const expSelector = document.getElementById('exp-currency');
-    const viewSelector = document.getElementById('view-currency');
-    const viewContainer = document.getElementById('dashboard-currency-toggle');
-    
-    // QUICK CONVERT ELEMENTS
-    const qcContainer = document.getElementById('quick-convert-container');
-    const qcForeignLabel = document.getElementById('qc-foreign-label');
-    
-    const currExpVal = expSelector.value;
-    const currViewVal = viewSelector.value;
-    let expHtml = `<option value="USD">USD</option>`;
-    let viewHtml = `<option value="USD">🇺🇸 USD ($)</option>`;
-    
-    if (secondaryCurrency) {
-        const sym = CURRENCY_SYMBOLS[secondaryCurrency] || secondaryCurrency;
-        expHtml += `<option value="${secondaryCurrency}">${secondaryCurrency}</option>`;
-        viewHtml += `<option value="${secondaryCurrency}">🌎 ${secondaryCurrency} (${sym})</option>`;
-        viewContainer.style.display = 'flex';
-        
-        // Show Quick Convert & Update Label
-        qcContainer.style.display = 'flex';
-        qcForeignLabel.innerText = secondaryCurrency;
-        if (document.getElementById('qc-usd').value) quickConvert('usd');
-        
-    } else { 
-        viewContainer.style.display = 'none'; 
-        qcContainer.style.display = 'none';
-    }
-    
-    expSelector.innerHTML = expHtml;
-    viewSelector.innerHTML = viewHtml;
-    
-    if(secondaryCurrency && currExpVal === secondaryCurrency) expSelector.value = secondaryCurrency;
-    if(secondaryCurrency && currViewVal === secondaryCurrency) viewSelector.value = secondaryCurrency;
-}
+            const expSelector = document.getElementById('exp-currency');
+            const viewSelector = document.getElementById('view-currency');
+            const viewContainer = document.getElementById('dashboard-currency-toggle');
+            
+            // QUICK CONVERT ELEMENTS
+            const qcContainer = document.getElementById('quick-convert-container');
+            const qcForeignLabel = document.getElementById('qc-foreign-label');
+            const qcNotesContainer = document.getElementById('notes-quick-convert-container');
+            const qcNotesForeignLabel = document.getElementById('qc-notes-foreign-label');
+            
+            const currExpVal = expSelector.value;
+            const currViewVal = viewSelector.value;
+            let expHtml = `<option value="USD">USD</option>`;
+            let viewHtml = `<option value="USD">🇺🇸 USD ($)</option>`;
+            
+            if (secondaryCurrency) {
+                const sym = CURRENCY_SYMBOLS[secondaryCurrency] || secondaryCurrency;
+                expHtml += `<option value="${secondaryCurrency}">${secondaryCurrency}</option>`;
+                viewHtml += `<option value="${secondaryCurrency}">🌎 ${secondaryCurrency} (${sym})</option>`;
+                viewContainer.style.display = 'flex';
+                
+                // Show Quick Convert & Update Label (Main Header)
+                qcContainer.style.display = 'flex';
+                qcForeignLabel.innerText = secondaryCurrency;
+                if (document.getElementById('qc-usd').value) quickConvert('usd');
+
+                // Show Quick Convert & Update Label (Notes Header)
+                if (qcNotesContainer) {
+                    qcNotesContainer.style.display = 'flex';
+                    qcNotesForeignLabel.innerText = secondaryCurrency;
+                    if (document.getElementById('qc-notes-usd').value) quickConvertNotes('usd');
+                }
+                
+            } else { 
+                viewContainer.style.display = 'none'; 
+                qcContainer.style.display = 'none';
+                if (qcNotesContainer) qcNotesContainer.style.display = 'none';
+            }
+            
+            expSelector.innerHTML = expHtml;
+            viewSelector.innerHTML = viewHtml;
+            
+            if(secondaryCurrency && currExpVal === secondaryCurrency) expSelector.value = secondaryCurrency;
+            if(secondaryCurrency && currViewVal === secondaryCurrency) viewSelector.value = secondaryCurrency;
+        }
 
         function formatMoney(amountInUsd) {
             const displayCur = document.getElementById('view-currency').value || 'USD';
