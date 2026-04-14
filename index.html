@@ -89,7 +89,7 @@
         details.participants-dropdown[open] summary::after { transform: rotate(180deg); }
         details.participants-dropdown[open] { padding-bottom: 16px; }
 
-        .header-top-row { display: flex; flex-direction: column; gap: 10px; align-items: center; }
+        .header-top-row { display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
 
         @media (min-width: 1024px) {
             body { height: 100vh; overflow: hidden; display: flex; flex-direction: column; padding-bottom: 0; }
@@ -126,14 +126,15 @@
         }
 
         .trip-name-input {
-            font-size: 1.5rem; font-weight: 900; color: var(--text); letter-spacing: -0.02em;
+            font-size: 1.4rem; font-weight: 900; color: var(--text); letter-spacing: -0.02em;
             text-align: center; border: 2px dashed transparent; background: transparent;
             padding: 2px 8px; box-sizing: border-box; transition: all 0.2s ease; border-radius: var(--radius-sm);
+            width: 100%;
         }
         .trip-name-input:focus, .trip-name-input:hover { border-color: var(--primary); outline: none; background: rgba(79, 70, 229, 0.05); color: var(--primary); }
 
         .trip-comment-input {
-            font-size: 0.9rem; font-weight: 500; color: var(--secondary);
+            font-size: 0.85rem; font-weight: 500; color: var(--secondary);
             text-align: center; border: 1px dashed transparent; background: transparent;
             padding: 2px 8px; box-sizing: border-box; transition: all 0.2s ease; border-radius: var(--radius-sm);
             width: 100%; max-width: 300px;
@@ -142,10 +143,24 @@
 
         .next-payer-badge {
             background: #fff1f2; border: 1px solid #fecdd3; color: #be123c;
-            padding: 4px 10px; border-radius: 8px; font-size: 0.85rem; font-weight: 700;
+            padding: 4px 10px; border-radius: 8px; font-size: 0.8rem; font-weight: 700;
             display: flex; align-items: center; gap: 6px; box-shadow: var(--shadow-sm);
             white-space: nowrap;
         }
+
+        /* --- CLOUD SLOTS COMPACT --- */
+        .cloud-slot {
+            display: flex; flex-direction: column; align-items: center; gap: 2px;
+            background: white; padding: 4px; border-radius: var(--radius-sm); border: 1px solid var(--border);
+            min-width: 0;
+        }
+        .cloud-slot.auto-backup { background: #e0f2fe; border-color: #7dd3fc; }
+        .cloud-slot .slot-label { font-size: 0.6rem; font-weight: 800; color: var(--secondary); text-transform: uppercase; }
+        .cloud-slot.auto-backup .slot-label { color: #0284c7; }
+        .cloud-slot .slot-btns { display: flex; gap: 2px; width: 100%; }
+        .cloud-slot .slot-btns button { flex: 1; padding: 2px 0; font-size: 0.65rem; }
+        .cloud-slot .slot-name { font-size: 0.65rem; font-weight: 700; color: var(--primary); text-align: center; margin-top: auto; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 100%; width: 100%; }
+        .cloud-slot.auto-backup .slot-name { color: #0284c7; }
 
         .card {
             background: var(--card-bg); 
@@ -332,7 +347,7 @@
         
        .notes-modal {
             background: var(--card-bg); border-radius: var(--radius);
-            width: 90%; max-width: 1600px; /* Increased from 800px to allow wide PC viewing */
+            width: 90%; max-width: 1600px;
             height: 80vh; max-height: 800px;
             display: flex; flex-direction: column; box-shadow: var(--shadow-lg);
             overflow: hidden; border: 1px solid var(--border);
@@ -348,7 +363,6 @@
         .ql-container.ql-snow { border: none !important; font-family: 'Inter', sans-serif; font-size: 1rem;}
         .ql-editor p { margin-bottom: 8px; }
         
-        /* Ensure tooltip stays visible within modal boundaries */
         .ql-tooltip { max-width: 90vw; box-sizing: border-box; z-index: 10; }
         .ql-snow .ql-tooltip[data-mode="link"]::before { content: "Link:"; }
     </style>
@@ -397,23 +411,16 @@
     <div class="app-container">
         
         <div class="top-bar-area">
-            <div class="header-top-row" style="align-items: flex-start;">
+            <div class="header-top-row">
                 
-                <div style="display: flex; flex-direction: column; justify-content: center; gap: 2px;">
+                <div style="display: flex; flex-direction: column; justify-content: center; gap: 2px; flex: 1; min-width: 250px;">
                     <input type="text" id="trip-name" class="trip-name-input" value="My Trip" onchange="updateTripName()">
                     <input type="text" id="trip-comment" class="trip-comment-input" placeholder="Add a trip comment..." onchange="updateTripComment()">
-                    <span id="cloud-status" style="font-size: 0.75rem; color: var(--secondary); font-weight: 600; min-height: 16px; text-align: center;"></span>
+                    <span id="cloud-status" style="font-size: 0.7rem; color: var(--secondary); font-weight: 600; min-height: 14px; text-align: center;"></span>
                 </div>
 
-                <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; flex: 1;">
-                    <div style="display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px;">
-                        <div id="next-payer-container"></div>
-                        <div class="glass-toolbar" style="border-radius: var(--radius-sm);">
-                            <span style="font-size: 0.85rem; font-weight: 700; margin-right: 6px; color: var(--secondary);" title="Leave blank for USD only">Currency:</span>
-                            <input type="text" id="global-currency" class="currency-selector" style="width: 60px; text-align: center; padding: 4px 6px;" placeholder="..." maxlength="3" onchange="handleCurrencyChange()">
-                            <span id="rate-display" class="rate-display tabular-nums"></span>
-                        </div>
-                    </div>
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1;">
+                    <div id="next-payer-container" style="margin-bottom: -2px;"></div>
                     <div class="glass-toolbar">
                         <button class="outline small" onclick="openNotesModal()" style="background: #f0fdf4; border-color: #bbf7d0; color: var(--green);">📝 Notes</button>
                         <button id="master-sync-btn" class="outline small" onclick="manageCloudSync()" style="font-weight: 700;">☁️ Connect Cloud</button>
@@ -422,40 +429,59 @@
                         <button class="secondary outline small" onclick="document.getElementById('file-import').click()">📂 Load</button>
                         <input type="file" id="file-import" accept=".json, .tsplit" style="display:none;" onchange="importTrip(event)">
                     </div>
+                    
+                    <div class="glass-toolbar" style="padding: 2px 8px;">
+                        <span style="font-size: 0.75rem; font-weight: 700; margin-right: 2px; color: var(--secondary);" title="Leave blank for USD only">Cur:</span>
+                        <input type="text" id="global-currency" class="currency-selector" style="width: 50px; text-align: center; padding: 2px 4px; font-size: 0.8rem;" placeholder="..." maxlength="3" onchange="handleCurrencyChange()">
+                        
+                        <div id="quick-convert-container" style="display: none; align-items: center; gap: 6px; border-left: 1px solid var(--border); padding-left: 8px; margin-left: 4px;">
+    <div style="display: flex; align-items: center; gap: 4px; background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 2px 6px;">
+        <span style="font-size: 0.7rem; font-weight: 800; color: var(--secondary);">USD</span>
+        <input type="number" id="qc-usd" class="tabular-nums" placeholder="0.00" style="width: 80px; padding: 2px; font-size: 0.85rem; border: none; background: transparent; outline: none; text-align: right; box-shadow: none;" oninput="quickConvert('usd')">
+    </div>
+    <span style="font-size: 0.9rem; color: var(--secondary); font-weight: bold; line-height: 1;">⇌</span>
+    <div style="display: flex; align-items: center; gap: 4px; background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 2px 6px;">
+        <span id="qc-foreign-label" style="font-size: 0.7rem; font-weight: 800; color: var(--primary);">FX</span>
+        <input type="number" id="qc-foreign" class="tabular-nums" placeholder="0.00" style="width: 80px; padding: 2px; font-size: 0.85rem; border: none; background: transparent; outline: none; text-align: right; box-shadow: none;" oninput="quickConvert('foreign')">
+    </div>
+</div>
+                    </div>
                 </div>
 
-                <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
-                    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; background: white; padding: 6px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border); width: 130px;">
-                        <span style="font-size: 0.65rem; font-weight: 800; color: var(--secondary); text-transform: uppercase;">Manual 1</span>
-                        <div style="display: flex; gap: 4px; width: 100%;">
-                            <button id="cloud-save-btn-1" class="cloud small" onclick="saveToSupabase('manual_trip')" style="flex: 1; padding: 4px;">☁️ Save</button>
-                            <button id="cloud-load-btn-1" class="cloud small" onclick="loadFromSupabase('manual_trip')" style="flex: 1; padding: 4px;">☁️ Load</button>
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; flex: 1; max-width: 450px; width: 100%;">
+                    <div class="cloud-slot">
+                        <span class="slot-label">Manual 1</span>
+                        <div class="slot-btns">
+                            <button id="cloud-save-btn-1" class="cloud" onclick="saveToSupabase('manual_trip')">S</button>
+                            <button id="cloud-load-btn-1" class="cloud" onclick="loadFromSupabase('manual_trip')">L</button>
                         </div>
-                        <span id="manual-cloud-name-1" style="font-size: 0.7rem; color: var(--primary); font-weight: 700; text-align: center; margin-top: auto; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 120px;">Checking...</span>
+                        <span id="manual-cloud-name-1" class="slot-name">...</span>
                     </div>
 
-                    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; background: white; padding: 6px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border); width: 130px;">
-                        <span style="font-size: 0.65rem; font-weight: 800; color: var(--secondary); text-transform: uppercase;">Manual 2</span>
-                        <div style="display: flex; gap: 4px; width: 100%;">
-                            <button id="cloud-save-btn-2" class="cloud small" onclick="saveToSupabase('manual_trip_2')" style="flex: 1; padding: 4px;">☁️ Save</button>
-                            <button id="cloud-load-btn-2" class="cloud small" onclick="loadFromSupabase('manual_trip_2')" style="flex: 1; padding: 4px;">☁️ Load</button>
+                    <div class="cloud-slot">
+                        <span class="slot-label">Manual 2</span>
+                        <div class="slot-btns">
+                            <button id="cloud-save-btn-2" class="cloud" onclick="saveToSupabase('manual_trip_2')">S</button>
+                            <button id="cloud-load-btn-2" class="cloud" onclick="loadFromSupabase('manual_trip_2')">L</button>
                         </div>
-                        <span id="manual-cloud-name-2" style="font-size: 0.7rem; color: var(--primary); font-weight: 700; text-align: center; margin-top: auto; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 120px;">Checking...</span>
+                        <span id="manual-cloud-name-2" class="slot-name">...</span>
                     </div>
 
-                    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; background: white; padding: 6px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border); width: 130px;">
-                        <span style="font-size: 0.65rem; font-weight: 800; color: var(--secondary); text-transform: uppercase;">Manual 3</span>
-                        <div style="display: flex; gap: 4px; width: 100%;">
-                            <button id="cloud-save-btn-3" class="cloud small" onclick="saveToSupabase('manual_trip_3')" style="flex: 1; padding: 4px;">☁️ Save</button>
-                            <button id="cloud-load-btn-3" class="cloud small" onclick="loadFromSupabase('manual_trip_3')" style="flex: 1; padding: 4px;">☁️ Load</button>
+                    <div class="cloud-slot">
+                        <span class="slot-label">Manual 3</span>
+                        <div class="slot-btns">
+                            <button id="cloud-save-btn-3" class="cloud" onclick="saveToSupabase('manual_trip_3')">S</button>
+                            <button id="cloud-load-btn-3" class="cloud" onclick="loadFromSupabase('manual_trip_3')">L</button>
                         </div>
-                        <span id="manual-cloud-name-3" style="font-size: 0.7rem; color: var(--primary); font-weight: 700; text-align: center; margin-top: auto; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 120px;">Checking...</span>
+                        <span id="manual-cloud-name-3" class="slot-name">...</span>
                     </div>
                     
-                    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; background: #e0f2fe; padding: 6px 8px; border-radius: var(--radius-sm); border: 1px solid #7dd3fc; width: 130px;">
-                        <span style="font-size: 0.65rem; font-weight: 800; color: #0284c7; text-transform: uppercase;">Auto-Backup</span>
-                        <button id="cloud-load-auto-btn" class="cloud small" onclick="loadFromSupabase('auto_trip')" style="background-color: #0284c7; width: 100%; padding: 4px;">☁️ Load Backup</button>
-                        <span id="auto-cloud-name" style="font-size: 0.7rem; color: #0284c7; font-weight: 700; text-align: center; margin-top: auto; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 120px;">Checking...</span>
+                    <div class="cloud-slot auto-backup">
+                        <span class="slot-label">Auto-Sync</span>
+                        <div class="slot-btns">
+                            <button id="cloud-load-auto-btn" class="cloud" style="background-color: #0284c7; width: 100%;" onclick="loadFromSupabase('auto_trip')">Load Last</button>
+                        </div>
+                        <span id="auto-cloud-name" class="slot-name">...</span>
                     </div>
                 </div>
 
@@ -632,6 +658,14 @@
             </div>
         </div>
 
+        <div class="mobile-quick-nav" style="margin-top: 16px; margin-bottom: 24px;">
+            <button class="outline small" onclick="document.getElementById('activity-card').scrollIntoView({behavior: 'smooth', block: 'start'})">➕ Add</button>
+            <button class="outline small" onclick="document.getElementById('ledger-card-wrapper').scrollIntoView({behavior: 'smooth', block: 'start'})">📜 Ledger</button>
+            <button class="outline small" onclick="document.getElementById('analytics-section').scrollIntoView({behavior: 'smooth', block: 'start'})">📊 Analytics</button>
+            <button class="outline small" onclick="document.getElementById('settlement-section').scrollIntoView({behavior: 'smooth', block: 'start'})">💸 Settle</button>
+            <button class="outline small" onclick="window.scrollTo({top: 0, behavior: 'smooth'})">⬆️ Top</button>
+        </div>
+
     </div>
 
     <div class="modal-overlay" id="notes-overlay">
@@ -665,7 +699,7 @@
                 <h2 style="margin:0; color: var(--primary);">☁️ Setup Secure Sync</h2>
             </div>
             <div style="padding: 20px; display: flex; flex-direction: column; gap: 15px;">
-                <p style="font-size: 0.85rem; color: var(--secondary); margin: 0; line-height: 1.4;">Connect to Supabase with end-to-end encryption. Your long Device Key stays permanently on this device. You will only need to enter your short Session PIN when you open the app.</p>
+                <p style="font-size: 0.85rem; color: var(--secondary); margin: 0; line-height: 1.4;">Connect to Supabase with end-to-end encryption. Your long Device Key stays permanently on this device.</p>
                 
                 <div>
                     <label style="font-size: 0.8rem; font-weight: 700; color: var(--text);">Supabase Access Code (Base64)</label>
@@ -679,7 +713,7 @@
                 <div>
                     <label style="font-size: 0.8rem; font-weight: 700; color: var(--text);">Session PIN (Short Code)</label>
                     <input type="password" id="setup-session-pin" placeholder="e.g. 2025" onkeypress="if(event.key === 'Enter') submitCloudSetup()">
-                    <span style="font-size: 0.7rem; color: var(--secondary);">Required once every time you open the app.</span>
+                    <span style="font-size: 0.7rem; color: var(--secondary);">Optional. Required once every time you open the app if set.</span>
                 </div>
                 
                 <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
@@ -946,7 +980,7 @@
 
         document.addEventListener('focusin', (e) => {
             if ((e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.classList.contains('ql-editor'))) {
-                if (!e.target.closest('#mini-calculator')) lastActiveInput = e.target;
+                if (!e.target.closest('#mini-calculator') && !e.target.id.startsWith('qc-')) lastActiveInput = e.target;
             }
         });
 
@@ -1009,6 +1043,23 @@
                     }
                     setTimeout(() => btn.innerText = "📋 Copy & Paste Result", 1500);
                 });
+            }
+        }
+
+        // --- QUICK CURRENCY CONVERTER LOGIC ---
+        function quickConvert(source) {
+            const usdInput = document.getElementById('qc-usd');
+            const fxInput = document.getElementById('qc-foreign');
+            if (!currentExchangeRate || currentExchangeRate <= 0) return;
+            
+            if (source === 'usd') {
+                const usdVal = parseFloat(usdInput.value);
+                if (!isNaN(usdVal)) fxInput.value = (usdVal * currentExchangeRate).toFixed(2);
+                else fxInput.value = '';
+            } else {
+                const fxVal = parseFloat(fxInput.value);
+                if (!isNaN(fxVal)) usdInput.value = (fxVal / currentExchangeRate).toFixed(2);
+                else usdInput.value = '';
             }
         }
 
@@ -1124,6 +1175,7 @@
                 document.getElementById('exp-category').value = 'Other';
                 document.getElementById('per-day-toggle').checked = false;
                 document.getElementById('trip-days-input').style.display = 'none'; document.getElementById('trip-days-input').value = 1;
+                document.getElementById('qc-usd').value = ''; document.getElementById('qc-foreign').value = '';
                 
                 activeCategoryFilters = new Set(Object.keys(CATEGORIES)); cancelEdit(); 
                 localStorage.removeItem('tripSplitterLatest');
@@ -1317,7 +1369,6 @@
                 html += `<div style="page-break-inside: avoid;"><h2 class="pdf-header">💸 Final Settlement</h2><h3 class="pdf-subheader">Overall Standing</h3><ul style="font-size: 13px; line-height: 1.6; padding-left: 20px;">`;
                 currentGroupBalances.forEach(b => {
                     let txt = b.net > 0.01 ? `is owed <strong>${formatMoney(b.net)}</strong>` : (b.net < -0.01 ? `owes <strong style="color:#ef4444;">${formatMoney(Math.abs(b.net))}</strong>` : '<span style="color:#10b981;">is perfectly settled</span>');
-                    // Applied color styling to the name
                     html += `<li><strong style="color: ${b.color};">${b.name}</strong> ${txt}</li>`;
                 });
                 html += `</ul><h3 class="pdf-subheader" style="margin-top: 15px;">How to Settle Up</h3>`;
@@ -1326,7 +1377,6 @@
                 } else {
                     html += `<ul style="font-size: 14px; line-height: 1.8; padding-left: 20px;">`;
                     currentSettlements.forEach(s => { 
-                        // Applied color styling to both payer and payee names
                         html += `<li><strong style="color: ${s.from.color};">${s.from.name}</strong> pays <strong style="color: ${s.to.color};">${s.to.name}</strong>: <strong>${formatMoney(s.amount)}</strong></li>`; 
                     });
                     html += `</ul>`;
@@ -1378,9 +1428,11 @@
             const btn = document.getElementById('master-sync-btn');
             if (!btn) return;
             const hasAccess = localStorage.getItem('tripSplitter_cloudAccess');
+            const hasPin = localStorage.getItem('tripSplitter_hasPin') === 'true';
+            
             if (!hasAccess) {
                 btn.innerHTML = "☁️ Connect Cloud"; btn.style.borderColor = "var(--border)"; btn.style.color = "var(--text)";
-            } else if (!sessionPin) {
+            } else if (hasPin && !sessionPin) {
                 btn.innerHTML = "🔒 Unlock Cloud"; btn.style.borderColor = "var(--danger)"; btn.style.color = "var(--danger)";
             } else {
                 btn.innerHTML = "✅ Secured"; btn.style.borderColor = "var(--green)"; btn.style.color = "var(--green)";
@@ -1414,7 +1466,7 @@
             const devKey = document.getElementById('setup-device-key').value.trim();
             const pin = document.getElementById('setup-session-pin').value.trim();
             
-            if (!access || !devKey || !pin) { alert("Please fill out all fields."); return; }
+            if (!access || !devKey) { alert("Please fill out the Access Code and Device Key."); return; }
             
             let tempClient;
             try {
@@ -1461,6 +1513,7 @@
 
             localStorage.setItem('tripSplitter_cloudAccess', access);
             localStorage.setItem('tripSplitter_deviceKey', devKey);
+            localStorage.setItem('tripSplitter_hasPin', pin ? 'true' : 'false');
             sessionPin = pin; supabaseClient = tempClient;
             
             document.getElementById('cloud-setup-overlay').classList.remove('active');
@@ -1524,6 +1577,7 @@
         async function getValidCloudKey(isAutoSave = false) {
             const access = localStorage.getItem('tripSplitter_cloudAccess');
             const devKey = localStorage.getItem('tripSplitter_deviceKey');
+            const hasPin = localStorage.getItem('tripSplitter_hasPin') === 'true';
 
             if (!access || !devKey) {
                 if (isAutoSave) {
@@ -1531,10 +1585,10 @@
                     if (el) el.innerHTML = '<span style="cursor:pointer;" onclick="manageCloudSync()">🔒 Setup Sync</span>';
                     return null;
                 }
-                return await openCloudSetupModal() ? localStorage.getItem('tripSplitter_deviceKey') + sessionPin : null;
+                return await openCloudSetupModal() ? localStorage.getItem('tripSplitter_deviceKey') + (sessionPin || "") : null;
             }
 
-            if (!sessionPin) {
+            if (hasPin && !sessionPin) {
                 if (isAutoSave) {
                     const el = document.getElementById('cloud-status');
                     if (el) el.innerHTML = '<span style="cursor:pointer; color: var(--danger); font-weight: 800;" onclick="manageCloudSync()">🔒 Sync Paused - Click to Unlock</span>';
@@ -1542,13 +1596,15 @@
                 }
                 return await openPinModal() ? devKey + sessionPin : null;
             }
-            return devKey + sessionPin;
+            return devKey + (sessionPin || "");
         }
 
         async function manageCloudSync() {
             const access = localStorage.getItem('tripSplitter_cloudAccess');
+            const hasPin = localStorage.getItem('tripSplitter_hasPin') === 'true';
+            
             if (!access) await getValidCloudKey(); 
-            else if (!sessionPin) await getValidCloudKey(); 
+            else if (hasPin && !sessionPin) await getValidCloudKey(); 
             else alert("✅ Cloud Sync is actively connected and unlocked for this session.");
         }
 
@@ -1556,6 +1612,7 @@
             if(confirm("Clear your Cloud Sync settings from this browser? This will remove your Access Code and Device Key.")) {
                 localStorage.removeItem('tripSplitter_cloudAccess');
                 localStorage.removeItem('tripSplitter_deviceKey');
+                localStorage.removeItem('tripSplitter_hasPin');
                 sessionPin = ""; supabaseClient = null;
                 updateSyncBtnState(); alert("Cloud configuration cleared."); fetchCloudTripNames(); 
             }
@@ -1585,8 +1642,9 @@
                     try {
                         let parsed = typeof row.trip_data === 'string' ? JSON.parse(row.trip_data) : row.trip_data;
                         if (parsed && parsed.ciphertext) {
-                            if (sessionPin) {
-                                const fullKey = localStorage.getItem('tripSplitter_deviceKey') + sessionPin;
+                            const hasPin = localStorage.getItem('tripSplitter_hasPin') === 'true';
+                            if (!hasPin || sessionPin) {
+                                const fullKey = localStorage.getItem('tripSplitter_deviceKey') + (sessionPin || "");
                                 const decrypted = await decryptData(fullKey, parsed);
                                 if (decrypted) { parsed = JSON.parse(decrypted); } 
                                 else { parsed = { tripName: "🔒 Locked (Wrong PIN?)" }; }
@@ -1629,7 +1687,7 @@
                     alert(`✅ Securely encrypted and saved to ${slotName}!`); fetchCloudTripNames(); 
                 }
             } catch (err) { alert("Encryption failed."); console.error(err); }
-            btn.innerText = "☁️ Save";
+            btn.innerText = "S";
         }
 
         async function silentCloudSave() {
@@ -1713,14 +1771,14 @@
         // --- 5. CURRENCY & FORMATTING ---
         async function fetchExchangeRate(targetCurrency, isSilent = false) {
             if (!targetCurrency || targetCurrency === 'USD') return false;
-            if (!isSilent) document.getElementById('rate-display').innerText = 'Loading...';
+            // if (!isSilent) document.getElementById('rate-display').innerText = 'Loading...';
             try {
                 const res = await fetch('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json');
                 const data = await res.json();
                 const rate = data.usd[targetCurrency.toLowerCase()];
                 if (rate) {
                     currentExchangeRate = rate;
-                    document.getElementById('rate-display').innerText = `(1 USD = ${currentExchangeRate.toFixed(3)} ${targetCurrency})`;
+                    // document.getElementById('rate-display').innerText = `(1 USD = ${currentExchangeRate.toFixed(3)} ${targetCurrency})`;
                     return true;
                 } else {
                     if (!isSilent) alert(`Currency code "${targetCurrency}" not found on the exchange server.`);
@@ -1729,7 +1787,7 @@
             } catch (e) {
                 console.error(e);
                 if (!isSilent) alert("Failed to connect to currency API. Using offline rate if available.");
-                document.getElementById('rate-display').innerText = `(Offline Rate: 1 USD = ${currentExchangeRate.toFixed(3)} ${targetCurrency})`;
+                // document.getElementById('rate-display').innerText = `(Offline Rate: 1 USD = ${currentExchangeRate.toFixed(3)} ${targetCurrency})`;
                 return true; 
             }
         }
@@ -1738,8 +1796,8 @@
             let inputVal = document.getElementById('global-currency').value.trim().toUpperCase();
             if (inputVal === "" || inputVal === "USD") {
                 secondaryCurrency = ""; currentExchangeRate = 1;
-                document.getElementById('rate-display').innerText = '';
                 document.getElementById('global-currency').value = "";
+                document.getElementById('qc-usd').value = ""; document.getElementById('qc-foreign').value = "";
                 saveState(); updateCurrencySelectors(); updateUI(); return;
             }
             if (inputVal.length !== 3) { document.getElementById('global-currency').value = secondaryCurrency; return; }
@@ -1748,33 +1806,45 @@
                 secondaryCurrency = inputVal; saveState(); updateCurrencySelectors(); updateUI();
             } else {
                 document.getElementById('global-currency').value = secondaryCurrency;
-                if (secondaryCurrency) document.getElementById('rate-display').innerText = `(1 USD = ${currentExchangeRate.toFixed(3)} ${secondaryCurrency})`;
-                else document.getElementById('rate-display').innerText = '';
             }
         }
 
         function updateCurrencySelectors() {
-            const expSelector = document.getElementById('exp-currency');
-            const viewSelector = document.getElementById('view-currency');
-            const viewContainer = document.getElementById('dashboard-currency-toggle');
-            const currExpVal = expSelector.value;
-            const currViewVal = viewSelector.value;
-            let expHtml = `<option value="USD">USD</option>`;
-            let viewHtml = `<option value="USD">🇺🇸 USD ($)</option>`;
-            
-            if (secondaryCurrency) {
-                const sym = CURRENCY_SYMBOLS[secondaryCurrency] || secondaryCurrency;
-                expHtml += `<option value="${secondaryCurrency}">${secondaryCurrency}</option>`;
-                viewHtml += `<option value="${secondaryCurrency}">🌎 ${secondaryCurrency} (${sym})</option>`;
-                viewContainer.style.display = 'flex';
-            } else { viewContainer.style.display = 'none'; }
-            
-            expSelector.innerHTML = expHtml;
-            viewSelector.innerHTML = viewHtml;
-            
-            if(secondaryCurrency && currExpVal === secondaryCurrency) expSelector.value = secondaryCurrency;
-            if(secondaryCurrency && currViewVal === secondaryCurrency) viewSelector.value = secondaryCurrency;
-        }
+    const expSelector = document.getElementById('exp-currency');
+    const viewSelector = document.getElementById('view-currency');
+    const viewContainer = document.getElementById('dashboard-currency-toggle');
+    
+    // QUICK CONVERT ELEMENTS
+    const qcContainer = document.getElementById('quick-convert-container');
+    const qcForeignLabel = document.getElementById('qc-foreign-label');
+    
+    const currExpVal = expSelector.value;
+    const currViewVal = viewSelector.value;
+    let expHtml = `<option value="USD">USD</option>`;
+    let viewHtml = `<option value="USD">🇺🇸 USD ($)</option>`;
+    
+    if (secondaryCurrency) {
+        const sym = CURRENCY_SYMBOLS[secondaryCurrency] || secondaryCurrency;
+        expHtml += `<option value="${secondaryCurrency}">${secondaryCurrency}</option>`;
+        viewHtml += `<option value="${secondaryCurrency}">🌎 ${secondaryCurrency} (${sym})</option>`;
+        viewContainer.style.display = 'flex';
+        
+        // Show Quick Convert & Update Label
+        qcContainer.style.display = 'flex';
+        qcForeignLabel.innerText = secondaryCurrency;
+        if (document.getElementById('qc-usd').value) quickConvert('usd');
+        
+    } else { 
+        viewContainer.style.display = 'none'; 
+        qcContainer.style.display = 'none';
+    }
+    
+    expSelector.innerHTML = expHtml;
+    viewSelector.innerHTML = viewHtml;
+    
+    if(secondaryCurrency && currExpVal === secondaryCurrency) expSelector.value = secondaryCurrency;
+    if(secondaryCurrency && currViewVal === secondaryCurrency) viewSelector.value = secondaryCurrency;
+}
 
         function formatMoney(amountInUsd) {
             const displayCur = document.getElementById('view-currency').value || 'USD';
