@@ -148,7 +148,7 @@
             white-space: nowrap;
         }
 
-        /* --- CLOUD SLOTS COMPACT --- */
+        /* --- CLOUD SLOTS & BUTTON ANIMATIONS --- */
         .cloud-slot {
             display: flex; flex-direction: column; align-items: center; gap: 2px;
             background: white; padding: 4px; border-radius: var(--radius-sm); border: 1px solid var(--border);
@@ -158,9 +158,21 @@
         .cloud-slot .slot-label { font-size: 0.6rem; font-weight: 800; color: var(--secondary); text-transform: uppercase; }
         .cloud-slot.auto-backup .slot-label { color: #0284c7; }
         .cloud-slot .slot-btns { display: flex; gap: 2px; width: 100%; }
-        .cloud-slot .slot-btns button { flex: 1; padding: 2px 0; font-size: 0.65rem; }
+        .cloud-slot .slot-btns button { flex: 1; padding: 2px 0; font-size: 0.65rem; transition: all 0.3s ease; }
         .cloud-slot .slot-name { font-size: 0.65rem; font-weight: 700; color: var(--primary); text-align: center; margin-top: auto; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 100%; width: 100%; }
         .cloud-slot.auto-backup .slot-name { color: #0284c7; }
+
+        @keyframes pulse-warning {
+            0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); }
+            70% { box-shadow: 0 0 0 6px rgba(245, 158, 11, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+        }
+        .btn-update-available {
+            background-color: #f59e0b !important; 
+            color: white !important;
+            animation: pulse-warning 2s infinite;
+            border: 1px solid #d97706 !important;
+        }
 
         .card {
             background: var(--card-bg); 
@@ -500,6 +512,7 @@
             <details class="participants-dropdown">
                 <summary>
                     <span>👥 Manage Participants & Groups</span>
+                    <span style="font-size: 0.7rem; color: var(--secondary); font-weight: 600; background: var(--bg); padding: 2px 6px; border-radius: 10px;">v2.1</span>
                 </summary>
                 <div style="margin-top: 12px; border-top: 1px solid var(--border); padding-top: 12px;">
                     <div class="form-row">
@@ -770,17 +783,12 @@
         // --- HELPER: HTML SANITIZATION ---
         function sanitizeHTML(html) {
             if (!html) return "";
-            // Strip normal spaces between tags and hidden carriage returns
             let clean = html.replace(/\r?\n|\r/g, '').replace(/>\s+</g, '><');
-            // Prevent stacking trailing empty paragraphs
-            while (clean !== '<p><br></p>' && clean.endsWith('<p><br></p>')) {
-                clean = clean.slice(0, -11);
-            }
+            while (clean !== '<p><br></p>' && clean.endsWith('<p><br></p>')) { clean = clean.slice(0, -11); }
             if (clean === '<p><br></p>') return "";
             return clean;
         }
 
-        // --- NAME TRUNCATION HELPER ---
         function shortName(name) {
             if (!name) return '';
             return name.length > 4 ? name.substring(0, 4) : name;
@@ -808,9 +816,13 @@
         let supabaseClient = null;
         let cloudSyncTimeout = null;
         let cloudTripNames = { manual_trip: "", manual_trip_2: "", manual_trip_3: "", auto_trip: "" };
-        let sessionPin = ""; // Stores the temporary PIN in memory
-        let pinFailedAttempts = 0; // Security Tracker
+        let sessionPin = ""; 
+        let pinFailedAttempts = 0; 
         let cloudAuthPromiseResolve = null;
+
+        // SMART SYNC VARIABLES
+        let localLastModified = Date.now();
+        let cloudTimestamps = { manual_trip: 0, manual_trip_2: 0, manual_trip_3: 0, auto_trip: 0 };
 
         // Globals explicitly for PDF Export parsing
         let currentSettlements = [];
@@ -822,9 +834,9 @@
         };
         let currentGroupBalances = [];
 
-        // Notes Phase 3 Additions & Phase 4 (Delta Storage)
-        let tripNotes = ""; // Used exclusively for PDF generation (String)
-        let tripNotesDelta = null; // Used exclusively for editing fidelity (JSON Object)
+        // Notes Variables
+        let tripNotes = ""; 
+        let tripNotesDelta = null; 
         let autoColorNotes = false;
         let quill = null;
         let notesDebounceTimer;
@@ -880,11 +892,10 @@
                     notesDebounceTimer = setTimeout(() => {
                         const currentClean = sanitizeHTML(quill.root.innerHTML);
                         const savedClean = sanitizeHTML(tripNotes);
-                        // Save if the HTML changed, OR if we don't have a Delta object yet (upgrade path)
                         if (currentClean !== savedClean || !tripNotesDelta) {
                             applyAutoColor(); 
-                            tripNotes = sanitizeHTML(quill.root.innerHTML); // Save HTML for PDF
-                            tripNotesDelta = quill.getContents(); // Save native Delta JSON for bulletproof reloading
+                            tripNotes = sanitizeHTML(quill.root.innerHTML); 
+                            tripNotesDelta = quill.getContents(); 
                             saveState();
                         }
                         isNotesDirty = false;
@@ -892,18 +903,16 @@
                 }
             });
             
-            updateSyncBtnState(); // Initialize Cloud Sync Button visually
+            updateSyncBtnState(); 
         });
 
         function openNotesModal() {
             document.getElementById('notes-overlay').classList.add('active');
             document.getElementById('auto-color-toggle').checked = autoColorNotes;
             if (quill) {
-                // Primary Path: If we have a native Delta JSON, load it directly (immune to Edge/Chrome parser quirks)
                 if (tripNotesDelta && Object.keys(tripNotesDelta).length > 0) {
                     quill.setContents(tripNotesDelta);
                 } 
-                // Fallback Path: If it's an old save file with only HTML, flush and paste
                 else {
                     const targetHTML = sanitizeHTML(tripNotes || "");
                     quill.setText('');
@@ -1177,10 +1186,12 @@
         }
 
         function saveState(skipAutoSync = false) {
+            localLastModified = Date.now(); // Update local modification time
+            
             const payload = { 
                 tripName, tripComment, participants, participantGroups, expenses, 
                 secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay,
-                tripNotes, tripNotesDelta, autoColorNotes
+                tripNotes, tripNotesDelta, autoColorNotes, lastModified: localLastModified
             };
 
             localStorage.setItem('tripSplitterLatest', JSON.stringify(payload));
@@ -1190,6 +1201,9 @@
                 clearTimeout(cloudSyncTimeout);
                 cloudSyncTimeout = setTimeout(silentCloudSave, 3000); 
             }
+            
+            // Clear any sync warnings since local is now the newest
+            compareVersions();
         }
 
         function loadState() {
@@ -1210,6 +1224,7 @@
                     tripNotes = data.tripNotes || "";
                     tripNotesDelta = data.tripNotesDelta || null;
                     autoColorNotes = data.autoColorNotes || false;
+                    localLastModified = data.lastModified || Date.now();
                     
                     repairLegacyData();
                     document.getElementById('trip-name').value = tripName;
@@ -1239,6 +1254,7 @@
                 tripName = "My Trip"; tripComment = ""; participants = []; participantGroups = {}; expenses = [];
                 secondaryCurrency = ""; currentExchangeRate = 1; currentSort = 'date-desc'; tripDays = 1;
                 showPerDay = false; tripNotes = ""; tripNotesDelta = null; autoColorNotes = false;
+                localLastModified = Date.now();
                 
                 document.getElementById('global-currency').value = ""; document.getElementById('ledger-sort').value = "date-desc";
                 document.getElementById('trip-name').value = tripName; document.getElementById('trip-comment').value = tripComment;
@@ -1252,6 +1268,7 @@
                 localStorage.removeItem('tripSplitterLatest');
                 updateCurrencySelectors(); updateUI();
                 document.getElementById('next-payer-container').innerHTML = ''; document.getElementById('cloud-status').innerText = '';
+                compareVersions();
             }
         }
 
@@ -1326,7 +1343,7 @@
         }
 
         function exportTrip() {
-            const payload = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, tripNotesDelta, autoColorNotes });
+            const payload = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, tripNotesDelta, autoColorNotes, lastModified: localLastModified });
             const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(payload);
             const dl = document.createElement('a'); dl.setAttribute("href", dataStr);
             dl.setAttribute("download", tripName.replace(/\s+/g, '_') + ".json"); dl.click();
@@ -1335,7 +1352,7 @@
         async function exportSecureTrip() {
             const password = prompt("⚠️ Secure Save ⚠️\nEnter a password to encrypt this trip file.\n\nWARNING: If you forget this password, your data cannot be recovered.");
             if (!password) return; 
-            const payload = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, tripNotesDelta, autoColorNotes });
+            const payload = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, tripNotesDelta, autoColorNotes, lastModified: localLastModified });
             try {
                 const encryptedData = await encryptData(password, payload);
                 const securePayload = JSON.stringify(encryptedData);
@@ -1368,6 +1385,7 @@
                     currentExchangeRate = parsedData.currentExchangeRate || 1; currentSort = parsedData.currentSort || 'date-desc';
                     tripDays = parsedData.tripDays || 1; showPerDay = parsedData.showPerDay || false;
                     tripNotes = parsedData.tripNotes || ""; tripNotesDelta = parsedData.tripNotesDelta || null; autoColorNotes = parsedData.autoColorNotes || false;
+                    localLastModified = parsedData.lastModified || Date.now();
                     
                     activeCategoryFilters = new Set(Object.keys(CATEGORIES)); repairLegacyData();
                     document.getElementById('trip-name').value = tripName; document.getElementById('trip-comment').value = tripComment;
@@ -1655,8 +1673,6 @@
             cloudAuthPromiseResolve = null;
         }
 
-        
-
         async function getValidCloudKey(isAutoSave = false) {
             const access = localStorage.getItem('tripSplitter_cloudAccess');
             const devKey = localStorage.getItem('tripSplitter_deviceKey');
@@ -1702,6 +1718,27 @@
             }
         }
 
+        function compareVersions() {
+            const checkSlot = (id, btnId, defaultText) => {
+                const btn = document.getElementById(btnId);
+                if (!btn) return;
+                if (cloudTripNames[id] === tripName && cloudTimestamps[id] > localLastModified) {
+                    btn.classList.add('btn-update-available');
+                    btn.innerHTML = defaultText === 'L' ? '⚠️ Load' : '⚠️ Update Found';
+                    btn.title = "A newer version of this trip exists in the cloud!";
+                } else {
+                    btn.classList.remove('btn-update-available');
+                    btn.innerHTML = defaultText;
+                    btn.title = "";
+                }
+            };
+
+            checkSlot('manual_trip', 'cloud-load-btn-1', 'L');
+            checkSlot('manual_trip_2', 'cloud-load-btn-2', 'L');
+            checkSlot('manual_trip_3', 'cloud-load-btn-3', 'L');
+            checkSlot('auto_trip', 'cloud-load-auto-btn', 'Load Last');
+        }
+
         async function fetchCloudTripNames() {
             const client = getSupabaseClient(); if (!client) return; 
             
@@ -1736,6 +1773,7 @@
                         }
                         if (parsed && parsed.tripName) {
                             cloudTripNames[row.id] = parsed.tripName; 
+                            cloudTimestamps[row.id] = parsed.lastModified || 0;
                             if (row.id === 'manual_trip') manualName1 = parsed.tripName;
                             if (row.id === 'manual_trip_2') manualName2 = parsed.tripName;
                             if (row.id === 'manual_trip_3') manualName3 = parsed.tripName;
@@ -1747,6 +1785,8 @@
             
             document.getElementById('manual-cloud-name-1').innerText = manualName1; document.getElementById('manual-cloud-name-2').innerText = manualName2;
             document.getElementById('manual-cloud-name-3').innerText = manualName3; document.getElementById('auto-cloud-name').innerText = autoName;
+            
+            compareVersions();
         }
 
         async function saveToSupabase(targetId) {
@@ -1757,7 +1797,7 @@
             const key = await getValidCloudKey(); if (!key) return;
             const client = getSupabaseClient(); if (!client) return;
 
-            const payloadStr = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, tripNotesDelta, autoColorNotes });
+            const payloadStr = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, tripNotesDelta, autoColorNotes, lastModified: localLastModified });
             
             const btnId = targetId === 'manual_trip' ? 'cloud-save-btn-1' : (targetId === 'manual_trip_2' ? 'cloud-save-btn-2' : 'cloud-save-btn-3');
             const btn = document.getElementById(btnId); btn.innerText = "⏳";
@@ -1778,7 +1818,7 @@
             const key = await getValidCloudKey(true); if (!key) return;
             const client = getSupabaseClient(); if (!client) return;
             
-            const payloadStr = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, tripNotesDelta, autoColorNotes });
+            const payloadStr = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, tripNotesDelta, autoColorNotes, lastModified: localLastModified });
             const statusEl = document.getElementById('cloud-status');
             
             try {
@@ -1831,6 +1871,7 @@
                     currentExchangeRate = parsedData.currentExchangeRate || 1; currentSort = parsedData.currentSort || 'date-desc';
                     tripDays = parsedData.tripDays || 1; showPerDay = parsedData.showPerDay || false;
                     tripNotes = parsedData.tripNotes || ""; tripNotesDelta = parsedData.tripNotesDelta || null; autoColorNotes = parsedData.autoColorNotes || false;
+                    localLastModified = parsedData.lastModified || Date.now();
                     
                     activeCategoryFilters = new Set(Object.keys(CATEGORIES)); repairLegacyData();
                     document.getElementById('trip-name').value = tripName; document.getElementById('trip-comment').value = tripComment;
@@ -1841,6 +1882,7 @@
                     document.getElementById('trip-days-input').value = tripDays;
                     
                     saveState(true); updateCurrencySelectors(); updateUI(); cancelEdit();
+                    compareVersions();
                     
                     let slotName = "Autosave";
                     if(targetId === 'manual_trip') slotName = "Manual 1";
