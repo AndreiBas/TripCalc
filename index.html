@@ -772,8 +772,25 @@
 
     <script>
         // --- HELPER: HTML SANITIZATION ---
+        // Completely rewritten to aggressively strip hidden Edge newlines and prune trailing <p><br></p> loops
         function sanitizeHTML(html) {
-            return html ? html.replace(/>\s+</g, '><') : "";
+            if (!html) return "";
+            // Step 1: Strip hidden carriage returns and newlines that browsers might inject
+            let clean = html.replace(/\r?\n|\r/g, '');
+            
+            // Strip normal spaces between tags
+            clean = clean.replace(/>\s+</g, '><');
+            
+            // Step 2: Strip trailing empty paragraphs to prevent loop stacking
+            // Keep looping as long as it ends with an empty paragraph, UNLESS it's the ONLY thing left
+            while (clean !== '<p><br></p>' && clean.endsWith('<p><br></p>')) {
+                clean = clean.slice(0, -11);
+            }
+            
+            // If it's just one empty paragraph, make it truly empty
+            if (clean === '<p><br></p>') return "";
+            
+            return clean;
         }
 
         // --- NAME TRUNCATION HELPER ---
@@ -833,7 +850,7 @@
         const CATEGORIES = {
             'Food': { icon: '🍔', color: '#b45309', bg: '#fef3c7' },       
             'Transport': { icon: '🚕', color: '#1d4ed8', bg: '#dbeafe' },  
-            'Travel': { icon: '✈️', color: '#6d28d9', bg: '#ede9fe' },     
+            'Travel': { icon: '✈️', color: '#6d28d9', bg: '#ede9fe' },      
             'Fun': { icon: '🎟️', color: '#be185d', bg: '#fce7f3' },    
             'Transfer': { icon: '💸', color: '#047857', bg: '#d1fae5' }, 
             'Other': { icon: '📝', color: '#334155', bg: '#f1f5f9' }       
@@ -888,14 +905,19 @@
             updateSyncBtnState(); // Initialize Cloud Sync Button visually
         });
 
+        // Step 3: Updated to flush the editor before pasting
         function openNotesModal() {
             document.getElementById('notes-overlay').classList.add('active');
             document.getElementById('auto-color-toggle').checked = autoColorNotes;
             if (quill) {
                 const currentHTML = sanitizeHTML(quill.root.innerHTML);
                 const targetHTML = sanitizeHTML(tripNotes || "");
-                if (currentHTML !== targetHTML && !(currentHTML === '<p><br></p>' && targetHTML === '')) {
-                    quill.clipboard.dangerouslyPasteHTML(targetHTML);
+                
+                if (currentHTML !== targetHTML) {
+                    quill.setText(''); // Flush the editor completely first
+                    if (targetHTML) {
+                        quill.clipboard.dangerouslyPasteHTML(targetHTML);
+                    }
                 }
                 isNotesDirty = false;
             }
