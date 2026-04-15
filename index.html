@@ -95,7 +95,7 @@
             body { height: 100vh; overflow: hidden; display: flex; flex-direction: column; padding-bottom: 0; }
             .mobile-quick-nav { display: none !important; }
             .header-top-row { flex-direction: row; justify-content: space-between; align-items: center; }
-            .app-container { grid-template-columns: 400px 1fr; flex: 1; min-height: 0; overflow: hidden; gap: 20px; }
+            .app-container { grid-template-columns: 420px 1fr; flex: 1; min-height: 0; overflow: hidden; gap: 20px; }
             .col-right { grid-column: 1 / -1; }
             .col-left, .col-mid, .col-right {
                 height: 100%; overflow-y: auto; padding-right: 10px; padding-bottom: 40px; 
@@ -109,7 +109,7 @@
         }
         
         @media (min-width: 1400px) {
-            .app-container { grid-template-columns: 380px 1fr 1fr; }
+            .app-container { grid-template-columns: 400px 1fr 1fr; }
             .col-left { grid-column: 1; }
             .col-mid { grid-column: 2; }
             .col-right { grid-column: 3; }
@@ -248,10 +248,24 @@
         .tag-del:hover { opacity: 1; color: var(--danger); }
 
         .participant-selector { background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 10px; margin-top: 16px; }
-        .participant-row { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px; background: #fff; border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 6px; box-shadow: var(--shadow-sm);}
-        .participant-row input[type="number"] { width: 90px; padding: 6px 8px; margin: 0; font-size: 0.85rem; text-align: right; border-radius: var(--radius-sm); }
-        .checkbox-item { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; cursor: pointer; font-weight: 700; flex: 1;}
-        .checkbox-item input[type="checkbox"] { width: 16px; height: 16px; margin: 0; cursor: pointer; accent-color: var(--primary);}
+        
+        /* Updated Single Line Participant Row */
+        .participant-row { 
+            display: flex; align-items: center; justify-content: space-between; flex-wrap: nowrap; 
+            padding: 6px 8px; background: #fff; border: 1px solid var(--border); border-radius: var(--radius-sm); 
+            margin-bottom: 6px; box-shadow: var(--shadow-sm); gap: 8px; overflow-x: auto;
+        }
+        .participant-row::-webkit-scrollbar { display: none; } /* Clean look */
+        .inputs-group { display: flex; gap: 4px; flex: none; }
+        .participant-row input[type="number"] { width: 100px; padding: 6px; margin: 0; font-size: 0.85rem; text-align: right; border-radius: var(--radius-sm); flex: none;}
+        
+        .part-personal { background: #f8fafc; }
+        .part-fixed { background: #fffbeb; border-color: #fde68a; } /* Amber tint for Exact $ */
+        .part-fixed:focus { border-color: #f59e0b; box-shadow: inset 0 0 0 1px #f59e0b; }
+        
+        .checkbox-item { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; cursor: pointer; font-weight: 700; flex: 1; min-width: 0; white-space: nowrap;}
+        .checkbox-item input[type="checkbox"] { width: 16px; height: 16px; margin: 0; cursor: pointer; accent-color: var(--primary); flex: none;}
+        .checkbox-item span { overflow: hidden; text-overflow: ellipsis; }
 
         .ledger-card { padding-top: 0; display: flex; flex-direction: column; min-height: 400px; position: relative; }
         
@@ -493,7 +507,7 @@
                 </summary>
                 <div style="margin-top: 12px; border-top: 1px solid var(--border); padding-top: 12px;">
                     <div class="form-row">
-                        <input type="text" id="new-participant" placeholder="Initials (e.g., AB)" maxlength="3" style="flex: 1;" onkeypress="handleParticipantKeyPress(event)">
+                        <input type="text" id="new-participant" placeholder="Name (Max 12)" maxlength="12" style="flex: 1;" onkeypress="handleParticipantKeyPress(event)">
                         <input type="text" id="new-participant-group" placeholder="Family/Group Name (Optional)" style="flex: 2;" onkeypress="handleParticipantKeyPress(event)">
                         <button onclick="addParticipant()" style="flex: none;">Add Person</button>
                     </div>
@@ -578,13 +592,13 @@
                                 
                                 <div style="display:flex; gap: 6px; align-items: center;">
                                     <select id="exp-split-type" class="split-type-select" onchange="updateSplitTypeUI()">
-                                        <option value="equal">Equal + Extras</option>
+                                        <option value="equal">Equal / Shared</option>
                                         <option value="percentage">Percentage (%)</option>
                                     </select>
                                 </div>
                             </div>
                             <div id="split-helper-text" style="font-size: 0.8rem; color: var(--secondary); margin-bottom: 8px; font-weight: 500;">
-                                <em>Add personal items to be excluded from the equal split.</em>
+                                <em>Use <strong>+ Extra</strong> to add to their base share, or <strong>= Exact</strong> to override it completely.</em>
                             </div>
                             
                             <div id="participant-list-inputs" class="participant-list-scroller"></div>
@@ -757,6 +771,12 @@
     </div>
 
     <script>
+        // --- NAME TRUNCATION HELPER ---
+        function shortName(name) {
+            if (!name) return '';
+            return name.length > 4 ? name.substring(0, 4) : name;
+        }
+
         // --- 1. STATE VARIABLES ---
         let tripName = "My Trip";
         let tripComment = ""; 
@@ -1051,7 +1071,7 @@
                                 else lastActiveInput.value += calcExpr;
                             }
                             lastActiveInput.dispatchEvent(new Event('input', { bubbles: true })); lastActiveInput.dispatchEvent(new Event('change', { bubbles: true }));
-                            if (lastActiveInput.classList.contains('part-personal')) calculateRemainingPercentage();
+                            if (lastActiveInput.classList.contains('part-personal') || lastActiveInput.classList.contains('part-fixed')) calculateRemainingPercentage();
                         } catch(e) { console.error("Could not paste into input", e); }
                     }
                     setTimeout(() => btn.innerText = "📋 Copy & Paste Result", 1500);
@@ -1127,6 +1147,7 @@
                 if (typeof e.ignored === 'undefined') e.ignored = false;
                 if (!e.category) e.category = 'Other';
                 if (!e.personalExpenses) e.personalExpenses = {}; 
+                if (!e.fixedShares) e.fixedShares = {}; 
                 if (!e.splitType) e.splitType = 'equal'; 
                 if (!e.percentageShares) e.percentageShares = {}; 
                 if (typeof e.notes === 'undefined') e.notes = ''; 
@@ -1369,7 +1390,7 @@
                         <td style="background: #f8fafc; width: 25%;"><strong style="color: #64748b; text-transform: uppercase; font-size: 10px;">Filtered Trip Cost</strong><br><span style="font-size: 16px; color: #4f46e5; font-weight: bold;">${formatMoney(currentStats.totalSpent)}</span>${showPerDay && tripDays > 0 ? `<br><span style="color: #4f46e5; font-size: 10px;">(${formatMoney(currentStats.totalSpent / tripDays)}/d)</span>` : ''}</td>
                         <td style="background: #fff1f2; border-color: #fecdd3; width: 25%;"><strong style="color: #be123c; text-transform: uppercase; font-size: 10px;">Biggest Splurge</strong><br><span style="font-size: 12px; color: #be123c;">${currentStats.biggestSplurge.desc}</span><br><strong style="font-size: 14px; color: #be123c;">${formatMoney(currentStats.biggestSplurge.amount)}</strong></td>
                         <td style="background: #f8fafc; width: 25%;"><strong style="color: #64748b; text-transform: uppercase; font-size: 10px;">Most Exp. Day</strong><br><span style="font-size: 12px;">${currentStats.mostExpensiveDay.date ? formatDateDisplay(currentStats.mostExpensiveDay.date) : 'N/A'}</span><br><strong style="font-size: 14px;">${formatMoney(currentStats.mostExpensiveDay.amount)}</strong></td>
-                        <td style="background: #f8fafc; width: 25%;"><strong style="color: #64748b; text-transform: uppercase; font-size: 10px;">Trip Banker</strong><br><span style="font-size: 12px;">${currentStats.tripBanker.name}</span><br><strong style="font-size: 14px;">${formatMoney(currentStats.tripBanker.paid)}</strong></td>
+                        <td style="background: #f8fafc; width: 25%;"><strong style="color: #64748b; text-transform: uppercase; font-size: 10px;">Trip Banker</strong><br><span style="font-size: 12px;">${shortName(currentStats.tripBanker.name)}</span><br><strong style="font-size: 14px;">${formatMoney(currentStats.tripBanker.paid)}</strong></td>
                 </tr></table>`;
 
                 html += `<h3 class="pdf-subheader">Category Breakdown</h3>
@@ -1389,7 +1410,7 @@
                     if (stats.owed === 0 && stats.paid === 0) return;
                     const diff = stats.paid - stats.owed;
                     const diffText = diff > 0.01 ? `<span style="color: #10b981;">+${formatMoney(diff)}</span>` : (diff < -0.01 ? `<span style="color: #ef4444;">${formatMoney(diff)}</span>` : '<span style="color: #64748b;">$0.00</span>');
-                    html += `<tr><td><strong>${gName}</strong>${stats.members.length > 1 ? `<br><span style="font-size: 10px; color: #64748b;">(${stats.members.join(', ')})</span>` : ''}</td><td style="text-align: right;">${formatMoney(stats.paid)}</td><td style="text-align: right;">${formatMoney(stats.owed)}</td><td style="text-align: right; font-weight: bold;">${diffText}</td></tr>`;
+                    html += `<tr><td><strong>${shortName(gName)}</strong>${stats.members.length > 1 ? `<br><span style="font-size: 10px; color: #64748b;">(${stats.members.map(shortName).join(', ')})</span>` : ''}</td><td style="text-align: right;">${formatMoney(stats.paid)}</td><td style="text-align: right;">${formatMoney(stats.owed)}</td><td style="text-align: right; font-weight: bold;">${diffText}</td></tr>`;
                 });
                 html += `</tbody></table>`;
             }
@@ -1417,7 +1438,7 @@
             if (currentFilteredExpenses.length > 0) {
                 html += `<h2 class="pdf-header">📜 Activity Ledger</h2><table><thead style="background: #f1f5f9; display: table-header-group;"><tr><th style="width: 15%; text-align: left;">Date</th><th style="width: 30%; text-align: left;">Description</th><th style="width: 18%; text-align: left;">Category</th><th style="width: 17%; text-align: left;">Paid By</th><th style="width: 20%; text-align: right;">Amount</th></tr></thead><tbody>`;
                 currentFilteredExpenses.forEach(e => {
-                    html += `<tr style="page-break-inside: avoid;"><td>${e.date}</td><td><strong>${e.desc}</strong></td><td>${CATEGORIES[e.category]?.icon || ''} ${e.category}</td><td>${e.payer}</td><td style="text-align: right; font-weight: bold;">${formatMoney(e.amount)}</td></tr>`;
+                    html += `<tr style="page-break-inside: avoid;"><td>${e.date}</td><td><strong>${e.desc}</strong></td><td>${CATEGORIES[e.category]?.icon || ''} ${e.category}</td><td>${shortName(e.payer)}</td><td style="text-align: right; font-weight: bold;">${formatMoney(e.amount)}</td></tr>`;
                 });
                 html += `</tbody></table>`;
             }
@@ -1931,11 +1952,11 @@
         }
 
         function renameParticipant(oldName) {
-            const newNameInput = prompt(`Rename ${oldName} to (Max 10 chars):`, oldName);
+            const newNameInput = prompt(`Rename ${oldName} to (Max 12 chars):`, oldName);
             if (!newNameInput) return;
             const newName = newNameInput.trim().toUpperCase();
             if (newName === oldName || newName === "") return;
-            if (newName.length > 10) { alert("Name is too long! Please keep it to 10 characters or less."); return; }
+            if (newName.length > 12) { alert("Name is too long! Please keep it to 12 characters or less."); return; }
             if (participants.includes(newName)) { alert("Name already exists."); return; }
 
             const idx = participants.indexOf(oldName);
@@ -1949,6 +1970,9 @@
                 if (involvedIdx > -1) e.involved[involvedIdx] = newName;
                 if (e.personalExpenses && e.personalExpenses[oldName]) {
                     e.personalExpenses[newName] = e.personalExpenses[oldName]; delete e.personalExpenses[oldName];
+                }
+                if (e.fixedShares && e.fixedShares[oldName] !== undefined) {
+                    e.fixedShares[newName] = e.fixedShares[oldName]; delete e.fixedShares[oldName];
                 }
                 if (e.percentageShares && e.percentageShares[oldName]) {
                     e.percentageShares[newName] = e.percentageShares[oldName]; delete e.percentageShares[oldName];
@@ -2065,17 +2089,20 @@
         function updateSplitTypeUI() {
             const type = document.getElementById('exp-split-type').value;
             const helper = document.getElementById('split-helper-text');
-            const inputs = document.querySelectorAll('.part-personal');
+            const extraInputs = document.querySelectorAll('.part-personal');
+            const fixedInputs = document.querySelectorAll('.part-fixed');
             
             if (type === 'percentage') {
                 helper.innerHTML = `<em>Enter % for specific people. The rest divides equally.</em> <strong id="perc-remaining" style="margin-left: 5px; padding: 2px 8px; background: #e2e8f0; border-radius: 6px;">100% left</strong>`;
-                inputs.forEach(input => { input.placeholder = "Share %"; input.max = "100"; if(!editingExpenseId) input.value = ''; });
+                extraInputs.forEach(input => { input.placeholder = "Share %"; input.max = "100"; if(!editingExpenseId) input.value = ''; });
+                fixedInputs.forEach(input => input.style.display = 'none');
                 calculateRemainingPercentage();
             } else {
                 const cur = document.getElementById('exp-currency').value;
                 const sym = CURRENCY_SYMBOLS[cur] ? CURRENCY_SYMBOLS[cur] : cur;
-                helper.innerHTML = '<em>Add personal items to be excluded from the equal split.</em>';
-                inputs.forEach(input => { input.placeholder = `+ Pers. ${sym}`; input.removeAttribute('max'); if(!editingExpenseId) input.value = ''; });
+                helper.innerHTML = `<em>Use <strong>+ Extra</strong> to add to their base share, or <strong>= Exact</strong> to override it completely.</em>`;
+                extraInputs.forEach(input => { input.placeholder = `+ Extra ${sym}`; input.removeAttribute('max'); if(!editingExpenseId) input.value = ''; });
+                fixedInputs.forEach(input => { input.placeholder = `= Exact ${sym}`; if(!editingExpenseId) input.value = ''; input.style.display = 'block'; });
             }
         }
         
@@ -2137,9 +2164,11 @@
             
             const selected = [];
             const personalExpensesLocal = {};
+            const fixedSharesLocal = {};
             const percentageShares = {};
             
             let totalPersonalAmtLocal = 0;
+            let totalFixedAmtLocal = 0;
             let totalPercentageEntered = 0;
 
             document.querySelectorAll('.participant-row').forEach(row => {
@@ -2147,12 +2176,26 @@
                 if (cb.checked) {
                     const name = cb.value;
                     selected.push(name);
-                    const pInput = row.querySelector('.part-personal').value;
-                    const pAmt = parseFloat(pInput);
                     
-                    if (!isNaN(pAmt) && pAmt > 0) {
-                        if (splitType === 'equal') { personalExpensesLocal[name] = pAmt; totalPersonalAmtLocal += pAmt; } 
-                        else { percentageShares[name] = pAmt; totalPercentageEntered += pAmt; }
+                    const extraInput = row.querySelector('.part-personal').value;
+                    const extraAmt = parseFloat(extraInput);
+                    
+                    const fixedInput = row.querySelector('.part-fixed').value;
+                    const fixedAmt = parseFloat(fixedInput);
+                    
+                    if (splitType === 'equal') {
+                        if (!isNaN(fixedAmt) && fixedAmt >= 0) {
+                            fixedSharesLocal[name] = fixedAmt;
+                            totalFixedAmtLocal += fixedAmt;
+                        } else if (!isNaN(extraAmt) && extraAmt > 0) {
+                            personalExpensesLocal[name] = extraAmt; 
+                            totalPersonalAmtLocal += extraAmt;
+                        }
+                    } else {
+                        if (!isNaN(extraAmt) && extraAmt > 0) {
+                            percentageShares[name] = extraAmt; 
+                            totalPercentageEntered += extraAmt;
+                        }
                     }
                 }
             });
@@ -2160,8 +2203,8 @@
             if (!desc || isNaN(localAmount) || localAmount <= 0 || !payer || selected.length === 0) {
                 alert("Please fill all fields, enter a valid amount, and select at least one participant."); return;
             }
-            if (splitType === 'equal' && totalPersonalAmtLocal > localAmount) {
-                alert(`Total personal expenses (${totalPersonalAmtLocal}) cannot exceed the total check amount (${localAmount}).`); return;
+            if (splitType === 'equal' && (totalPersonalAmtLocal + totalFixedAmtLocal) > localAmount) {
+                alert(`The total of Extras and Exact shares (${totalPersonalAmtLocal + totalFixedAmtLocal}) cannot exceed the total check amount (${localAmount}).`); return;
             }
             if (splitType === 'percentage' && totalPercentageEntered > 100.01) {
                 alert(`Total percentages entered (${totalPercentageEntered}%) cannot exceed 100%.`); return;
@@ -2169,20 +2212,25 @@
 
             let amountUsd = localAmount;
             let personalExpensesUsd = {};
+            let fixedSharesUsd = {};
             
             if (localCurrency !== 'USD' && currentExchangeRate > 0) {
                 amountUsd = localAmount / currentExchangeRate;
                 if (splitType === 'equal') {
                     Object.keys(personalExpensesLocal).forEach(k => { personalExpensesUsd[k] = personalExpensesLocal[k] / currentExchangeRate; });
+                    Object.keys(fixedSharesLocal).forEach(k => { fixedSharesUsd[k] = fixedSharesLocal[k] / currentExchangeRate; });
                 }
-            } else { personalExpensesUsd = personalExpensesLocal; }
+            } else { 
+                personalExpensesUsd = personalExpensesLocal; 
+                fixedSharesUsd = fixedSharesLocal;
+            }
 
             if (editingExpenseId) {
                 const index = expenses.findIndex(e => e.id === editingExpenseId);
                 if (index > -1) {
                     expenses[index] = { 
                         id: editingExpenseId, category, desc, notes, date, amount: amountUsd, localAmount, localCurrency, 
-                        payer, splitType, involved: selected, personalExpenses: personalExpensesUsd, 
+                        payer, splitType, involved: selected, personalExpenses: personalExpensesUsd, fixedShares: fixedSharesUsd, 
                         percentageShares, ignored: expenses[index].ignored, timestamp: expenses[index].timestamp 
                     };
                 }
@@ -2190,11 +2238,13 @@
             } else {
                 expenses.push({ 
                     id: Math.random().toString(36).substr(2, 9), category, desc, notes, date, amount: amountUsd, localAmount, localCurrency, 
-                    payer, splitType, involved: selected, personalExpenses: personalExpensesUsd, 
+                    payer, splitType, involved: selected, personalExpenses: personalExpensesUsd, fixedShares: fixedSharesUsd,
                     percentageShares, ignored: false, timestamp: Date.now() 
                 });
                 document.getElementById('exp-desc').value = ''; document.getElementById('exp-notes').value = '';
-                document.getElementById('exp-amount').value = ''; document.querySelectorAll('.part-personal').forEach(input => input.value = ''); 
+                document.getElementById('exp-amount').value = ''; 
+                document.querySelectorAll('.part-personal').forEach(input => input.value = ''); 
+                document.querySelectorAll('.part-fixed').forEach(input => input.value = ''); 
                 calculateRemainingPercentage();
                 updateFormColor();
             }
@@ -2219,19 +2269,28 @@
             
             document.querySelectorAll('.participant-row').forEach(row => {
                 const cb = row.querySelector('.part-checkbox');
-                const pInput = row.querySelector('.part-personal');
+                const extraInput = row.querySelector('.part-personal');
+                const fixedInput = row.querySelector('.part-fixed');
                 const name = cb.value;
                 
                 if (exp.involved.includes(name)) {
                     cb.checked = true;
                     if (exp.splitType === 'percentage' && exp.percentageShares && exp.percentageShares[name]) {
-                        pInput.value = exp.percentageShares[name];
-                    } else if ((!exp.splitType || exp.splitType === 'equal') && exp.personalExpenses && exp.personalExpenses[name]) {
-                        let pVal = exp.personalExpenses[name];
-                        if (exp.localCurrency !== 'USD' && currentExchangeRate > 0) pVal = pVal * currentExchangeRate;
-                        pInput.value = pVal.toFixed(2);
-                    } else { pInput.value = ''; }
-                } else { cb.checked = false; pInput.value = ''; }
+                        extraInput.value = exp.percentageShares[name];
+                    } else if (!exp.splitType || exp.splitType === 'equal') {
+                        if (exp.personalExpenses && exp.personalExpenses[name]) {
+                            let pVal = exp.personalExpenses[name];
+                            if (exp.localCurrency !== 'USD' && currentExchangeRate > 0) pVal = pVal * currentExchangeRate;
+                            extraInput.value = pVal.toFixed(2);
+                        } else { extraInput.value = ''; }
+                        
+                        if (exp.fixedShares && exp.fixedShares[name] !== undefined) {
+                            let fVal = exp.fixedShares[name];
+                            if (exp.localCurrency !== 'USD' && currentExchangeRate > 0) fVal = fVal * currentExchangeRate;
+                            fixedInput.value = fVal.toFixed(2);
+                        } else { fixedInput.value = ''; }
+                    } else { extraInput.value = ''; fixedInput.value = ''; }
+                } else { cb.checked = false; extraInput.value = ''; fixedInput.value = ''; }
             });
             checkMasterCheckboxState();
 
@@ -2323,7 +2382,9 @@
             document.getElementById('exp-split-type').value = 'equal';
             document.getElementById('activity-card').classList.remove('edit-mode');
             updatePayerColor(); updateSplitTypeUI();
+            
             document.querySelectorAll('.part-personal').forEach(input => input.value = ''); 
+            document.querySelectorAll('.part-fixed').forEach(input => input.value = ''); 
             
             const checkboxes = document.querySelectorAll('#participant-list-inputs .part-checkbox');
             checkboxes.forEach(cb => cb.checked = true);
@@ -2355,10 +2416,14 @@
             const pListInputs = document.getElementById('participant-list-inputs');
             pListInputs.innerHTML = participants.map(p => `
                 <div class="participant-row">
-                    <label class="checkbox-item" style="color: ${getColor(p)}">
-                        <input type="checkbox" value="${p}" class="part-checkbox" checked onchange="checkMasterCheckboxState()"> ${p}
+                    <label class="checkbox-item" style="color: ${getColor(p)}" title="${p}">
+                        <input type="checkbox" value="${p}" class="part-checkbox" checked onchange="checkMasterCheckboxState()"> 
+                        <span>${shortName(p)}</span>
                     </label>
-                    <input type="number" class="part-personal tabular-nums" data-name="${p}" placeholder="+ Personal $" step="0.01" min="0" oninput="calculateRemainingPercentage()">
+                    <div class="inputs-group">
+                        <input type="number" class="part-personal tabular-nums" data-name="${p}" placeholder="+ Extra $" step="0.01" min="0" oninput="calculateRemainingPercentage()">
+                        <input type="number" class="part-fixed tabular-nums" data-name="${p}" placeholder="= Exact $" step="0.01" min="0">
+                    </div>
                 </div>
             `).join('');
             checkMasterCheckboxState();
@@ -2380,7 +2445,7 @@
                 const hasGroup = participantGroups[p] && participantGroups[p] !== p;
                 const groupText = hasGroup ? `👥 ${participantGroups[p]}` : '👤 Edit Group';
                 return `
-                <div class="tag" style="color: ${c}; border-color: ${c}40;">
+                <div class="tag" style="color: ${c}; border-color: ${c}40;" title="${p}">
                     <span class="tag-name" onclick="renameParticipant('${p}')">${p}</span>
                     <span class="tag-group-btn" onclick="changeGroup('${p}')" title="Assign to a group">${groupText}</span>
                     <span class="tag-del" onclick="deleteParticipant('${p}')">&times;</span>
@@ -2389,7 +2454,7 @@
 
             const pSelect = document.getElementById('exp-payer');
             const currentPayer = pSelect.value;
-            pSelect.innerHTML = '<option value="" style="color: var(--text); font-weight: 500;">Who paid?</option>' + participants.map(p => `<option value="${p}" style="color: ${getColor(p)}; font-weight: 800;">${p}</option>`).join('');
+            pSelect.innerHTML = '<option value="" style="color: var(--text); font-weight: 500;">Who paid?</option>' + participants.map(p => `<option value="${p}" style="color: ${getColor(p)}; font-weight: 800;" title="${p}">${shortName(p)}</option>`).join('');
             if(!editingExpenseId) pSelect.value = currentPayer; 
             updatePayerColor();
 
@@ -2500,14 +2565,33 @@
                     });
                 } else {
                     let totalPersonalForExp = 0;
-                    if (e.personalExpenses) Object.values(e.personalExpenses).forEach(val => totalPersonalForExp += val);
-                    const sharedAmount = Math.max(0, e.amount - totalPersonalForExp);
-                    const baseShare = sharedAmount / e.involved.length;
+                    let totalFixedForExp = 0;
+                    let unfixedCount = 0;
+
+                    e.involved.forEach(p => {
+                        if (e.fixedShares && e.fixedShares[p] !== undefined) {
+                            totalFixedForExp += e.fixedShares[p];
+                        } else {
+                            unfixedCount++;
+                            if (e.personalExpenses && e.personalExpenses[p]) {
+                                totalPersonalForExp += e.personalExpenses[p];
+                            }
+                        }
+                    });
+
+                    const sharedAmount = Math.max(0, e.amount - totalFixedForExp - totalPersonalForExp);
+                    const baseShare = unfixedCount > 0 ? sharedAmount / unfixedCount : 0;
 
                     e.involved.forEach(p => {
                         const involvedGroup = participantGroups[p] || p;
-                        const personal = (e.personalExpenses && e.personalExpenses[p]) ? e.personalExpenses[p] : 0;
-                        const finalShare = baseShare + personal;
+                        let finalShare = 0;
+                        
+                        if (e.fixedShares && e.fixedShares[p] !== undefined) {
+                            finalShare = e.fixedShares[p];
+                        } else {
+                            const personal = (e.personalExpenses && e.personalExpenses[p]) ? e.personalExpenses[p] : 0;
+                            finalShare = baseShare + personal;
+                        }
                         
                         if (finalShare > 0) {
                             if (cat === 'Transfer') {
@@ -2601,22 +2685,44 @@
                     breakdownHtml = e.involved.map(p => {
                         const pPerc = (e.percentageShares && e.percentageShares[p] !== undefined) ? e.percentageShares[p] : defaultPerc;
                         const finalShare = e.amount * (pPerc / 100);
-                        return `<span style="white-space: nowrap;"><span style="color: ${getColor(p)}; font-weight: 700;">${p}</span> <span class="tabular-nums" style="font-size: 0.85rem; color: var(--secondary);">(${formatMoney(finalShare)} / ${pPerc.toFixed(1)}%)</span></span>`;
+                        return `<span style="white-space: nowrap;" title="${p}"><span style="color: ${getColor(p)}; font-weight: 700;">${shortName(p)}</span> <span class="tabular-nums" style="font-size: 0.85rem; color: var(--secondary);">(${formatMoney(finalShare)} / ${pPerc.toFixed(1)}%)</span></span>`;
                     }).join(', ');
                 } else {
                     let totalPersonalForExp = 0;
-                    if (e.personalExpenses) Object.values(e.personalExpenses).forEach(val => totalPersonalForExp += val);
-                    const sharedAmount = Math.max(0, e.amount - totalPersonalForExp); const baseShare = sharedAmount / e.involved.length;
+                    let totalFixedForExp = 0;
+                    let unfixedCount = 0;
+
+                    e.involved.forEach(p => {
+                        if (e.fixedShares && e.fixedShares[p] !== undefined) {
+                            totalFixedForExp += e.fixedShares[p];
+                        } else {
+                            unfixedCount++;
+                            if (e.personalExpenses && e.personalExpenses[p]) {
+                                totalPersonalForExp += e.personalExpenses[p];
+                            }
+                        }
+                    });
+
+                    const sharedAmount = Math.max(0, e.amount - totalFixedForExp - totalPersonalForExp); 
+                    const baseShare = unfixedCount > 0 ? sharedAmount / unfixedCount : 0;
                     
                     breakdownHtml = e.involved.map(p => {
-                        const personal = (e.personalExpenses && e.personalExpenses[p]) ? e.personalExpenses[p] : 0;
-                        const finalShare = baseShare + personal;
-                        let displayPersonal = personal;
-                        const displayCur = document.getElementById('view-currency').value || 'USD';
-                        if (displayCur !== 'USD') displayPersonal = personal * currentExchangeRate;
-                        
-                        let personalNote = personal > 0 ? ` <span style="font-size:0.75rem; color: #b45309;">(inc. ${formatMoney(personal)} pers.)</span>` : '';
-                        return `<span style="white-space: nowrap;"><span style="color: ${getColor(p)}; font-weight: 700;">${p}</span> <span class="tabular-nums" style="font-size: 0.85rem; color: var(--secondary);">(${formatMoney(finalShare)}${personalNote})</span></span>`;
+                        if (e.fixedShares && e.fixedShares[p] !== undefined) {
+                            const fixedShare = e.fixedShares[p];
+                            let displayFixed = fixedShare;
+                            const displayCur = document.getElementById('view-currency').value || 'USD';
+                            if (displayCur !== 'USD') displayFixed = fixedShare * currentExchangeRate;
+                            return `<span style="white-space: nowrap;" title="${p}"><span style="color: ${getColor(p)}; font-weight: 700;">${shortName(p)}</span> <span class="tabular-nums" style="font-size: 0.85rem; color: var(--secondary);">(${formatMoney(fixedShare)} <span style="color:#d97706;">exact</span>)</span></span>`;
+                        } else {
+                            const personal = (e.personalExpenses && e.personalExpenses[p]) ? e.personalExpenses[p] : 0;
+                            const finalShare = baseShare + personal;
+                            let displayPersonal = personal;
+                            const displayCur = document.getElementById('view-currency').value || 'USD';
+                            if (displayCur !== 'USD') displayPersonal = personal * currentExchangeRate;
+                            
+                            let personalNote = personal > 0 ? ` <span style="font-size:0.75rem; color: var(--primary);">(+ ${formatMoney(personal)} extra)</span>` : '';
+                            return `<span style="white-space: nowrap;" title="${p}"><span style="color: ${getColor(p)}; font-weight: 700;">${shortName(p)}</span> <span class="tabular-nums" style="font-size: 0.85rem; color: var(--secondary);">(${formatMoney(finalShare)}${personalNote})</span></span>`;
+                        }
                     }).join(', ');
                 }
 
@@ -2638,7 +2744,7 @@
                         <strong style="font-size: 1.15rem; color: #0f172a; letter-spacing: -0.01em;">${e.desc}</strong>
                         ${e.ignored ? '<span style="color: var(--danger); font-size: 0.75rem; font-weight: 800; margin-left: 6px; background: #fee2e2; padding: 2px 4px; border-radius: 4px;">IGNORED</span>' : ''}<br>
                         <span style="font-size:0.9rem; color:var(--secondary); font-weight: 500;">
-                            ${formattedDate} • Paid by <span style="color:${payerColor}; font-weight:800;">${e.payer}</span> • 👥 <strong>${e.involved.length}</strong> involved<br>
+                            ${formattedDate} • Paid by <span style="color:${payerColor}; font-weight:800;" title="${e.payer}">${shortName(e.payer)}</span> • 👥 <strong>${e.involved.length}</strong> involved<br>
                             <div style="margin-top: 6px; padding-left: 8px; border-left: 2px solid rgba(226,232,240,0.8); font-size: 0.85rem; line-height: 1.4;">
                                 <strong style="color: var(--text);">For:</strong> ${breakdownHtml}
                             </div>
@@ -2665,7 +2771,7 @@
                     if (diff < -maxDebt) { maxDebt = Math.abs(diff); topDebtor = gName; }
                 });
                 if (topDebtor) {
-                    badgeContainer.innerHTML = `<div class="next-payer-badge">🚨 Pay Next? <strong style="color: ${getColor(groupStats[topDebtor].members[0])};">${topDebtor}</strong> <span class="tabular-nums">(Owes ${formatMoney(maxDebt)})</span></div>`;
+                    badgeContainer.innerHTML = `<div class="next-payer-badge">🚨 Pay Next? <strong style="color: ${getColor(groupStats[topDebtor].members[0])};" title="${topDebtor}">${shortName(topDebtor)}</strong> <span class="tabular-nums">(Owes ${formatMoney(maxDebt)})</span></div>`;
                 } else {
                     badgeContainer.innerHTML = `<div class="next-payer-badge" style="color: var(--green); border-color: #bbf7d0; background: #f0fdf4;">🎉 Everyone perfectly settled!</div>`;
                 }
@@ -2704,8 +2810,8 @@
                     </div>
                     <div class="global-stat-box">
                         <span class="global-stat-label">🏆 Trip Banker</span>
-                        <span class="global-stat-value" style="font-size: 1.1rem; color: ${getColor(tripBanker.name)}">
-                            ${tripBanker.name} <strong class="tabular-nums" style="color: var(--text);">(${formatMoney(tripBanker.paid)})</strong>
+                        <span class="global-stat-value" style="font-size: 1.1rem; color: ${getColor(tripBanker.name)}" title="${tripBanker.name}">
+                            ${shortName(tripBanker.name)} <strong class="tabular-nums" style="color: var(--text);">(${formatMoney(tripBanker.paid)})</strong>
                         </span>
                         <div style="font-size: 0.8rem; color: var(--secondary); margin-top: 2px;">Fronted money for ${tripBanker.count} acts</div>
                     </div>
@@ -2826,7 +2932,7 @@
                                 individualBreakdownHtml += `
                                     <div style="background: #f8fafc; padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--border);">
                                         <div style="display:flex; justify-content:space-between; align-items: center; font-size: 0.85rem; margin-bottom: 6px;">
-                                            <span style="color: ${getColor(m)}; font-weight: 800; font-size: 0.95rem;">${m}</span>
+                                            <span style="color: ${getColor(m)}; font-weight: 800; font-size: 0.95rem;" title="${m}">${shortName(m)}</span>
                                             <div style="text-align: right; line-height: 1.4; display: flex; flex-direction: column; align-items: flex-end;">
                                                 <div style="display:flex; align-items: center; flex-wrap: wrap; justify-content: flex-end;"><span style="color: var(--secondary); font-size: 0.75rem; margin-right: 4px;">Share:</span><strong class="tabular-nums" style="color: var(--text);">${formatMoney(mStats.owed)}</strong>${getPerDayTextSmall(mStats.owed)}</div>
                                                 <div style="display:flex; align-items: center; flex-wrap: wrap; justify-content: flex-end;"><span style="color: var(--secondary); font-size: 0.75rem; margin-right: 4px;">Paid:</span><strong class="tabular-nums" style="color: var(--text);">${formatMoney(mStats.paid)}</strong>${getPerDayTextSmall(mStats.paid)}</div>
@@ -2843,11 +2949,11 @@
                     Object.keys(stats.catActivitySets).forEach(cat => { if(cat !== 'Transfer') stats.catActivitySets[cat].forEach(id => totalGroupActs.add(id)); });
                     const avgPerActivity = totalGroupActs.size > 0 ? formatMoney(stats.owed / totalGroupActs.size) : '0.00';
                     const topCatDisplay = topCat ? `<span style="color: ${CATEGORIES[topCat].color}; font-weight: 800;">${CATEGORIES[topCat].icon} ${topCat}</span>` : '<span style="color: var(--secondary);">None</span>';
-                    const memberSubtext = stats.members.length > 1 ? `<div class="stat-members">Includes: ${stats.members.join(', ')}</div>` : '';
+                    const memberSubtext = stats.members.length > 1 ? `<div class="stat-members" title="${stats.members.join(', ')}">Includes: ${stats.members.map(shortName).join(', ')}</div>` : '';
 
                     statsHtml += `
                         <div class="stat-card" style="border-top: 5px solid ${repColor};">
-                            <div class="stat-name" style="color: ${repColor};">${gName}</div>
+                            <div class="stat-name" style="color: ${repColor};" title="${gName}">${shortName(gName)}</div>
                             ${memberSubtext}
                             <div style="background: #f8fafc; padding: 10px 14px; border-radius: var(--radius-sm); margin-bottom: 12px; font-size: 0.85rem; border: 1px solid var(--border);">
                                 <div style="display:flex; justify-content:space-between; margin-bottom: 6px; align-items: center;">
