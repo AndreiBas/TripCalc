@@ -249,18 +249,17 @@
 
         .participant-selector { background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 10px; margin-top: 16px; }
         
-        /* Updated Single Line Participant Row */
         .participant-row { 
             display: flex; align-items: center; justify-content: space-between; flex-wrap: nowrap; 
             padding: 6px 8px; background: #fff; border: 1px solid var(--border); border-radius: var(--radius-sm); 
             margin-bottom: 6px; box-shadow: var(--shadow-sm); gap: 8px; overflow-x: auto;
         }
-        .participant-row::-webkit-scrollbar { display: none; } /* Clean look */
+        .participant-row::-webkit-scrollbar { display: none; }
         .inputs-group { display: flex; gap: 4px; flex: none; }
         .participant-row input[type="number"] { width: 100px; padding: 6px; margin: 0; font-size: 0.85rem; text-align: right; border-radius: var(--radius-sm); flex: none;}
         
         .part-personal { background: #f8fafc; }
-        .part-fixed { background: #fffbeb; border-color: #fde68a; } /* Amber tint for Exact $ */
+        .part-fixed { background: #fffbeb; border-color: #fde68a; }
         .part-fixed:focus { border-color: #f59e0b; box-shadow: inset 0 0 0 1px #f59e0b; }
         
         .checkbox-item { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; cursor: pointer; font-weight: 700; flex: 1; min-width: 0; white-space: nowrap;}
@@ -305,7 +304,6 @@
         .settlement-item:last-child { border-bottom: none; }
         .section-label { font-size: 0.8rem; text-transform: uppercase; color: var(--secondary); font-weight: 800; letter-spacing: 0.05em; margin-bottom: 10px; margin-top: 16px;}
         
-        /* Global Stats Grid */
         .global-stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 24px; }
         .global-stat-box { background: #fff; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; box-shadow: var(--shadow-sm); position: relative; overflow: hidden;}
         .global-stat-label { font-size: 0.75rem; color: var(--secondary); text-transform: uppercase; font-weight: 800; letter-spacing: 0.05em; margin-bottom: 4px;}
@@ -339,7 +337,6 @@
         details.indiv-details[open] summary::after { transform: rotate(180deg); }
         .indiv-content { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
 
-        /* Floating Calculator Styling */
         #mini-calculator {
             display: none; position: fixed; bottom: 20px; right: 20px;
             background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
@@ -350,7 +347,6 @@
             #mini-calculator { bottom: 80px; right: 50%; transform: translateX(50%); }
         }
 
-        /* --- MODAL STYLES --- */
         .modal-overlay {
             display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(4px);
@@ -772,24 +768,15 @@
 
     <script>
         // --- HELPER: HTML SANITIZATION ---
-        // Completely rewritten to aggressively strip hidden Edge newlines and prune trailing <p><br></p> loops
         function sanitizeHTML(html) {
             if (!html) return "";
-            // Step 1: Strip hidden carriage returns and newlines that browsers might inject
-            let clean = html.replace(/\r?\n|\r/g, '');
-            
-            // Strip normal spaces between tags
-            clean = clean.replace(/>\s+</g, '><');
-            
-            // Step 2: Strip trailing empty paragraphs to prevent loop stacking
-            // Keep looping as long as it ends with an empty paragraph, UNLESS it's the ONLY thing left
+            // Strip normal spaces between tags and hidden carriage returns
+            let clean = html.replace(/\r?\n|\r/g, '').replace(/>\s+</g, '><');
+            // Prevent stacking trailing empty paragraphs
             while (clean !== '<p><br></p>' && clean.endsWith('<p><br></p>')) {
                 clean = clean.slice(0, -11);
             }
-            
-            // If it's just one empty paragraph, make it truly empty
             if (clean === '<p><br></p>') return "";
-            
             return clean;
         }
 
@@ -835,8 +822,9 @@
         };
         let currentGroupBalances = [];
 
-        // Notes Phase 3 Additions
-        let tripNotes = "";
+        // Notes Phase 3 Additions & Phase 4 (Delta Storage)
+        let tripNotes = ""; // Used exclusively for PDF generation (String)
+        let tripNotesDelta = null; // Used exclusively for editing fidelity (JSON Object)
         let autoColorNotes = false;
         let quill = null;
         let notesDebounceTimer;
@@ -892,9 +880,11 @@
                     notesDebounceTimer = setTimeout(() => {
                         const currentClean = sanitizeHTML(quill.root.innerHTML);
                         const savedClean = sanitizeHTML(tripNotes);
-                        if (currentClean !== savedClean) {
+                        // Save if the HTML changed, OR if we don't have a Delta object yet (upgrade path)
+                        if (currentClean !== savedClean || !tripNotesDelta) {
                             applyAutoColor(); 
-                            tripNotes = sanitizeHTML(quill.root.innerHTML);
+                            tripNotes = sanitizeHTML(quill.root.innerHTML); // Save HTML for PDF
+                            tripNotesDelta = quill.getContents(); // Save native Delta JSON for bulletproof reloading
                             saveState();
                         }
                         isNotesDirty = false;
@@ -905,16 +895,18 @@
             updateSyncBtnState(); // Initialize Cloud Sync Button visually
         });
 
-        // Step 3: Updated to flush the editor before pasting
         function openNotesModal() {
             document.getElementById('notes-overlay').classList.add('active');
             document.getElementById('auto-color-toggle').checked = autoColorNotes;
             if (quill) {
-                const currentHTML = sanitizeHTML(quill.root.innerHTML);
-                const targetHTML = sanitizeHTML(tripNotes || "");
-                
-                if (currentHTML !== targetHTML) {
-                    quill.setText(''); // Flush the editor completely first
+                // Primary Path: If we have a native Delta JSON, load it directly (immune to Edge/Chrome parser quirks)
+                if (tripNotesDelta && Object.keys(tripNotesDelta).length > 0) {
+                    quill.setContents(tripNotesDelta);
+                } 
+                // Fallback Path: If it's an old save file with only HTML, flush and paste
+                else {
+                    const targetHTML = sanitizeHTML(tripNotes || "");
+                    quill.setText('');
                     if (targetHTML) {
                         quill.clipboard.dangerouslyPasteHTML(targetHTML);
                     }
@@ -931,6 +923,7 @@
                     clearTimeout(notesDebounceTimer);
                     applyAutoColor();
                     tripNotes = sanitizeHTML(quill.root.innerHTML);
+                    tripNotesDelta = quill.getContents();
                     saveState();
                 }
                 isNotesDirty = false;
@@ -967,7 +960,6 @@
             const text = quill.getText();
             const formattedIndices = new Set(); 
             const rules = [
-                // CHANGED: Use [ \t]* instead of \s* to avoid matching line breaks
                 { regex: /(?:[$€£]|USD|EUR)[ \t]*\d+(?:,\d{3})*(?:\.\d{2})?/gi, color: AUTO_COLORS.currency }, 
                 { regex: /\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{1,2}(?:st|nd|rd|th)?,? \d{2,4}\b|\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b/gi, color: AUTO_COLORS.date }, 
                 { regex: /\b\d+(?:,\d{3})*(?:\.\d+)?\b/g, color: AUTO_COLORS.number } 
@@ -1188,7 +1180,7 @@
             const payload = { 
                 tripName, tripComment, participants, participantGroups, expenses, 
                 secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay,
-                tripNotes, autoColorNotes
+                tripNotes, tripNotesDelta, autoColorNotes
             };
 
             localStorage.setItem('tripSplitterLatest', JSON.stringify(payload));
@@ -1216,6 +1208,7 @@
                     tripDays = data.tripDays || 1;
                     showPerDay = data.showPerDay || false;
                     tripNotes = data.tripNotes || "";
+                    tripNotesDelta = data.tripNotesDelta || null;
                     autoColorNotes = data.autoColorNotes || false;
                     
                     repairLegacyData();
@@ -1245,7 +1238,7 @@
             if(confirm("Start a new trip? This wipes your current progress! Make sure you saved your file first.")) {
                 tripName = "My Trip"; tripComment = ""; participants = []; participantGroups = {}; expenses = [];
                 secondaryCurrency = ""; currentExchangeRate = 1; currentSort = 'date-desc'; tripDays = 1;
-                showPerDay = false; tripNotes = ""; autoColorNotes = false;
+                showPerDay = false; tripNotes = ""; tripNotesDelta = null; autoColorNotes = false;
                 
                 document.getElementById('global-currency').value = ""; document.getElementById('ledger-sort').value = "date-desc";
                 document.getElementById('trip-name').value = tripName; document.getElementById('trip-comment').value = tripComment;
@@ -1333,7 +1326,7 @@
         }
 
         function exportTrip() {
-            const payload = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, autoColorNotes });
+            const payload = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, tripNotesDelta, autoColorNotes });
             const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(payload);
             const dl = document.createElement('a'); dl.setAttribute("href", dataStr);
             dl.setAttribute("download", tripName.replace(/\s+/g, '_') + ".json"); dl.click();
@@ -1342,7 +1335,7 @@
         async function exportSecureTrip() {
             const password = prompt("⚠️ Secure Save ⚠️\nEnter a password to encrypt this trip file.\n\nWARNING: If you forget this password, your data cannot be recovered.");
             if (!password) return; 
-            const payload = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, autoColorNotes });
+            const payload = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, tripNotesDelta, autoColorNotes });
             try {
                 const encryptedData = await encryptData(password, payload);
                 const securePayload = JSON.stringify(encryptedData);
@@ -1374,7 +1367,7 @@
                     expenses = parsedData.expenses || []; secondaryCurrency = parsedData.secondaryCurrency || "";
                     currentExchangeRate = parsedData.currentExchangeRate || 1; currentSort = parsedData.currentSort || 'date-desc';
                     tripDays = parsedData.tripDays || 1; showPerDay = parsedData.showPerDay || false;
-                    tripNotes = parsedData.tripNotes || ""; autoColorNotes = parsedData.autoColorNotes || false;
+                    tripNotes = parsedData.tripNotes || ""; tripNotesDelta = parsedData.tripNotesDelta || null; autoColorNotes = parsedData.autoColorNotes || false;
                     
                     activeCategoryFilters = new Set(Object.keys(CATEGORIES)); repairLegacyData();
                     document.getElementById('trip-name').value = tripName; document.getElementById('trip-comment').value = tripComment;
@@ -1764,7 +1757,7 @@
             const key = await getValidCloudKey(); if (!key) return;
             const client = getSupabaseClient(); if (!client) return;
 
-            const payloadStr = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, autoColorNotes });
+            const payloadStr = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, tripNotesDelta, autoColorNotes });
             
             const btnId = targetId === 'manual_trip' ? 'cloud-save-btn-1' : (targetId === 'manual_trip_2' ? 'cloud-save-btn-2' : 'cloud-save-btn-3');
             const btn = document.getElementById(btnId); btn.innerText = "⏳";
@@ -1785,7 +1778,7 @@
             const key = await getValidCloudKey(true); if (!key) return;
             const client = getSupabaseClient(); if (!client) return;
             
-            const payloadStr = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, autoColorNotes });
+            const payloadStr = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, tripNotesDelta, autoColorNotes });
             const statusEl = document.getElementById('cloud-status');
             
             try {
@@ -1837,7 +1830,7 @@
                     expenses = parsedData.expenses || []; secondaryCurrency = parsedData.secondaryCurrency || "";
                     currentExchangeRate = parsedData.currentExchangeRate || 1; currentSort = parsedData.currentSort || 'date-desc';
                     tripDays = parsedData.tripDays || 1; showPerDay = parsedData.showPerDay || false;
-                    tripNotes = parsedData.tripNotes || ""; autoColorNotes = parsedData.autoColorNotes || false;
+                    tripNotes = parsedData.tripNotes || ""; tripNotesDelta = parsedData.tripNotesDelta || null; autoColorNotes = parsedData.autoColorNotes || false;
                     
                     activeCategoryFilters = new Set(Object.keys(CATEGORIES)); repairLegacyData();
                     document.getElementById('trip-name').value = tripName; document.getElementById('trip-comment').value = tripComment;
