@@ -771,6 +771,11 @@
     </div>
 
     <script>
+        // --- HELPER: HTML SANITIZATION ---
+        function sanitizeHTML(html) {
+            return html ? html.replace(/>\s+</g, '><') : "";
+        }
+
         // --- NAME TRUNCATION HELPER ---
         function shortName(name) {
             if (!name) return '';
@@ -868,9 +873,11 @@
                     isNotesDirty = true;
                     clearTimeout(notesDebounceTimer);
                     notesDebounceTimer = setTimeout(() => {
-                        if (quill.root.innerHTML !== tripNotes) {
+                        const currentClean = sanitizeHTML(quill.root.innerHTML);
+                        const savedClean = sanitizeHTML(tripNotes);
+                        if (currentClean !== savedClean) {
                             applyAutoColor(); 
-                            tripNotes = quill.root.innerHTML;
+                            tripNotes = sanitizeHTML(quill.root.innerHTML);
                             saveState();
                         }
                         isNotesDirty = false;
@@ -885,8 +892,8 @@
             document.getElementById('notes-overlay').classList.add('active');
             document.getElementById('auto-color-toggle').checked = autoColorNotes;
             if (quill) {
-                const currentHTML = quill.root.innerHTML;
-                const targetHTML = tripNotes || "";
+                const currentHTML = sanitizeHTML(quill.root.innerHTML);
+                const targetHTML = sanitizeHTML(tripNotes || "");
                 if (currentHTML !== targetHTML && !(currentHTML === '<p><br></p>' && targetHTML === '')) {
                     quill.clipboard.dangerouslyPasteHTML(targetHTML);
                 }
@@ -898,13 +905,10 @@
             document.getElementById('notes-overlay').classList.remove('active');
             if (quill) {
                 clearNotesSearchField(); 
-                const currentHTML = quill.root.innerHTML;
-                const targetHTML = tripNotes || "";
-                const isDefaultEmpty = currentHTML === '<p><br></p>' && targetHTML === '';
-                if (currentHTML !== targetHTML && !isDefaultEmpty) {
+                if (isNotesDirty) {
                     clearTimeout(notesDebounceTimer);
                     applyAutoColor();
-                    tripNotes = quill.root.innerHTML;
+                    tripNotes = sanitizeHTML(quill.root.innerHTML);
                     saveState();
                 }
                 isNotesDirty = false;
@@ -941,7 +945,8 @@
             const text = quill.getText();
             const formattedIndices = new Set(); 
             const rules = [
-                { regex: /(?:[$€£]|USD|EUR)\s*\d+(?:,\d{3})*(?:\.\d{2})?/gi, color: AUTO_COLORS.currency }, 
+                // CHANGED: Use [ \t]* instead of \s* to avoid matching line breaks
+                { regex: /(?:[$€£]|USD|EUR)[ \t]*\d+(?:,\d{3})*(?:\.\d{2})?/gi, color: AUTO_COLORS.currency }, 
                 { regex: /\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{1,2}(?:st|nd|rd|th)?,? \d{2,4}\b|\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b/gi, color: AUTO_COLORS.date }, 
                 { regex: /\b\d+(?:,\d{3})*(?:\.\d+)?\b/g, color: AUTO_COLORS.number } 
             ];
