@@ -821,7 +821,7 @@
         let cloudAuthPromiseResolve = null;
 
         // SMART SYNC VARIABLES
-        let localLastModified = Date.now();
+        let localLastModified = 0;
         let cloudTimestamps = { manual_trip: 0, manual_trip_2: 0, manual_trip_3: 0, auto_trip: 0 };
 
         // Globals explicitly for PDF Export parsing
@@ -853,7 +853,7 @@
             'Travel': { icon: '✈️', color: '#6d28d9', bg: '#ede9fe' },      
             'Fun': { icon: '🎟️', color: '#be185d', bg: '#fce7f3' },    
             'Transfer': { icon: '💸', color: '#047857', bg: '#d1fae5' }, 
-            'Other': { icon: '📝', color: '#334155', bg: '#f1f5f9' }       
+            'Other': { icon: '📝', color: '#334155', bg: '#f1f5f9' }        
         };
         const COLORS = ['#4f46e5', '#ea580c', '#059669', '#d97706', '#7c3aed', '#db2777', '#0d9488', '#2563eb', '#c026d3', '#0284c7'];
         const CURRENCY_SYMBOLS = { USD: '$', EUR: '€', GBP: '£', CAD: 'C$', AUD: 'A$', JPY: '¥', MXN: 'M$' };
@@ -1119,7 +1119,7 @@
                 else fxInput.value = '';
             } else {
                 const fxVal = parseFloat(fxInput.value);
-                if (!isNaN(fxVal)) usdInput.value = (fxVal / currentExchangeRate).toFixed(2);
+                if (!isNaN(fxVal)) usdInput.value = (usdVal / currentExchangeRate).toFixed(2);
                 else usdInput.value = '';
             }
         }
@@ -1135,7 +1135,7 @@
                 else fxInput.value = '';
             } else {
                 const fxVal = parseFloat(fxInput.value);
-                if (!isNaN(fxVal)) usdInput.value = (fxVal / currentExchangeRate).toFixed(2);
+                if (!isNaN(fxVal)) usdInput.value = (usdVal / currentExchangeRate).toFixed(2);
                 else usdInput.value = '';
             }
         }
@@ -3120,6 +3120,17 @@
             }
             bList.innerHTML = html;
         }
+
+        // --- 10. WAKE-UP EVENT LISTENERS ---
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                fetchCloudTripNames();
+            }
+        });
+
+        window.addEventListener('focus', () => {
+            fetchCloudTripNames();
+        });
 
         loadState();
         updateFormColor();
