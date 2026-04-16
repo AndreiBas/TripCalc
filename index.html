@@ -1174,7 +1174,8 @@
                 else fxInput.value = '';
             } else {
                 const fxVal = parseFloat(fxInput.value);
-                if (!isNaN(fxVal)) usdInput.value = (usdVal / currentExchangeRate).toFixed(2);
+                // FIX: Changed usdVal to fxVal here
+                if (!isNaN(fxVal)) usdInput.value = (fxVal / currentExchangeRate).toFixed(2);
                 else usdInput.value = '';
             }
         }
@@ -1190,7 +1191,8 @@
                 else fxInput.value = '';
             } else {
                 const fxVal = parseFloat(fxInput.value);
-                if (!isNaN(fxVal)) usdInput.value = (usdVal / currentExchangeRate).toFixed(2);
+                // FIX: Changed usdVal to fxVal here
+                if (!isNaN(fxVal)) usdInput.value = (fxVal / currentExchangeRate).toFixed(2);
                 else usdInput.value = '';
             }
         }
