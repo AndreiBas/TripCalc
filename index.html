@@ -525,7 +525,7 @@
                     <div style="display:flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border);">
                         <div style="display:flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                             <span style="font-size: 0.8rem; color: var(--secondary); font-weight: 500;"><em>Click names to rename. Click 👥 to group.</em></span>
-                            <span style="font-size: 0.75rem; color: var(--danger); cursor: pointer; font-weight: 700; padding: 2px 6px; background: #fef2f2; border-radius: 4px;" onclick="resetSupabaseConfig()">⚙️ Reset Cloud Sync</span>
+                            <span style="font-size: 0.75rem; color: var(--primary); cursor: pointer; font-weight: 700; padding: 2px 6px; background: #e0e7ff; border-radius: 4px;" onclick="openCloudSettingsModal()">⚙️ Cloud Settings & Reset</span>
                         </div>
                         <div style="display:flex; gap: 6px; flex-wrap: wrap;">
                             <button id="export-pdf-btn" class="outline small" onclick="generatePDF()" style="background: #eff6ff; border-color: #bfdbfe; color: #1d4ed8;">📄 Export PDF</button>
@@ -728,6 +728,61 @@
         </div>
     </div>
 
+    <div class="modal-overlay" id="cloud-settings-overlay">
+        <div class="notes-modal" style="max-width: 400px; height: auto;">
+            <div class="notes-header">
+                <h2 style="margin:0; color: var(--text);">⚙️ Cloud Settings</h2>
+            </div>
+            <div style="padding: 20px; display: flex; flex-direction: column; gap: 12px;">
+                <button class="outline" onclick="openChangePinModal()">🔑 Change Session PIN</button>
+                <button class="warning outline" onclick="disconnectLocalSync()">🔌 Disconnect Device Only</button>
+                <button class="danger outline" onclick="openNuclearResetModal()">☢️ Nuclear Reset (Wipe Cloud Database)</button>
+                <div style="display: flex; justify-content: flex-end; margin-top: 10px;">
+                    <button class="secondary outline" onclick="document.getElementById('cloud-settings-overlay').classList.remove('active')">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="change-pin-overlay">
+        <div class="notes-modal" style="max-width: 350px; height: auto;">
+            <div class="notes-header">
+                <h2 style="margin:0; color: var(--primary);">🔑 Change Session PIN</h2>
+            </div>
+            <div style="padding: 20px; display: flex; flex-direction: column; gap: 15px;">
+                <p style="font-size: 0.85rem; color: var(--secondary); margin: 0;">Enter your new Session PIN. This will re-encrypt all your data in the cloud with the new key.</p>
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+    <input type="password" id="current-session-pin" placeholder="Current PIN" style="font-size: 1.2rem; text-align: center; letter-spacing: 0.2em;">
+    <input type="password" id="new-session-pin" placeholder="New PIN" style="font-size: 1.2rem; text-align: center; letter-spacing: 0.2em;" onkeypress="if(event.key === 'Enter') submitChangePin()">
+</div>
+                <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
+                    <button class="secondary outline" onclick="document.getElementById('change-pin-overlay').classList.remove('active')">Cancel</button>
+                    <button id="submit-change-pin-btn" onclick="submitChangePin()">Save New PIN</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="nuclear-reset-overlay">
+        <div class="notes-modal" style="max-width: 400px; height: auto; border: 1px solid var(--danger);">
+            <div class="notes-header" style="background: #fef2f2; border-bottom: 1px solid #fecdd3;">
+                <h2 style="margin:0; color: var(--danger);">☢️ Database Reset</h2>
+            </div>
+            <div style="padding: 20px; display: flex; flex-direction: column; gap: 15px;">
+                <p style="font-size: 0.85rem; color: var(--danger); font-weight: bold; margin: 0;">WARNING: This is irreversible.</p>
+                <p style="font-size: 0.85rem; color: var(--secondary); margin: 0;">This will permanently delete all trip slots (Manual 1-3, Auto-Sync) from the Supabase database and clear your local connection settings.</p>
+                <div>
+    <label style="font-size: 0.8rem; font-weight: 700; color: var(--text);">Enter your Supabase Access Code to confirm</label>
+    <input type="text" id="nuclear-reset-confirm" placeholder="http://...|eyJh..." style="font-size: 0.85rem; text-align: center;">
+</div>
+                <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
+                    <button class="secondary outline" onclick="document.getElementById('nuclear-reset-overlay').classList.remove('active')">Cancel</button>
+                    <button id="submit-nuclear-btn" class="danger" onclick="submitNuclearReset()">Delete Everything</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="modal-overlay" id="cloud-setup-overlay">
         <div class="notes-modal" style="max-width: 450px; height: auto;">
             <div class="notes-header">
@@ -850,10 +905,10 @@
         const CATEGORIES = {
             'Food': { icon: '🍔', color: '#b45309', bg: '#fef3c7' },       
             'Transport': { icon: '🚕', color: '#1d4ed8', bg: '#dbeafe' },  
-            'Travel': { icon: '✈️', color: '#6d28d9', bg: '#ede9fe' },      
+            'Travel': { icon: '✈️', color: '#6d28d9', bg: '#ede9fe' },     
             'Fun': { icon: '🎟️', color: '#be185d', bg: '#fce7f3' },    
             'Transfer': { icon: '💸', color: '#047857', bg: '#d1fae5' }, 
-            'Other': { icon: '📝', color: '#334155', bg: '#f1f5f9' }        
+            'Other': { icon: '📝', color: '#334155', bg: '#f1f5f9' }       
         };
         const COLORS = ['#4f46e5', '#ea580c', '#059669', '#d97706', '#7c3aed', '#db2777', '#0d9488', '#2563eb', '#c026d3', '#0284c7'];
         const CURRENCY_SYMBOLS = { USD: '$', EUR: '€', GBP: '£', CAD: 'C$', AUD: 'A$', JPY: '¥', MXN: 'M$' };
@@ -1528,6 +1583,123 @@
             }
         }
 
+        function openCloudSettingsModal() {
+            document.getElementById('cloud-settings-overlay').classList.add('active');
+        }
+
+        function disconnectLocalSync() {
+            resetSupabaseConfig(false);
+            document.getElementById('cloud-settings-overlay').classList.remove('active');
+        }
+
+        function openChangePinModal() {
+    if (!supabaseClient || (localStorage.getItem('tripSplitter_hasPin') === 'true' && !sessionPin)) {
+        alert("Please unlock the cloud first before changing the PIN.");
+        return;
+    }
+    document.getElementById('cloud-settings-overlay').classList.remove('active');
+    document.getElementById('change-pin-overlay').classList.add('active');
+    document.getElementById('current-session-pin').value = '';
+    document.getElementById('new-session-pin').value = '';
+}
+
+async function submitChangePin() {
+    const currentPinInput = document.getElementById('current-session-pin').value.trim();
+    const newPin = document.getElementById('new-session-pin').value.trim();
+    
+    // Validate the current PIN before proceeding
+    if ((sessionPin || "") !== currentPinInput) {
+        alert("❌ Incorrect current PIN.");
+        return;
+    }
+
+    const devKey = localStorage.getItem('tripSplitter_deviceKey');
+    const newFullKey = devKey + newPin;
+    const client = getSupabaseClient();
+
+    const btn = document.getElementById('submit-change-pin-btn');
+    btn.innerText = "⏳ Re-encrypting...";
+    btn.disabled = true;
+
+    try {
+        const { data } = await client.from('trip_sync').select('id, trip_data').in('id', ['manual_trip', 'manual_trip_2', 'manual_trip_3', 'auto_trip']);
+
+        if (data && data.length > 0) {
+            for (const row of data) {
+                let parsed = typeof row.trip_data === 'string' ? JSON.parse(row.trip_data) : row.trip_data;
+                if (parsed && parsed.ciphertext) {
+                   const oldFullKey = devKey + (sessionPin || "");
+                   const decrypted = await decryptData(oldFullKey, parsed);
+                   if (decrypted) {
+                       const reEncrypted = await encryptData(newFullKey, decrypted);
+                       await client.from('trip_sync').update({ trip_data: reEncrypted }).eq('id', row.id);
+                   }
+                }
+            }
+        }
+
+        sessionPin = newPin;
+        localStorage.setItem('tripSplitter_hasPin', newPin ? 'true' : 'false');
+        alert("✅ PIN changed and all cloud data successfully re-encrypted.");
+        document.getElementById('change-pin-overlay').classList.remove('active');
+        updateSyncBtnState();
+
+    } catch (e) {
+        console.error("Change PIN error", e);
+        alert("❌ Error changing PIN.");
+    }
+    btn.innerText = "Save New PIN";
+    btn.disabled = false;
+}
+
+        function openNuclearResetModal() {
+            if (!getSupabaseClient()) {
+                alert("You are not connected to any cloud database.");
+                return;
+            }
+            document.getElementById('cloud-settings-overlay').classList.remove('active');
+            document.getElementById('nuclear-reset-overlay').classList.add('active');
+            document.getElementById('nuclear-reset-confirm').value = '';
+        }
+
+        async function submitNuclearReset() {
+    const enteredCode = document.getElementById('nuclear-reset-confirm').value.trim();
+    const savedAccessCode = localStorage.getItem('tripSplitter_cloudAccess');
+
+    // Failsafe: Ensure they are actually connected
+    if (!savedAccessCode) {
+        alert("No active cloud connection found to reset.");
+        document.getElementById('nuclear-reset-overlay').classList.remove('active');
+        return;
+    }
+
+    // Validate the entered code against the saved code
+    if (enteredCode !== savedAccessCode) {
+        alert("❌ Incorrect Access Code.\n\nThe code you entered does not match the active connection. Reset aborted.");
+        return;
+    }
+
+    const btn = document.getElementById('submit-nuclear-btn');
+    btn.innerText = "⏳ Purging...";
+    btn.disabled = true;
+
+    const client = getSupabaseClient();
+    if (client) {
+        const { error } = await client.from('trip_sync').delete().in('id', ['manual_trip', 'manual_trip_2', 'manual_trip_3', 'auto_trip']);
+        if (error) {
+            console.error("Delete error", error);
+            alert("Error deleting remote data. Check your connection/access code.");
+        }
+    }
+
+    resetSupabaseConfig(true);
+
+    alert("☢️ Database fully wiped and cloud disconnected.");
+    document.getElementById('nuclear-reset-overlay').classList.remove('active');
+    btn.innerText = "Delete Everything";
+    btn.disabled = false;
+}
+
         function openCloudSetupModal() {
             document.getElementById('cloud-setup-overlay').classList.add('active');
             document.getElementById('setup-access-code').value = '';
@@ -1704,7 +1876,7 @@
             
             if (!access) await getValidCloudKey(); 
             else if (hasPin && !sessionPin) await getValidCloudKey(); 
-            else alert("✅ Cloud Sync is actively connected and unlocked for this session.");
+            else openCloudSettingsModal();
         }
 
         function resetSupabaseConfig(force = false) {
