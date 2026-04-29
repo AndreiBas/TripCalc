@@ -980,7 +980,14 @@
                 isNotesDirty = false;
             }
         }
-
+// --- SECURE HASHING FOR DATABASE ACCESS ---
+async function generateAccessHash(password) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(password);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
         function closeNotesModal() {
             document.getElementById('notes-overlay').classList.remove('active');
             if (quill) {
@@ -1964,55 +1971,70 @@ async function submitChangePin() {
             
             compareVersions();
         }
+async function saveToSupabase(targetId) {
+    if (cloudTripNames[targetId] && !cloudTripNames[targetId].includes("Locked") && cloudTripNames[targetId] !== "Empty" && cloudTripNames[targetId] !== tripName) {
+        if (!confirm(`⚠️ Warning: Cloud slot currently holds a different trip ("${cloudTripNames[targetId]}").\n\nAre you sure you want to overwrite it with "${tripName}"?`)) return;
+    }
 
-        async function saveToSupabase(targetId) {
-            if (cloudTripNames[targetId] && !cloudTripNames[targetId].includes("Locked") && cloudTripNames[targetId] !== "Empty" && cloudTripNames[targetId] !== tripName) {
-                if (!confirm(`⚠️ Warning: Cloud slot currently holds a different trip ("${cloudTripNames[targetId]}").\n\nAre you sure you want to overwrite it with "${tripName}"?`)) return;
-            }
+    const key = await getValidCloudKey(); if (!key) return;
+    const client = getSupabaseClient(); if (!client) return;
 
-            const key = await getValidCloudKey(); if (!key) return;
-            const client = getSupabaseClient(); if (!client) return;
-
-            const payloadStr = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, tripNotesDelta, autoColorNotes, lastModified: localLastModified });
-            
-            const btnId = targetId === 'manual_trip' ? 'cloud-save-btn-1' : (targetId === 'manual_trip_2' ? 'cloud-save-btn-2' : 'cloud-save-btn-3');
-            const btn = document.getElementById(btnId); btn.innerText = "⏳";
-            
-            try {
-                const encryptedData = await encryptData(key, payloadStr);
-                const { error } = await client.from('trip_sync').upsert({ id: targetId, trip_data: encryptedData });
-                if (error) { console.error(error); alert("Error saving to cloud: " + error.message); } 
-                else { 
-                    let slotName = targetId === 'manual_trip' ? 'Manual 1' : (targetId === 'manual_trip_2' ? 'Manual 2' : 'Manual 3');
-                    alert(`✅ Securely encrypted and saved to ${slotName}!`); fetchCloudTripNames(); 
-                }
-            } catch (err) { alert("Encryption failed."); console.error(err); }
-            btn.innerText = "S";
+    const payloadStr = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, tripNotesDelta, autoColorNotes, lastModified: localLastModified });
+    
+    const btnId = targetId === 'manual_trip' ? 'cloud-save-btn-1' : (targetId === 'manual_trip_2' ? 'cloud-save-btn-2' : 'cloud-save-btn-3');
+    const btn = document.getElementById(btnId); btn.innerText = "⏳";
+    
+    try {
+        const encryptedData = await encryptData(key, payloadStr);
+        const accessHash = await generateAccessHash(key);
+        
+        // Use the secure RPC instead of upsert
+        const { error } = await client.rpc('save_secure_trip', {
+            p_id: targetId,
+            p_hash: accessHash,
+            p_data: encryptedData
+        });
+        
+        if (error) { console.error(error); alert("Error saving to cloud: " + error.message); } 
+        else { 
+            let slotName = targetId === 'manual_trip' ? 'Manual 1' : (targetId === 'manual_trip_2' ? 'Manual 2' : 'Manual 3');
+            alert(`✅ Securely encrypted and saved to ${slotName}!`); fetchCloudTripNames(); 
         }
-
+    } catch (err) { alert("Encryption failed."); console.error(err); }
+    btn.innerText = "S";
+}
         async function silentCloudSave() {
-            const key = await getValidCloudKey(true); if (!key) return;
-            const client = getSupabaseClient(); if (!client) return;
-            
-            const payloadStr = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, tripNotesDelta, autoColorNotes, lastModified: localLastModified });
-            const statusEl = document.getElementById('cloud-status');
-            
-            try {
-                const encryptedData = await encryptData(key, payloadStr);
-                const { error } = await client.from('trip_sync').upsert({ id: 'auto_trip', trip_data: encryptedData });
-                
-                if (error) { if(statusEl) statusEl.innerText = "❌ Auto-Sync Failed"; } 
-                else { 
-                    if(statusEl) {
-                        const now = new Date();
-                        statusEl.innerHTML = `✅ Secured <span class="tabular-nums">${now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>`;
-                        statusEl.style.color = "var(--green)";
-                        setTimeout(() => { statusEl.style.color = "var(--secondary)"; }, 5000);
-                        fetchCloudTripNames(); 
-                    }
-                }
-            } catch (err) { console.error("Silent save encryption failed.", err); }
+    const key = await getValidCloudKey(true); if (!key) return;
+    const client = getSupabaseClient(); if (!client) return;
+    
+    const payloadStr = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, tripNotesDelta, autoColorNotes, lastModified: localLastModified });
+    const statusEl = document.getElementById('cloud-status');
+    
+    try {
+        const encryptedData = await encryptData(key, payloadStr);
+        const accessHash = await generateAccessHash(key);
+        
+        // Use the secure RPC instead of upsert
+        const { error } = await client.rpc('save_secure_trip', {
+            p_id: 'auto_trip',
+            p_hash: accessHash,
+            p_data: encryptedData
+        });
+        
+        if (error) { if(statusEl) statusEl.innerText = "❌ Auto-Sync Failed"; } 
+        else { 
+            if(statusEl) {
+                const now = new Date();
+                statusEl.innerHTML = `✅ Secured <span class="tabular-nums">${now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>`;
+                statusEl.style.color = "var(--green)";
+                setTimeout(() => { statusEl.style.color = "var(--secondary)"; }, 5000);
+                fetchCloudTripNames(); 
+            }
         }
+    } catch (err) { console.error("Silent save encryption failed.", err); }
+}
+
+        
 
         async function loadFromSupabase(targetId) {
             const key = await getValidCloudKey(); if (!key) return;
