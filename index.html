@@ -558,7 +558,7 @@
             <details class="participants-dropdown">
                 <summary>
                     <span>👥 Manage Participants & Groups</span>
-                    <span style="font-size: 0.7rem; color: var(--secondary); font-weight: 600; background: var(--bg); padding: 2px 6px; border-radius: 10px;">v2.7</span>
+                    <span style="font-size: 0.7rem; color: var(--secondary); font-weight: 600; background: var(--bg); padding: 2px 6px; border-radius: 10px;">v2.9</span>
                 </summary>
                 <div style="margin-top: 12px; border-top: 1px solid var(--border); padding-top: 12px;">
                     <div class="form-row">
@@ -1518,24 +1518,89 @@ async function generateAccessHash(password) {
             }
         }
 
+        // --- UNIVERSAL OS-LEVEL FILE SAVER ---
+        // --- UNIVERSAL OS-LEVEL FILE SAVER (BULLETPROOF) ---
+        async function saveFileUniversal(content, fileName, mimeType) {
+            const blob = new Blob([content], { type: mimeType });
+            const file = new File([blob], fileName, { type: mimeType });
+
+            // 1. Try Native Web Share API (Best for Mobile)
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                try {
+                    await navigator.share({
+                        files: [file],
+                        title: fileName,
+                        text: 'Trip Splitter Backup'
+                    });
+                    return; // Success!
+                } catch (err) {
+                    if (err.name === 'AbortError') return; // User hit "Cancel", so we stop.
+                    console.warn('Share API blocked, falling back...', err);
+                }
+            }
+
+            // 2. Try Modern File System Access API (Best for Desktop)
+            if (window.showSaveFilePicker) {
+                try {
+                    const handle = await window.showSaveFilePicker({
+                        suggestedName: fileName,
+                        types: [{ description: 'Trip File', accept: { [mimeType]: ['.json', '.tsplit'] } }]
+                    });
+                    const writable = await handle.createWritable();
+                    await writable.write(blob);
+                    await writable.close();
+                    return; // Success!
+                } catch (err) {
+                    if (err.name === 'AbortError') return; // User hit "Cancel", so we stop.
+                    console.warn('FilePicker blocked (likely testing locally), falling back...', err);
+                    // Crucial Fix: We removed the "return;" here so the code continues to Step 3!
+                }
+            }
+
+            // 3. Fallback: Standard Download Link (Always works!)
+            try {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = fileName;
+                document.body.appendChild(a);
+                a.click();
+                
+                // Small delay ensures the browser registers the click before we clean up
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }, 150);
+            } catch (err) {
+                alert("File save failed entirely. Check your browser permissions.");
+                console.error("Fallback download failed:", err);
+            }
+        }
+
+        // --- UPDATED EXPORT FUNCTIONS ---
         function exportTrip() {
             const payload = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, tripNotesDelta, autoColorNotes, lastModified: localLastModified });
-            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(payload);
-            const dl = document.createElement('a'); dl.setAttribute("href", dataStr);
-            dl.setAttribute("download", tripName.replace(/\s+/g, '_') + ".json"); dl.click();
+            const fileName = tripName.replace(/\s+/g, '_') + ".json";
+            saveFileUniversal(payload, fileName, 'application/json');
         }
 
         async function exportSecureTrip() {
             const password = prompt("⚠️ Secure Save ⚠️\nEnter a password to encrypt this trip file.\n\nWARNING: If you forget this password, your data cannot be recovered.");
             if (!password) return; 
+            
             const payload = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, tripNotesDelta, autoColorNotes, lastModified: localLastModified });
+            
             try {
                 const encryptedData = await encryptData(password, payload);
                 const securePayload = JSON.stringify(encryptedData);
-                const dataStr = "data:text/plain;charset=utf-8," + encodeURIComponent(securePayload);
-                const dl = document.createElement('a'); dl.setAttribute("href", dataStr);
-                dl.setAttribute("download", tripName.replace(/\s+/g, '_') + ".tsplit"); dl.click();
-            } catch (err) { alert("Failed to encrypt data."); console.error(err); }
+                const fileName = tripName.replace(/\s+/g, '_') + ".tsplit";
+                
+                await saveFileUniversal(securePayload, fileName, 'text/plain');
+            } catch (err) { 
+                alert("Failed to encrypt data."); 
+                console.error(err); 
+            }
         }
 
         function importTrip(e) {
