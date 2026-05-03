@@ -97,8 +97,11 @@
             body { height: 100vh; overflow: hidden; display: flex; flex-direction: column; padding-bottom: 0; }
             .mobile-quick-nav { display: none !important; }
             .header-top-row { flex-direction: row; justify-content: space-between; align-items: center; }
-            .app-container { grid-template-columns: 420px 1fr; flex: 1; min-height: 0; overflow: hidden; gap: 20px; }
+            
+            /* FIX 1: Tightly hug the header (auto) and let columns take the rest (1fr) */
+        .app-container { grid-template-columns: 380px 1fr; grid-template-rows: auto 1fr; flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; gap: 20px; padding-right: 4px;}
             .col-right { grid-column: 1 / -1; }
+            
             .col-left, .col-mid, .col-right {
                 height: 100%; overflow-y: auto; padding-right: 10px; padding-bottom: 40px; 
                 scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent;
@@ -110,8 +113,10 @@
             .trip-comment-input { text-align: left; margin: 0; }
         }
         
-        @media (min-width: 1400px) {
-            .app-container { grid-template-columns: 400px 1fr 1fr; }
+        /* FIX 2: Lowered from 1400px to 1180px to catch Surface Pros & scaled displays at 100% zoom */
+        @media (min-width: 1180px) {
+            /* Lock the container so the 3 columns independently scroll without overlapping */
+            .app-container { grid-template-columns: 380px 1fr 1fr; overflow: hidden; padding-right: 0;}
             .col-left { grid-column: 1; }
             .col-mid { grid-column: 2; }
             .col-right { grid-column: 3; }
@@ -248,7 +253,11 @@
         button.outline:hover { background: #f8fafc; color: var(--text); border-color: #94a3b8;}
 
         .flex-1 { flex: 1; }
-        
+        #ledger-toggle-icon { display: inline-block; transition: transform 0.2s; font-size: 0.8rem; margin-left: 8px; }
+        .ledger-collapsed #ledger-toggle-icon { transform: rotate(-90deg); }
+        .ledger-collapsed #expense-list { display: none; }
+        /* FIX: Remove the hardcoded 400px height when collapsed so the card shrinks tightly */
+        .card.ledger-card.ledger-collapsed { min-height: 0; padding-bottom: 8px; }
         .tag {
             display: inline-flex; align-items: center; 
             padding: 4px 10px; border-radius: 16px; margin: 2px; font-weight: 700; gap: 6px;
@@ -291,6 +300,8 @@
         #ledger-toggle-icon { display: inline-block; transition: transform 0.2s; font-size: 0.8rem; margin-left: 8px; }
         .ledger-collapsed #ledger-toggle-icon { transform: rotate(-90deg); }
         .ledger-collapsed #expense-list { display: none; }
+        /* FIX: Remove the hardcoded 400px height when collapsed so the card shrinks tightly */
+        .card.ledger-card.ledger-collapsed { min-height: 0; padding-bottom: 8px; }
 
         .expense-item { 
             display: flex; justify-content: space-between; align-items: flex-start; 
@@ -389,6 +400,39 @@
         
         .ql-tooltip { max-width: 90vw; box-sizing: border-box; z-index: 10; }
         .ql-snow .ql-tooltip[data-mode="link"]::before { content: "Link:"; }
+		
+		/* --- NOTES TOC POP-UP --- */
+        #notes-toc-popup {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            margin-top: 6px;
+            background: #ffffff;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            box-shadow: var(--shadow-md);
+            max-height: 250px;
+            overflow-y: auto;
+            width: 220px;
+            z-index: 100;
+        }
+        .toc-item {
+            padding: 8px 12px;
+            font-size: 0.85rem;
+            color: var(--text);
+            cursor: pointer;
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            transition: background 0.2s;
+        }
+        .toc-item:last-child { border-bottom: none; }
+        .toc-item:hover { background: #f8fafc; color: var(--primary); font-weight: 600; }
+        
+        /* Ensure smooth scrolling inside Quill */
+        .ql-editor { scroll-behavior: smooth; }
     </style>
 </head>
 <body>
@@ -514,7 +558,7 @@
             <details class="participants-dropdown">
                 <summary>
                     <span>👥 Manage Participants & Groups</span>
-                    <span style="font-size: 0.7rem; color: var(--secondary); font-weight: 600; background: var(--bg); padding: 2px 6px; border-radius: 10px;">v2.5</span>
+                    <span style="font-size: 0.7rem; color: var(--secondary); font-weight: 600; background: var(--bg); padding: 2px 6px; border-radius: 10px;">v2.7</span>
                 </summary>
                 <div style="margin-top: 12px; border-top: 1px solid var(--border); padding-top: 12px;">
                     <div class="form-row">
@@ -699,10 +743,12 @@
                 <div style="display:flex; align-items:center; gap: 12px; flex-wrap: wrap;">
                     <h2 style="margin:0; border:none; padding:0; display:flex; align-items:center; gap:8px; color: var(--primary);">📝 Trip Notes</h2>
                     <div style="display:flex; align-items: center; gap: 6px; background: #fff; padding: 2px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border); position: relative;">
-                        <input type="text" id="notes-search" placeholder="🔍 Search..." oninput="searchNotes()" style="border: none; background: transparent; padding: 4px; width: 120px; font-size: 0.85rem; outline: none; padding-right: 16px;">
-                        <span id="clear-notes-search-btn" onclick="clearNotesSearchField()" style="position: absolute; right: 35px; color: var(--secondary); font-size: 1.2rem; cursor: pointer; display: none; line-height: 1;">&times;</span>
-                        <span id="notes-search-count" style="font-size: 0.75rem; color: var(--secondary); font-weight: 700; min-width: 15px; text-align: right;"></span>
-                    </div>
+    <input type="text" id="notes-search" placeholder="🔍 Search..." oninput="searchNotes()" onfocus="showNotesToC()" style="border: none; background: transparent; padding: 4px; width: 120px; font-size: 0.85rem; outline: none; padding-right: 16px;">
+    <span id="clear-notes-search-btn" onclick="clearNotesSearchField()" style="position: absolute; right: 35px; color: var(--secondary); font-size: 1.2rem; cursor: pointer; display: none; line-height: 1;">&times;</span>
+    <span id="notes-search-count" style="font-size: 0.75rem; color: var(--secondary); font-weight: 700; min-width: 15px; text-align: right;"></span>
+    
+    <div id="notes-toc-popup"></div>
+</div>
                     
                     <div id="notes-quick-convert-container" style="display: none; align-items: center; gap: 6px; border-left: 1px solid var(--border); padding-left: 8px; margin-left: 4px;">
     <div style="display: flex; align-items: center; gap: 4px; background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 2px 6px;">
@@ -1063,7 +1109,14 @@ async function generateAccessHash(password) {
         }
 
         // --- SEARCH NOTES LOGIC ---
+        // --- EXISTING FUNCTION (UPDATED) ---
+        
+// --- SEARCH NOTES LOGIC ---
         function searchNotes() {
+            // Hide ToC popup as soon as user types
+            const popup = document.getElementById('notes-toc-popup');
+            if (popup) popup.style.display = 'none';
+
             clearSearchHighlights();
             const term = document.getElementById('notes-search').value.trim().toLowerCase();
             const countEl = document.getElementById('notes-search-count');
@@ -1080,6 +1133,63 @@ async function generateAccessHash(password) {
             }
             countEl.innerText = count > 0 ? `${count}` : "0";
         }
+        // --- NEW TOC FUNCTIONS ---
+        function showNotesToC() {
+            const popup = document.getElementById('notes-toc-popup');
+            const searchInput = document.getElementById('notes-search');
+            
+            // Do not show if the user is currently searching text
+            if (searchInput.value.trim().length > 0) {
+                popup.style.display = 'none';
+                return;
+            }
+
+            // Grab all Heading 2 elements from inside the Quill editor
+            const headers = document.querySelectorAll('#quill-editor .ql-editor h2');
+            
+            if (headers.length === 0) {
+                popup.innerHTML = '<div style="padding: 12px; font-size: 0.8rem; color: var(--secondary); text-align: center; font-style: italic;">No H2 headers found.</div>';
+            } else {
+                let html = '';
+                headers.forEach((h2, index) => {
+                    // Assign a temporary ID if it doesn't have one to anchor the scroll
+                    if (!h2.id) h2.id = 'note-header-' + index;
+                    
+                    // Sanitize text
+                    const text = h2.innerText || 'Header';
+                    html += `<div class="toc-item" onclick="jumpToNoteHeader('${h2.id}')" title="${text}">${text}</div>`;
+                });
+                popup.innerHTML = html;
+            }
+            
+            popup.style.display = 'block';
+        }
+
+        function jumpToNoteHeader(id) {
+            const targetHeader = document.getElementById(id);
+            if (targetHeader) {
+                // Quill's scrollable container is the .ql-editor div
+                const editorBody = document.querySelector('#quill-editor .ql-editor');
+                // Scroll smoothly to the header's relative top position
+                editorBody.scrollTo({ top: targetHeader.offsetTop - 10, behavior: 'smooth' });
+            }
+            
+            // Hide popup and remove focus from search bar so it doesn't immediately pop back up
+            document.getElementById('notes-toc-popup').style.display = 'none';
+            document.getElementById('notes-search').blur();
+        }
+
+        // Global listener to close the ToC popup if the user clicks anywhere outside it
+        document.addEventListener('click', function(e) {
+            const popup = document.getElementById('notes-toc-popup');
+            const searchInput = document.getElementById('notes-search');
+            
+            if (popup && popup.style.display === 'block') {
+                if (!searchInput.contains(e.target) && !popup.contains(e.target)) {
+                    popup.style.display = 'none';
+                }
+            }
+        });
 
         function clearSearchHighlights() {
             if (!activeSearchTerm) return;
