@@ -582,7 +582,7 @@
             <details class="participants-dropdown">
                 <summary>
                     <span>👥 Manage Participants & Groups</span>
-                    <span style="font-size: 0.7rem; color: var(--secondary); font-weight: 600; background: var(--bg); padding: 2px 6px; border-radius: 10px;">v3.01</span>
+                    <span style="font-size: 0.7rem; color: var(--secondary); font-weight: 600; background: var(--bg); padding: 2px 6px; border-radius: 10px;">v3.1</span>
                 </summary>
                 <div style="margin-top: 12px; border-top: 1px solid var(--border); padding-top: 12px;">
                     <div class="form-row">
@@ -1022,13 +1022,19 @@
 
         let activeCategoryFilters = new Set(Object.keys(CATEGORIES));
 
-        // --- QUILL INIT ---
+       // --- QUILL INIT ---
         window.addEventListener('DOMContentLoaded', () => {
             quill = new Quill('#quill-editor', {
                 theme: 'snow',
                 bounds: '.notes-body',
                 placeholder: 'Jot down trip ideas, itineraries, packing lists, or links here...',
                 modules: {
+                    // FIX 1: Enable the History module to fix the Ctrl+Z copy/paste glitch
+                    history: {
+                        delay: 500,
+                        maxStack: 100,
+                        userOnly: true
+                    },
                     toolbar: [
                         [{ 'header': [1, 2, 3, false] }],
                         ['bold', 'italic', 'underline', 'strike'],
@@ -1051,17 +1057,21 @@
                 if (source === 'user') {
                     isNotesDirty = true;
                     clearTimeout(notesDebounceTimer);
+                    // Increased debounce to 1.5s to prevent firing between continuous thoughts
                     notesDebounceTimer = setTimeout(() => {
                         const currentClean = sanitizeHTML(quill.root.innerHTML);
                         const savedClean = sanitizeHTML(tripNotes);
                         if (currentClean !== savedClean || !tripNotesDelta) {
+                            // We keep Auto-color, but we pass `true` to saveState.
+                            // FIX 2: saveState(true) skips the heavy Cloud Sync encryption while typing.
+                            // The cloud sync will now only happen when you click "Done" to close the modal.
                             applyAutoColor(); 
                             tripNotes = sanitizeHTML(quill.root.innerHTML); 
                             tripNotesDelta = quill.getContents(); 
-                            saveState();
+                            saveState(true); 
                         }
-                        isNotesDirty = false;
-                    }, 1000);
+                        // Keep dirty flag true so closeNotesModal() knows it needs to do a final cloud sync
+                    }, 1500);
                 }
             });
             
