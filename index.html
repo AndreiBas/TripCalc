@@ -582,7 +582,7 @@
             <details class="participants-dropdown">
                 <summary>
                     <span>👥 Manage Participants & Groups</span>
-                    <span style="font-size: 0.7rem; color: var(--secondary); font-weight: 600; background: var(--bg); padding: 2px 6px; border-radius: 10px;">v3.1</span>
+                    <span style="font-size: 0.7rem; color: var(--secondary); font-weight: 600; background: var(--bg); padding: 2px 6px; border-radius: 10px;">v3.2</span>
                 </summary>
                 <div style="margin-top: 12px; border-top: 1px solid var(--border); padding-top: 12px;">
                     <div class="form-row">
@@ -2483,14 +2483,17 @@
                 let requiredText = [];
                 const parts = searchInputRaw.split(/\s+/);
                 parts.forEach(p => {
-                    if (p.startsWith('#') && p.length > 1) requiredTags.push(p.substring(1));
-                    else if (p !== '#') requiredText.push(p);
+                    if (p.startsWith('#') && p.length > 1) requiredTags.push(p.substring(1).toLowerCase());
+                    else if (p !== '#') requiredText.push(p.toLowerCase());
                 });
 
                 const expTags = (e.tags || []).map(t => t.toLowerCase());
                 const hasAllTags = requiredTags.every(rt => expTags.some(t => t.includes(rt)));
                 
-                const searchableText = `${e.desc} ${e.payer} ${e.notes || ''}`.toLowerCase();
+                // FIX: Added involved participants to the searchable text string
+                const involvedNames = e.involved ? e.involved.join(' ') : '';
+                const searchableText = `${e.desc} ${e.payer} ${involvedNames} ${e.notes || ''}`.toLowerCase();
+                
                 const hasAllText = requiredText.every(rt => searchableText.includes(rt));
 
                 return hasAllTags && hasAllText;
