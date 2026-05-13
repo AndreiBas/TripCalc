@@ -98,8 +98,7 @@
             .mobile-quick-nav { display: none !important; }
             .header-top-row { flex-direction: row; justify-content: space-between; align-items: center; }
             
-            /* FIX 1: Tightly hug the header (auto) and let columns take the rest (1fr) */
-        .app-container { grid-template-columns: 380px 1fr; grid-template-rows: auto 1fr; flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; gap: 20px; padding-right: 4px;}
+            .app-container { grid-template-columns: 380px 1fr; grid-template-rows: auto 1fr; flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; gap: 20px; padding-right: 4px;}
             .col-right { grid-column: 1 / -1; }
             
             .col-left, .col-mid, .col-right {
@@ -113,9 +112,7 @@
             .trip-comment-input { text-align: left; margin: 0; }
         }
         
-        /* FIX 2: Lowered from 1400px to 1180px to catch Surface Pros & scaled displays at 100% zoom */
         @media (min-width: 1180px) {
-            /* Lock the container so the 3 columns independently scroll without overlapping */
             .app-container { grid-template-columns: 380px 1fr 1fr; overflow: hidden; padding-right: 0;}
             .col-left { grid-column: 1; }
             .col-mid { grid-column: 2; }
@@ -155,7 +152,6 @@
             white-space: nowrap;
         }
 
-        /* --- CLOUD SLOTS & BUTTON ANIMATIONS --- */
         .cloud-slot {
             display: flex; flex-direction: column; align-items: center; gap: 2px;
             background: white; padding: 4px; border-radius: var(--radius-sm); border: 1px solid var(--border);
@@ -253,11 +249,6 @@
         button.outline:hover { background: #f8fafc; color: var(--text); border-color: #94a3b8;}
 
         .flex-1 { flex: 1; }
-        #ledger-toggle-icon { display: inline-block; transition: transform 0.2s; font-size: 0.8rem; margin-left: 8px; }
-        .ledger-collapsed #ledger-toggle-icon { transform: rotate(-90deg); }
-        .ledger-collapsed #expense-list { display: none; }
-        /* FIX: Remove the hardcoded 400px height when collapsed so the card shrinks tightly */
-        .card.ledger-card.ledger-collapsed { min-height: 0; padding-bottom: 8px; }
         .tag {
             display: inline-flex; align-items: center; 
             padding: 4px 10px; border-radius: 16px; margin: 2px; font-weight: 700; gap: 6px;
@@ -300,7 +291,6 @@
         #ledger-toggle-icon { display: inline-block; transition: transform 0.2s; font-size: 0.8rem; margin-left: 8px; }
         .ledger-collapsed #ledger-toggle-icon { transform: rotate(-90deg); }
         .ledger-collapsed #expense-list { display: none; }
-        /* FIX: Remove the hardcoded 400px height when collapsed so the card shrinks tightly */
         .card.ledger-card.ledger-collapsed { min-height: 0; padding-bottom: 8px; }
 
         .expense-item { 
@@ -400,8 +390,7 @@
         
         .ql-tooltip { max-width: 90vw; box-sizing: border-box; z-index: 10; }
         .ql-snow .ql-tooltip[data-mode="link"]::before { content: "Link:"; }
-		
-		/* --- NOTES TOC POP-UP --- */
+        
         #notes-toc-popup {
             display: none;
             position: absolute;
@@ -431,8 +420,43 @@
         .toc-item:last-child { border-bottom: none; }
         .toc-item:hover { background: #f8fafc; color: var(--primary); font-weight: 600; }
         
-        /* Ensure smooth scrolling inside Quill */
         .ql-editor { scroll-behavior: smooth; }
+
+        /* --- TAGS STYLING --- */
+        .tag-pill {
+            display: inline-flex;
+            align-items: center;
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 4px;
+            margin-right: 4px;
+            margin-top: 4px;
+            cursor: pointer;
+            transition: filter 0.2s;
+        }
+        .tag-pill:hover { filter: brightness(0.95); }
+
+        .suggestions-popup {
+            display: none;
+            position: absolute;
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            box-shadow: var(--shadow-md);
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 1000;
+            width: 100%;
+        }
+        .suggestion-item {
+            padding: 8px 12px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            border-bottom: 1px solid #f1f5f9;
+        }
+        .suggestion-item:hover { background: #f8fafc; }
+
     </style>
 </head>
 <body>
@@ -503,16 +527,16 @@
                         <input type="text" id="global-currency" class="currency-selector" style="width: 50px; text-align: center; padding: 2px 4px; font-size: 0.8rem;" placeholder="..." maxlength="3" onchange="handleCurrencyChange()">
                         
                         <div id="quick-convert-container" style="display: none; align-items: center; gap: 6px; border-left: 1px solid var(--border); padding-left: 8px; margin-left: 4px;">
-    <div style="display: flex; align-items: center; gap: 4px; background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 2px 6px;">
-        <span style="font-size: 0.7rem; font-weight: 800; color: var(--secondary);">USD</span>
-        <input type="number" id="qc-usd" class="tabular-nums" placeholder="0.00" style="width: 80px; padding: 2px; font-size: 0.85rem; border: none; background: transparent; outline: none; text-align: right; box-shadow: none;" oninput="quickConvert('usd')">
-    </div>
-    <span style="font-size: 0.9rem; color: var(--secondary); font-weight: bold; line-height: 1;">⇌</span>
-    <div style="display: flex; align-items: center; gap: 4px; background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 2px 6px;">
-        <span id="qc-foreign-label" style="font-size: 0.7rem; font-weight: 800; color: var(--primary);">FX</span>
-        <input type="number" id="qc-foreign" class="tabular-nums" placeholder="0.00" style="width: 80px; padding: 2px; font-size: 0.85rem; border: none; background: transparent; outline: none; text-align: right; box-shadow: none;" oninput="quickConvert('foreign')">
-    </div>
-</div>
+                            <div style="display: flex; align-items: center; gap: 4px; background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 2px 6px;">
+                                <span style="font-size: 0.7rem; font-weight: 800; color: var(--secondary);">USD</span>
+                                <input type="number" id="qc-usd" class="tabular-nums" placeholder="0.00" style="width: 80px; padding: 2px; font-size: 0.85rem; border: none; background: transparent; outline: none; text-align: right; box-shadow: none;" oninput="quickConvert('usd')">
+                            </div>
+                            <span style="font-size: 0.9rem; color: var(--secondary); font-weight: bold; line-height: 1;">⇌</span>
+                            <div style="display: flex; align-items: center; gap: 4px; background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 2px 6px;">
+                                <span id="qc-foreign-label" style="font-size: 0.7rem; font-weight: 800; color: var(--primary);">FX</span>
+                                <input type="number" id="qc-foreign" class="tabular-nums" placeholder="0.00" style="width: 80px; padding: 2px; font-size: 0.85rem; border: none; background: transparent; outline: none; text-align: right; box-shadow: none;" oninput="quickConvert('foreign')">
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -558,7 +582,7 @@
             <details class="participants-dropdown">
                 <summary>
                     <span>👥 Manage Participants & Groups</span>
-                    <span style="font-size: 0.7rem; color: var(--secondary); font-weight: 600; background: var(--bg); padding: 2px 6px; border-radius: 10px;">v2.95</span>
+                    <span style="font-size: 0.7rem; color: var(--secondary); font-weight: 600; background: var(--bg); padding: 2px 6px; border-radius: 10px;">v3.01</span>
                 </summary>
                 <div style="margin-top: 12px; border-top: 1px solid var(--border); padding-top: 12px;">
                     <div class="form-row">
@@ -620,6 +644,12 @@
                         <div class="form-row">
                             <input type="text" id="exp-desc" style="flex: 1;" placeholder="Description (e.g., Dinner)" list="desc-suggestions" oninput="this.value = this.value.charAt(0).toUpperCase() + this.value.slice(1);">
                             <datalist id="desc-suggestions"></datalist>
+                        </div>
+                        
+                        <!-- TAGS FIELD -->
+                        <div class="form-row" style="position: relative;">
+                            <input type="text" id="exp-tags" placeholder="Tags (e.g. #restaurant #drinks)" oninput="handleFormTagInput(event)" onfocus="handleFormTagInput(event)" autocomplete="off">
+                            <div id="form-tag-suggestions" class="suggestions-popup"></div>
                         </div>
                         
                         <div class="form-row">
@@ -686,10 +716,17 @@
                             <button class="outline small" onclick="toggleAllExpenses(true)" title="Ignore All in Math">🚫 All</button>
                         </div>
                     </div>
+                    
                     <div style="margin-bottom: 8px; position: relative; display: flex; align-items: center;">
-                        <input type="text" id="search-filter" placeholder="🔍 Search activities, people, or notes..." oninput="handleSearchChange()" style="width: 100%; background: #fff; padding: 8px 36px 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: inset 0 1px 2px rgba(0,0,0,0.02);">
+                        <input type="text" id="search-filter" placeholder="🔍 Search activities, people, or #tags..." 
+                               oninput="handleSearchInput(event)" 
+                               onfocus="handleSearchInput(event)"
+                               autocomplete="off"
+                               style="width: 100%; background: #fff; padding: 8px 36px 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: inset 0 1px 2px rgba(0,0,0,0.02);">
+                        <div id="search-tag-suggestions" class="suggestions-popup" style="top: 100%; left: 0; width: 100%;"></div>
                         <button id="clear-search-btn" onclick="clearSearch()" style="position: absolute; right: 4px; background: transparent; border: none; color: var(--secondary); font-size: 1.2rem; cursor: pointer; display: none; padding: 4px 8px; box-shadow: none; width: auto; flex: none; min-width: auto; line-height: 1;" title="Clear search">&times;</button>
                     </div>
+                    
                     <div id="category-filters" style="display: flex; gap: 6px; flex-wrap: wrap;"></div>
                 </div>
                 
@@ -737,30 +774,31 @@
 
     </div>
 
+    <!-- Modals below (Notes, Sync, Reset, PIN, etc.) remain largely the same -->
     <div class="modal-overlay" id="notes-overlay">
         <div class="notes-modal">
             <div class="notes-header">
                 <div style="display:flex; align-items:center; gap: 12px; flex-wrap: wrap;">
                     <h2 style="margin:0; border:none; padding:0; display:flex; align-items:center; gap:8px; color: var(--primary);">📝 Trip Notes</h2>
                     <div style="display:flex; align-items: center; gap: 6px; background: #fff; padding: 2px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border); position: relative;">
-    <input type="text" id="notes-search" placeholder="🔍 Search..." oninput="searchNotes()" onfocus="showNotesToC()" style="border: none; background: transparent; padding: 4px; width: 120px; font-size: 0.85rem; outline: none; padding-right: 16px;">
-    <span id="clear-notes-search-btn" onclick="clearNotesSearchField()" style="position: absolute; right: 35px; color: var(--secondary); font-size: 1.2rem; cursor: pointer; display: none; line-height: 1;">&times;</span>
-    <span id="notes-search-count" style="font-size: 0.75rem; color: var(--secondary); font-weight: 700; min-width: 15px; text-align: right;"></span>
-    
-    <div id="notes-toc-popup"></div>
-</div>
+                        <input type="text" id="notes-search" placeholder="🔍 Search..." oninput="searchNotes()" onfocus="showNotesToC()" style="border: none; background: transparent; padding: 4px; width: 120px; font-size: 0.85rem; outline: none; padding-right: 16px;">
+                        <span id="clear-notes-search-btn" onclick="clearNotesSearchField()" style="position: absolute; right: 35px; color: var(--secondary); font-size: 1.2rem; cursor: pointer; display: none; line-height: 1;">&times;</span>
+                        <span id="notes-search-count" style="font-size: 0.75rem; color: var(--secondary); font-weight: 700; min-width: 15px; text-align: right;"></span>
+                        
+                        <div id="notes-toc-popup"></div>
+                    </div>
                     
                     <div id="notes-quick-convert-container" style="display: none; align-items: center; gap: 6px; border-left: 1px solid var(--border); padding-left: 8px; margin-left: 4px;">
-    <div style="display: flex; align-items: center; gap: 4px; background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 2px 6px;">
-        <span style="font-size: 0.7rem; font-weight: 800; color: var(--secondary);">USD</span>
-        <input type="number" id="qc-notes-usd" class="tabular-nums" placeholder="0.00" style="width: 80px; padding: 2px; font-size: 0.85rem; border: none; background: transparent; outline: none; text-align: right; box-shadow: none;" oninput="quickConvertNotes('usd')">
-    </div>
-    <span style="font-size: 0.9rem; color: var(--secondary); font-weight: bold; line-height: 1;">⇌</span>
-    <div style="display: flex; align-items: center; gap: 4px; background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 2px 6px;">
-        <span id="qc-notes-foreign-label" style="font-size: 0.7rem; font-weight: 800; color: var(--primary);">FX</span>
-        <input type="number" id="qc-notes-foreign" class="tabular-nums" placeholder="0.00" style="width: 80px; padding: 2px; font-size: 0.85rem; border: none; background: transparent; outline: none; text-align: right; box-shadow: none;" oninput="quickConvertNotes('foreign')">
-    </div>
-</div>
+                        <div style="display: flex; align-items: center; gap: 4px; background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 2px 6px;">
+                            <span style="font-size: 0.7rem; font-weight: 800; color: var(--secondary);">USD</span>
+                            <input type="number" id="qc-notes-usd" class="tabular-nums" placeholder="0.00" style="width: 80px; padding: 2px; font-size: 0.85rem; border: none; background: transparent; outline: none; text-align: right; box-shadow: none;" oninput="quickConvertNotes('usd')">
+                        </div>
+                        <span style="font-size: 0.9rem; color: var(--secondary); font-weight: bold; line-height: 1;">⇌</span>
+                        <div style="display: flex; align-items: center; gap: 4px; background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 2px 6px;">
+                            <span id="qc-notes-foreign-label" style="font-size: 0.7rem; font-weight: 800; color: var(--primary);">FX</span>
+                            <input type="number" id="qc-notes-foreign" class="tabular-nums" placeholder="0.00" style="width: 80px; padding: 2px; font-size: 0.85rem; border: none; background: transparent; outline: none; text-align: right; box-shadow: none;" oninput="quickConvertNotes('foreign')">
+                        </div>
+                    </div>
                 </div>
                 <div style="display:flex; gap: 12px; align-items: center; flex-wrap: wrap;">
                     <button class="outline small" onclick="toggleCalculator()" title="Open Calculator">🧮 Calc</button>
@@ -776,6 +814,7 @@
         </div>
     </div>
 
+    <!-- Settings Modals -->
     <div class="modal-overlay" id="cloud-settings-overlay">
         <div class="notes-modal" style="max-width: 400px; height: auto;">
             <div class="notes-header">
@@ -800,9 +839,9 @@
             <div style="padding: 20px; display: flex; flex-direction: column; gap: 15px;">
                 <p style="font-size: 0.85rem; color: var(--secondary); margin: 0;">Enter your new Session PIN. This will re-encrypt all your data in the cloud with the new key.</p>
                 <div style="display: flex; flex-direction: column; gap: 10px;">
-    <input type="password" id="current-session-pin" placeholder="Current PIN" style="font-size: 1.2rem; text-align: center; letter-spacing: 0.2em;">
-    <input type="password" id="new-session-pin" placeholder="New PIN" style="font-size: 1.2rem; text-align: center; letter-spacing: 0.2em;" onkeypress="if(event.key === 'Enter') submitChangePin()">
-</div>
+                    <input type="password" id="current-session-pin" placeholder="Current PIN" style="font-size: 1.2rem; text-align: center; letter-spacing: 0.2em;">
+                    <input type="password" id="new-session-pin" placeholder="New PIN" style="font-size: 1.2rem; text-align: center; letter-spacing: 0.2em;" onkeypress="if(event.key === 'Enter') submitChangePin()">
+                </div>
                 <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
                     <button class="secondary outline" onclick="document.getElementById('change-pin-overlay').classList.remove('active')">Cancel</button>
                     <button id="submit-change-pin-btn" onclick="submitChangePin()">Save New PIN</button>
@@ -820,9 +859,9 @@
                 <p style="font-size: 0.85rem; color: var(--danger); font-weight: bold; margin: 0;">WARNING: This is irreversible.</p>
                 <p style="font-size: 0.85rem; color: var(--secondary); margin: 0;">This will permanently delete all trip slots (Manual 1-3, Auto-Sync) from the Supabase database and clear your local connection settings.</p>
                 <div>
-    <label style="font-size: 0.8rem; font-weight: 700; color: var(--text);">Enter your Supabase Access Code to confirm</label>
-    <input type="text" id="nuclear-reset-confirm" placeholder="http://...|eyJh..." style="font-size: 0.85rem; text-align: center;">
-</div>
+                    <label style="font-size: 0.8rem; font-weight: 700; color: var(--text);">Enter your Supabase Access Code to confirm</label>
+                    <input type="text" id="nuclear-reset-confirm" placeholder="http://...|eyJh..." style="font-size: 0.85rem; text-align: center;">
+                </div>
                 <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
                     <button class="secondary outline" onclick="document.getElementById('nuclear-reset-overlay').classList.remove('active')">Cancel</button>
                     <button id="submit-nuclear-btn" class="danger" onclick="submitNuclearReset()">Delete Everything</button>
@@ -923,7 +962,6 @@
         let pinFailedAttempts = 0; 
         let cloudAuthPromiseResolve = null;
 
-        // SMART SYNC VARIABLES
         let localLastModified = 0;
         let cloudTimestamps = { manual_trip: 0, manual_trip_2: 0, manual_trip_3: 0, auto_trip: 0 };
 
@@ -959,6 +997,27 @@
             'Other': { icon: '📝', color: '#334155', bg: '#f1f5f9' }       
         };
         const COLORS = ['#4f46e5', '#ea580c', '#059669', '#d97706', '#7c3aed', '#db2777', '#0d9488', '#2563eb', '#c026d3', '#0284c7'];
+        
+        // Dynamic Tag Palette
+        const TAG_COLORS = [
+            { bg: '#fee2e2', color: '#b91c1c', border: '#fecaca' }, // Red
+            { bg: '#ffedd5', color: '#c2410c', border: '#fed7aa' }, // Orange
+            { bg: '#fef3c7', color: '#b45309', border: '#fde68a' }, // Amber
+            { bg: '#ecfccb', color: '#4d7c0f', border: '#d9f99d' }, // Lime
+            { bg: '#dcfce7', color: '#15803d', border: '#bbf7d0' }, // Green
+            { bg: '#d1fae5', color: '#047857', border: '#a7f3d0' }, // Emerald
+            { bg: '#ccfbf1', color: '#0f766e', border: '#99f6e4' }, // Teal
+            { bg: '#cffafe', color: '#0369a1', border: '#5eead4' }, // Cyan
+            { bg: '#e0f2fe', color: '#0369a1', border: '#bae6fd' }, // Light Blue
+            { bg: '#dbeafe', color: '#1d4ed8', border: '#bfdbfe' }, // Blue
+            { bg: '#e0e7ff', color: '#4338ca', border: '#c7d2fe' }, // Indigo
+            { bg: '#ede9fe', color: '#6d28d9', border: '#ddd6fe' }, // Violet
+            { bg: '#f3e8ff', color: '#7e22ce', border: '#e9d5ff' }, // Purple
+            { bg: '#fae8ff', color: '#a21caf', border: '#f3ccff' }, // Fuchsia
+            { bg: '#fce7f3', color: '#be185d', border: '#fbcfe8' }, // Pink
+            { bg: '#ffe4e6', color: '#be123c', border: '#fecdd3' }  // Rose
+        ];
+        
         const CURRENCY_SYMBOLS = { USD: '$', EUR: '€', GBP: '£', CAD: 'C$', AUD: 'A$', JPY: '¥', MXN: 'M$' };
 
         let activeCategoryFilters = new Set(Object.keys(CATEGORIES));
@@ -1009,6 +1068,163 @@
             updateSyncBtnState(); 
         });
 
+        // --- TAG SYSTEM LOGIC ---
+        function getTagStyle(tag) {
+            let hash = 0;
+            for (let i = 0; i < tag.length; i++) {
+                hash = tag.charCodeAt(i) + ((hash << 5) - hash);
+            }
+            const index = Math.abs(hash) % TAG_COLORS.length;
+            const c = TAG_COLORS[index];
+            return `background: ${c.bg}; color: ${c.color}; border: 1px solid ${c.border};`;
+        }
+
+        function getAllUniqueTags() {
+            const tagSet = new Set();
+            expenses.forEach(e => {
+                if (e.tags && Array.isArray(e.tags)) {
+                    e.tags.forEach(t => tagSet.add(t));
+                }
+            });
+            return Array.from(tagSet).sort();
+        }
+
+        function handleFormTagInput(e) {
+            const input = e.target;
+            const value = input.value;
+            const popup = document.getElementById('form-tag-suggestions');
+            
+            // If field is empty, show all tags to easily select
+            if (value.trim() === '') {
+                const allTags = getAllUniqueTags();
+                if (allTags.length > 0) {
+                    popup.innerHTML = allTags.map(t => `<div class="suggestion-item" onclick="selectTagForForm('${t}')"><span class="tag-pill" style="${getTagStyle(t)}">#${t}</span></div>`).join('');
+                    popup.style.display = 'block';
+                    popup.style.top = (input.offsetTop + input.offsetHeight) + 'px';
+                } else {
+                    popup.style.display = 'none';
+                }
+                return;
+            }
+
+            const cursorPos = input.selectionStart;
+            const textBeforeCursor = value.substring(0, cursorPos);
+            const words = textBeforeCursor.split(/\s+/);
+            const currentWord = words[words.length - 1];
+
+            if (currentWord.startsWith('#')) {
+                const query = currentWord.substring(1).toLowerCase();
+                const allTags = getAllUniqueTags();
+                const matches = allTags.filter(t => t.toLowerCase().includes(query));
+
+                if (matches.length > 0) {
+                    popup.innerHTML = matches.map(t => `<div class="suggestion-item" onclick="selectTagForForm('${t}')"><span class="tag-pill" style="${getTagStyle(t)}">#${t}</span></div>`).join('');
+                    popup.style.display = 'block';
+                    popup.style.top = (input.offsetTop + input.offsetHeight) + 'px';
+                } else {
+                    popup.style.display = 'none';
+                }
+            } else {
+                popup.style.display = 'none';
+            }
+        }
+
+        function selectTagForForm(tag) {
+            const input = document.getElementById('exp-tags');
+            const value = input.value;
+            
+            if (value.trim() === '') {
+                input.value = '#' + tag + ' ';
+            } else {
+                const cursorPos = input.selectionStart;
+                const textBeforeCursor = value.substring(0, cursorPos);
+                const wordsBefore = textBeforeCursor.split(/\s+/);
+                const currentWord = wordsBefore[wordsBefore.length - 1];
+                
+                if (currentWord.startsWith('#')) {
+                    wordsBefore[wordsBefore.length - 1] = '#' + tag;
+                    const newTextBefore = wordsBefore.join(' ') + ' ';
+                    input.value = newTextBefore + value.substring(cursorPos);
+                } else {
+                    input.value = value + (value.endsWith(' ') ? '' : ' ') + '#' + tag + ' ';
+                }
+            }
+            document.getElementById('form-tag-suggestions').style.display = 'none';
+            input.focus();
+        }
+
+        function handleSearchInput(e) {
+            handleSearchChange(); // Trigger the standard search timeout
+            
+            const input = e.target;
+            const value = input.value;
+            const popup = document.getElementById('search-tag-suggestions');
+            
+            if (value.trim() === '') {
+                const allTags = getAllUniqueTags();
+                if (allTags.length > 0) {
+                    popup.innerHTML = allTags.map(t => `<div class="suggestion-item" onclick="selectTagForSearch('${t}')"><span class="tag-pill" style="${getTagStyle(t)}">#${t}</span></div>`).join('');
+                    popup.style.display = 'block';
+                } else {
+                    popup.style.display = 'none';
+                }
+                return;
+            }
+
+            const cursorPos = input.selectionStart;
+            const textBeforeCursor = value.substring(0, cursorPos);
+            const words = textBeforeCursor.split(/\s+/);
+            const currentWord = words[words.length - 1];
+
+            if (currentWord.startsWith('#')) {
+                const query = currentWord.substring(1).toLowerCase();
+                const allTags = getAllUniqueTags();
+                const matches = allTags.filter(t => t.toLowerCase().includes(query));
+
+                if (matches.length > 0) {
+                    popup.innerHTML = matches.map(t => `<div class="suggestion-item" onclick="selectTagForSearch('${t}')"><span class="tag-pill" style="${getTagStyle(t)}">#${t}</span></div>`).join('');
+                    popup.style.display = 'block';
+                } else {
+                    popup.style.display = 'none';
+                }
+            } else {
+                popup.style.display = 'none';
+            }
+        }
+
+        function selectTagForSearch(tag) {
+            const input = document.getElementById('search-filter');
+            const value = input.value;
+            
+            if (value.trim() === '') {
+                input.value = '#' + tag + ' ';
+            } else {
+                const cursorPos = input.selectionStart;
+                const textBeforeCursor = value.substring(0, cursorPos);
+                const wordsBefore = textBeforeCursor.split(/\s+/);
+                const currentWord = wordsBefore[wordsBefore.length - 1];
+                
+                if (currentWord.startsWith('#')) {
+                    wordsBefore[wordsBefore.length - 1] = '#' + tag;
+                    const newTextBefore = wordsBefore.join(' ') + ' ';
+                    input.value = newTextBefore + value.substring(cursorPos);
+                } else {
+                    input.value = value + (value.endsWith(' ') ? '' : ' ') + '#' + tag + ' ';
+                }
+            }
+            
+            document.getElementById('search-tag-suggestions').style.display = 'none';
+            input.focus();
+            handleSearchChange(); 
+        }
+
+        // Close popups when clicking outside
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('#exp-tags')) document.getElementById('form-tag-suggestions').style.display = 'none';
+            if (!e.target.closest('#search-filter')) document.getElementById('search-tag-suggestions').style.display = 'none';
+        });
+        // ------------------------
+
         function openNotesModal() {
             document.getElementById('notes-overlay').classList.add('active');
             document.getElementById('auto-color-toggle').checked = autoColorNotes;
@@ -1026,14 +1242,15 @@
                 isNotesDirty = false;
             }
         }
-// --- SECURE HASHING FOR DATABASE ACCESS ---
-async function generateAccessHash(password) {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(password);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
+
+        async function generateAccessHash(password) {
+            const encoder = new TextEncoder();
+            const data = encoder.encode(password);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
         function closeNotesModal() {
             document.getElementById('notes-overlay').classList.remove('active');
             if (quill) {
@@ -1109,11 +1326,7 @@ async function generateAccessHash(password) {
         }
 
         // --- SEARCH NOTES LOGIC ---
-        // --- EXISTING FUNCTION (UPDATED) ---
-        
-// --- SEARCH NOTES LOGIC ---
         function searchNotes() {
-            // Hide ToC popup as soon as user types
             const popup = document.getElementById('notes-toc-popup');
             if (popup) popup.style.display = 'none';
 
@@ -1133,18 +1346,16 @@ async function generateAccessHash(password) {
             }
             countEl.innerText = count > 0 ? `${count}` : "0";
         }
-        // --- NEW TOC FUNCTIONS ---
+        
         function showNotesToC() {
             const popup = document.getElementById('notes-toc-popup');
             const searchInput = document.getElementById('notes-search');
             
-            // Do not show if the user is currently searching text
             if (searchInput.value.trim().length > 0) {
                 popup.style.display = 'none';
                 return;
             }
 
-            // Grab all Heading 2 elements from inside the Quill editor
             const headers = document.querySelectorAll('#quill-editor .ql-editor h2');
             
             if (headers.length === 0) {
@@ -1152,34 +1363,26 @@ async function generateAccessHash(password) {
             } else {
                 let html = '';
                 headers.forEach((h2, index) => {
-                    // Assign a temporary ID if it doesn't have one to anchor the scroll
                     if (!h2.id) h2.id = 'note-header-' + index;
-                    
-                    // Sanitize text
                     const text = h2.innerText || 'Header';
                     html += `<div class="toc-item" onclick="jumpToNoteHeader('${h2.id}')" title="${text}">${text}</div>`;
                 });
                 popup.innerHTML = html;
             }
-            
             popup.style.display = 'block';
         }
 
         function jumpToNoteHeader(id) {
             const targetHeader = document.getElementById(id);
             if (targetHeader) {
-                // Quill's scrollable container is the .ql-editor div
                 const editorBody = document.querySelector('#quill-editor .ql-editor');
-                // Scroll smoothly to the header's relative top position
                 editorBody.scrollTo({ top: targetHeader.offsetTop - 10, behavior: 'smooth' });
             }
             
-            // Hide popup and remove focus from search bar so it doesn't immediately pop back up
             document.getElementById('notes-toc-popup').style.display = 'none';
             document.getElementById('notes-search').blur();
         }
 
-        // Global listener to close the ToC popup if the user clicks anywhere outside it
         document.addEventListener('click', function(e) {
             const popup = document.getElementById('notes-toc-popup');
             const searchInput = document.getElementById('notes-search');
@@ -1210,7 +1413,7 @@ async function generateAccessHash(password) {
             document.getElementById('notes-search-count').innerText = "";
         }
 
-        // --- 1B. CALCULATOR LOGIC & SMART PASTE ---
+        // --- CALCULATOR LOGIC ---
         let calcExpr = ""; let lastActiveInput = null;
 
         document.addEventListener('focusin', (e) => {
@@ -1293,7 +1496,6 @@ async function generateAccessHash(password) {
                 else fxInput.value = '';
             } else {
                 const fxVal = parseFloat(fxInput.value);
-                // FIX: Changed usdVal to fxVal here
                 if (!isNaN(fxVal)) usdInput.value = (fxVal / currentExchangeRate).toFixed(2);
                 else usdInput.value = '';
             }
@@ -1310,20 +1512,19 @@ async function generateAccessHash(password) {
                 else fxInput.value = '';
             } else {
                 const fxVal = parseFloat(fxInput.value);
-                // FIX: Changed usdVal to fxVal here
                 if (!isNaN(fxVal)) usdInput.value = (fxVal / currentExchangeRate).toFixed(2);
                 else usdInput.value = '';
             }
         }
 
-        // --- 1C. INSIGHT FILTERING ---
+        // --- INSIGHT FILTERING ---
         function filterByInsight(name, cat) {
             insightFilter = { name, cat };
             document.getElementById('search-filter').scrollIntoView({behavior: 'smooth', block: 'center'});
             updateUI();
         }
 
-        // --- 2. INITIALIZATION & DATA REPAIR ---
+        // --- INITIALIZATION & DATA REPAIR ---
         document.getElementById('exp-date').valueAsDate = new Date();
 
         function getColor(name) {
@@ -1358,11 +1559,12 @@ async function generateAccessHash(password) {
                 if (!e.timestamp) e.timestamp = Date.now() + i; 
                 if (!e.localCurrency) e.localCurrency = 'USD';
                 if (!e.localAmount) e.localAmount = e.amount;
+                if (!e.tags) e.tags = []; // New tags array
             });
         }
 
         function saveState(skipAutoSync = false) {
-            localLastModified = Date.now(); // Update local modification time
+            localLastModified = Date.now();
             
             const payload = { 
                 tripName, tripComment, participants, participantGroups, expenses, 
@@ -1378,7 +1580,6 @@ async function generateAccessHash(password) {
                 cloudSyncTimeout = setTimeout(silentCloudSave, 3000); 
             }
             
-            // Clear any sync warnings since local is now the newest
             compareVersions();
         }
 
@@ -1435,6 +1636,7 @@ async function generateAccessHash(password) {
                 document.getElementById('global-currency').value = ""; document.getElementById('ledger-sort').value = "date-desc";
                 document.getElementById('trip-name').value = tripName; document.getElementById('trip-comment').value = tripComment;
                 document.getElementById('exp-category').value = 'Other';
+                document.getElementById('exp-tags').value = '';
                 document.getElementById('per-day-toggle').checked = false;
                 document.getElementById('trip-days-input').style.display = 'none'; document.getElementById('trip-days-input').value = 1;
                 document.getElementById('qc-usd').value = ''; document.getElementById('qc-foreign').value = '';
@@ -1468,7 +1670,7 @@ async function generateAccessHash(password) {
             if (!isNaN(val) && val > 0) { tripDays = val; saveState(); updateUI(); }
         }
 
-        // --- 3. EXPORT / IMPORT / CRYPTO / PDF ---
+        // --- EXPORT / IMPORT / CRYPTO / PDF ---
         const enc = new TextEncoder();
         const dec = new TextDecoder();
 
@@ -1518,12 +1720,10 @@ async function generateAccessHash(password) {
             }
         }
 
-        // --- UNIVERSAL OS-LEVEL FILE SAVER ---
         async function saveFileUniversal(content, fileName, mimeType, fileHandle = null) {
             const blob = new Blob([content], { type: mimeType });
             const file = new File([blob], fileName, { type: mimeType });
 
-            // If we already secured a FileHandle (used for Secure Save), write to it immediately
             if (fileHandle) {
                 try {
                     const writable = await fileHandle.createWritable();
@@ -1533,7 +1733,6 @@ async function generateAccessHash(password) {
                 } catch(err) { console.warn('File handle write failed', err); }
             }
 
-            // 1. Try Native Web Share API (Best for Mobile)
             if (navigator.canShare && navigator.canShare({ files: [file] })) {
                 try {
                     await navigator.share({ files: [file], title: fileName });
@@ -1541,7 +1740,6 @@ async function generateAccessHash(password) {
                 } catch (err) { if (err.name === 'AbortError') return; }
             }
 
-            // 2. Try Modern File System Access API (Best for Desktop)
             if (window.showSaveFilePicker) {
                 try {
                     const handle = await window.showSaveFilePicker({
@@ -1555,7 +1753,6 @@ async function generateAccessHash(password) {
                 } catch (err) { if (err.name === 'AbortError') return; }
             }
 
-            // 3. Fallback: Standard Download Link
             try {
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
@@ -1568,7 +1765,6 @@ async function generateAccessHash(password) {
             } catch (err) { alert("File save failed entirely."); }
         }
 
-        // --- UPDATED EXPORT FUNCTIONS ---
         function exportTrip() {
             const payload = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, tripNotesDelta, autoColorNotes, lastModified: localLastModified });
             const fileName = tripName.replace(/\s+/g, '_') + ".json";
@@ -1579,7 +1775,6 @@ async function generateAccessHash(password) {
             const fileName = tripName.replace(/\s+/g, '_') + ".tsplit";
             let fileHandle = null;
 
-            // Step 1: Open the Save Dialog IMMEDIATELY on click (solves the browser timeout trap)
             if (window.showSaveFilePicker) {
                 try {
                     fileHandle = await window.showSaveFilePicker({
@@ -1587,17 +1782,15 @@ async function generateAccessHash(password) {
                         types: [{ description: 'Trip File', accept: { 'text/plain': ['.tsplit'] } }]
                     });
                 } catch (err) {
-                    if (err.name === 'AbortError') return; // User cancelled the save box
+                    if (err.name === 'AbortError') return;
                 }
             }
 
-            // Step 2: Ask for the password NOW that we have permission to save
             const password = prompt("⚠️ Secure Save ⚠️\nEnter a password to encrypt this trip file.\n\nWARNING: If you forget this password, your data cannot be recovered.");
             if (!password) return; 
             
             const payload = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, tripNotesDelta, autoColorNotes, lastModified: localLastModified });
             
-            // Step 3: Encrypt and Write
             try {
                 const encryptedData = await encryptData(password, payload);
                 const securePayload = JSON.stringify(encryptedData);
@@ -1699,7 +1892,6 @@ async function generateAccessHash(password) {
                 html += `</tbody></table>`;
             }
 
-           // ---- SETTLEMENTS SECTION ----
             if (currentGroupBalances && currentGroupBalances.length > 0) {
                 html += `<div style="page-break-inside: avoid;"><h2 class="pdf-header">💸 Final Settlement</h2><h3 class="pdf-subheader">Overall Standing</h3><ul style="font-size: 13px; line-height: 1.6; padding-left: 20px;">`;
                 currentGroupBalances.forEach(b => {
@@ -1722,7 +1914,8 @@ async function generateAccessHash(password) {
             if (currentFilteredExpenses.length > 0) {
                 html += `<h2 class="pdf-header">📜 Activity Ledger</h2><table><thead style="background: #f1f5f9; display: table-header-group;"><tr><th style="width: 15%; text-align: left;">Date</th><th style="width: 30%; text-align: left;">Description</th><th style="width: 18%; text-align: left;">Category</th><th style="width: 17%; text-align: left;">Paid By</th><th style="width: 20%; text-align: right;">Amount</th></tr></thead><tbody>`;
                 currentFilteredExpenses.forEach(e => {
-                    html += `<tr style="page-break-inside: avoid;"><td>${e.date}</td><td><strong>${e.desc}</strong></td><td>${CATEGORIES[e.category]?.icon || ''} ${e.category}</td><td>${shortName(e.payer)}</td><td style="text-align: right; font-weight: bold;">${formatMoney(e.amount)}</td></tr>`;
+                    const tagStr = e.tags && e.tags.length ? ` <span style="color:#4f46e5;font-size:10px;">[${e.tags.map(t=>'#'+t).join(' ')}]</span>` : '';
+                    html += `<tr style="page-break-inside: avoid;"><td>${e.date}</td><td><strong>${e.desc}</strong>${tagStr}</td><td>${CATEGORIES[e.category]?.icon || ''} ${e.category}</td><td>${shortName(e.payer)}</td><td style="text-align: right; font-weight: bold;">${formatMoney(e.amount)}</td></tr>`;
                 });
                 html += `</tbody></table>`;
             }
@@ -1746,7 +1939,7 @@ async function generateAccessHash(password) {
         }
 
 
-      // --- 4. SECURE SUPABASE SYNC (SPLIT KEY ARCHITECTURE) ---
+      // --- SECURE SUPABASE SYNC ---
         function getSupabaseClient() {
             if (supabaseClient) return supabaseClient;
             const access = localStorage.getItem('tripSplitter_cloudAccess');
@@ -1784,64 +1977,63 @@ async function generateAccessHash(password) {
         }
 
         function openChangePinModal() {
-    if (!supabaseClient || (localStorage.getItem('tripSplitter_hasPin') === 'true' && !sessionPin)) {
-        alert("Please unlock the cloud first before changing the PIN.");
-        return;
-    }
-    document.getElementById('cloud-settings-overlay').classList.remove('active');
-    document.getElementById('change-pin-overlay').classList.add('active');
-    document.getElementById('current-session-pin').value = '';
-    document.getElementById('new-session-pin').value = '';
-}
-
-async function submitChangePin() {
-    const currentPinInput = document.getElementById('current-session-pin').value.trim();
-    const newPin = document.getElementById('new-session-pin').value.trim();
-    
-    // Validate the current PIN before proceeding
-    if ((sessionPin || "") !== currentPinInput) {
-        alert("❌ Incorrect current PIN.");
-        return;
-    }
-
-    const devKey = localStorage.getItem('tripSplitter_deviceKey');
-    const newFullKey = devKey + newPin;
-    const client = getSupabaseClient();
-
-    const btn = document.getElementById('submit-change-pin-btn');
-    btn.innerText = "⏳ Re-encrypting...";
-    btn.disabled = true;
-
-    try {
-        const { data } = await client.from('trip_sync').select('id, trip_data').in('id', ['manual_trip', 'manual_trip_2', 'manual_trip_3', 'auto_trip']);
-
-        if (data && data.length > 0) {
-            for (const row of data) {
-                let parsed = typeof row.trip_data === 'string' ? JSON.parse(row.trip_data) : row.trip_data;
-                if (parsed && parsed.ciphertext) {
-                   const oldFullKey = devKey + (sessionPin || "");
-                   const decrypted = await decryptData(oldFullKey, parsed);
-                   if (decrypted) {
-                       const reEncrypted = await encryptData(newFullKey, decrypted);
-                       await client.from('trip_sync').update({ trip_data: reEncrypted }).eq('id', row.id);
-                   }
-                }
+            if (!supabaseClient || (localStorage.getItem('tripSplitter_hasPin') === 'true' && !sessionPin)) {
+                alert("Please unlock the cloud first before changing the PIN.");
+                return;
             }
+            document.getElementById('cloud-settings-overlay').classList.remove('active');
+            document.getElementById('change-pin-overlay').classList.add('active');
+            document.getElementById('current-session-pin').value = '';
+            document.getElementById('new-session-pin').value = '';
         }
 
-        sessionPin = newPin;
-        localStorage.setItem('tripSplitter_hasPin', newPin ? 'true' : 'false');
-        alert("✅ PIN changed and all cloud data successfully re-encrypted.");
-        document.getElementById('change-pin-overlay').classList.remove('active');
-        updateSyncBtnState();
+        async function submitChangePin() {
+            const currentPinInput = document.getElementById('current-session-pin').value.trim();
+            const newPin = document.getElementById('new-session-pin').value.trim();
+            
+            if ((sessionPin || "") !== currentPinInput) {
+                alert("❌ Incorrect current PIN.");
+                return;
+            }
 
-    } catch (e) {
-        console.error("Change PIN error", e);
-        alert("❌ Error changing PIN.");
-    }
-    btn.innerText = "Save New PIN";
-    btn.disabled = false;
-}
+            const devKey = localStorage.getItem('tripSplitter_deviceKey');
+            const newFullKey = devKey + newPin;
+            const client = getSupabaseClient();
+
+            const btn = document.getElementById('submit-change-pin-btn');
+            btn.innerText = "⏳ Re-encrypting...";
+            btn.disabled = true;
+
+            try {
+                const { data } = await client.from('trip_sync').select('id, trip_data').in('id', ['manual_trip', 'manual_trip_2', 'manual_trip_3', 'auto_trip']);
+
+                if (data && data.length > 0) {
+                    for (const row of data) {
+                        let parsed = typeof row.trip_data === 'string' ? JSON.parse(row.trip_data) : row.trip_data;
+                        if (parsed && parsed.ciphertext) {
+                           const oldFullKey = devKey + (sessionPin || "");
+                           const decrypted = await decryptData(oldFullKey, parsed);
+                           if (decrypted) {
+                               const reEncrypted = await encryptData(newFullKey, decrypted);
+                               await client.from('trip_sync').update({ trip_data: reEncrypted }).eq('id', row.id);
+                           }
+                        }
+                    }
+                }
+
+                sessionPin = newPin;
+                localStorage.setItem('tripSplitter_hasPin', newPin ? 'true' : 'false');
+                alert("✅ PIN changed and all cloud data successfully re-encrypted.");
+                document.getElementById('change-pin-overlay').classList.remove('active');
+                updateSyncBtnState();
+
+            } catch (e) {
+                console.error("Change PIN error", e);
+                alert("❌ Error changing PIN.");
+            }
+            btn.innerText = "Save New PIN";
+            btn.disabled = false;
+        }
 
         function openNuclearResetModal() {
             if (!getSupabaseClient()) {
@@ -1854,42 +2046,40 @@ async function submitChangePin() {
         }
 
         async function submitNuclearReset() {
-    const enteredCode = document.getElementById('nuclear-reset-confirm').value.trim();
-    const savedAccessCode = localStorage.getItem('tripSplitter_cloudAccess');
+            const enteredCode = document.getElementById('nuclear-reset-confirm').value.trim();
+            const savedAccessCode = localStorage.getItem('tripSplitter_cloudAccess');
 
-    // Failsafe: Ensure they are actually connected
-    if (!savedAccessCode) {
-        alert("No active cloud connection found to reset.");
-        document.getElementById('nuclear-reset-overlay').classList.remove('active');
-        return;
-    }
+            if (!savedAccessCode) {
+                alert("No active cloud connection found to reset.");
+                document.getElementById('nuclear-reset-overlay').classList.remove('active');
+                return;
+            }
 
-    // Validate the entered code against the saved code
-    if (enteredCode !== savedAccessCode) {
-        alert("❌ Incorrect Access Code.\n\nThe code you entered does not match the active connection. Reset aborted.");
-        return;
-    }
+            if (enteredCode !== savedAccessCode) {
+                alert("❌ Incorrect Access Code.\n\nThe code you entered does not match the active connection. Reset aborted.");
+                return;
+            }
 
-    const btn = document.getElementById('submit-nuclear-btn');
-    btn.innerText = "⏳ Purging...";
-    btn.disabled = true;
+            const btn = document.getElementById('submit-nuclear-btn');
+            btn.innerText = "⏳ Purging...";
+            btn.disabled = true;
 
-    const client = getSupabaseClient();
-    if (client) {
-        const { error } = await client.from('trip_sync').delete().in('id', ['manual_trip', 'manual_trip_2', 'manual_trip_3', 'auto_trip']);
-        if (error) {
-            console.error("Delete error", error);
-            alert("Error deleting remote data. Check your connection/access code.");
+            const client = getSupabaseClient();
+            if (client) {
+                const { error } = await client.from('trip_sync').delete().in('id', ['manual_trip', 'manual_trip_2', 'manual_trip_3', 'auto_trip']);
+                if (error) {
+                    console.error("Delete error", error);
+                    alert("Error deleting remote data. Check your connection/access code.");
+                }
+            }
+
+            resetSupabaseConfig(true);
+
+            alert("☢️ Database fully wiped and cloud disconnected.");
+            document.getElementById('nuclear-reset-overlay').classList.remove('active');
+            btn.innerText = "Delete Everything";
+            btn.disabled = false;
         }
-    }
-
-    resetSupabaseConfig(true);
-
-    alert("☢️ Database fully wiped and cloud disconnected.");
-    document.getElementById('nuclear-reset-overlay').classList.remove('active');
-    btn.innerText = "Delete Everything";
-    btn.disabled = false;
-}
 
         function openCloudSetupModal() {
             document.getElementById('cloud-setup-overlay').classList.add('active');
@@ -1928,13 +2118,11 @@ async function submitChangePin() {
                 tempClient = supabase.createClient(parts[0], parts[1]);
             } catch(e) { alert("Invalid Access Code format. Ensure it is Base64 encoded."); return; }
 
-            // Verify the credentials against existing data before saving
             const btn = document.querySelector('#cloud-setup-overlay button:last-child');
             const origText = btn.innerText; btn.innerText = "Verifying..."; btn.disabled = true;
 
             let isValid = true;
             try {
-                // Fetch the actual slots to test decryption
                 const { data } = await tempClient.from('trip_sync').select('trip_data').in('id', ['manual_trip', 'manual_trip_2', 'manual_trip_3', 'auto_trip']);
                 if (data && data.length > 0) {
                     let hasEncryptedData = false;
@@ -1945,11 +2133,10 @@ async function submitChangePin() {
                         if (parsed && parsed.ciphertext) {
                             hasEncryptedData = true;
                             const decrypted = await decryptData(devKey + pin, parsed);
-                            if (decrypted) decryptionSucceeded = true; // At least one file decrypted successfully
+                            if (decrypted) decryptionSucceeded = true; 
                         }
                     }
                     
-                    // If we found locked files but could not open ANY of them, the password combo is wrong
                     if (hasEncryptedData && !decryptionSucceeded) {
                         isValid = false;
                     }
@@ -1978,7 +2165,6 @@ async function submitChangePin() {
             const pin = document.getElementById('unlock-session-pin').value.trim();
             if (!pin) return; 
 
-            // Verify the PIN against existing cloud data before accepting
             const btn = document.querySelector('#cloud-pin-overlay button:last-child');
             const origText = btn.innerText; btn.innerText = "Verifying..."; btn.disabled = true;
 
@@ -2028,7 +2214,7 @@ async function submitChangePin() {
                 }
             }
 
-            pinFailedAttempts = 0; // Reset counter on success
+            pinFailedAttempts = 0;
             sessionPin = pin;
             document.getElementById('cloud-pin-overlay').classList.remove('active');
             updateSyncBtnState(); fetchCloudTripNames();
@@ -2151,70 +2337,68 @@ async function submitChangePin() {
             
             compareVersions();
         }
-async function saveToSupabase(targetId) {
-    if (cloudTripNames[targetId] && !cloudTripNames[targetId].includes("Locked") && cloudTripNames[targetId] !== "Empty" && cloudTripNames[targetId] !== tripName) {
-        if (!confirm(`⚠️ Warning: Cloud slot currently holds a different trip ("${cloudTripNames[targetId]}").\n\nAre you sure you want to overwrite it with "${tripName}"?`)) return;
-    }
 
-    const key = await getValidCloudKey(); if (!key) return;
-    const client = getSupabaseClient(); if (!client) return;
-
-    const payloadStr = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, tripNotesDelta, autoColorNotes, lastModified: localLastModified });
-    
-    const btnId = targetId === 'manual_trip' ? 'cloud-save-btn-1' : (targetId === 'manual_trip_2' ? 'cloud-save-btn-2' : 'cloud-save-btn-3');
-    const btn = document.getElementById(btnId); btn.innerText = "⏳";
-    
-    try {
-        const encryptedData = await encryptData(key, payloadStr);
-        const accessHash = await generateAccessHash(key);
-        
-        // Use the secure RPC instead of upsert
-        const { error } = await client.rpc('save_secure_trip', {
-            p_id: targetId,
-            p_hash: accessHash,
-            p_data: encryptedData
-        });
-        
-        if (error) { console.error(error); alert("Error saving to cloud: " + error.message); } 
-        else { 
-            let slotName = targetId === 'manual_trip' ? 'Manual 1' : (targetId === 'manual_trip_2' ? 'Manual 2' : 'Manual 3');
-            alert(`✅ Securely encrypted and saved to ${slotName}!`); fetchCloudTripNames(); 
-        }
-    } catch (err) { alert("Encryption failed."); console.error(err); }
-    btn.innerText = "S";
-}
-        async function silentCloudSave() {
-    const key = await getValidCloudKey(true); if (!key) return;
-    const client = getSupabaseClient(); if (!client) return;
-    
-    const payloadStr = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, tripNotesDelta, autoColorNotes, lastModified: localLastModified });
-    const statusEl = document.getElementById('cloud-status');
-    
-    try {
-        const encryptedData = await encryptData(key, payloadStr);
-        const accessHash = await generateAccessHash(key);
-        
-        // Use the secure RPC instead of upsert
-        const { error } = await client.rpc('save_secure_trip', {
-            p_id: 'auto_trip',
-            p_hash: accessHash,
-            p_data: encryptedData
-        });
-        
-        if (error) { if(statusEl) statusEl.innerText = "❌ Auto-Sync Failed"; } 
-        else { 
-            if(statusEl) {
-                const now = new Date();
-                statusEl.innerHTML = `✅ Secured <span class="tabular-nums">${now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>`;
-                statusEl.style.color = "var(--green)";
-                setTimeout(() => { statusEl.style.color = "var(--secondary)"; }, 5000);
-                fetchCloudTripNames(); 
+        async function saveToSupabase(targetId) {
+            if (cloudTripNames[targetId] && !cloudTripNames[targetId].includes("Locked") && cloudTripNames[targetId] !== "Empty" && cloudTripNames[targetId] !== tripName) {
+                if (!confirm(`⚠️ Warning: Cloud slot currently holds a different trip ("${cloudTripNames[targetId]}").\n\nAre you sure you want to overwrite it with "${tripName}"?`)) return;
             }
-        }
-    } catch (err) { console.error("Silent save encryption failed.", err); }
-}
 
-        
+            const key = await getValidCloudKey(); if (!key) return;
+            const client = getSupabaseClient(); if (!client) return;
+
+            const payloadStr = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, tripNotesDelta, autoColorNotes, lastModified: localLastModified });
+            
+            const btnId = targetId === 'manual_trip' ? 'cloud-save-btn-1' : (targetId === 'manual_trip_2' ? 'cloud-save-btn-2' : 'cloud-save-btn-3');
+            const btn = document.getElementById(btnId); btn.innerText = "⏳";
+            
+            try {
+                const encryptedData = await encryptData(key, payloadStr);
+                const accessHash = await generateAccessHash(key);
+                
+                const { error } = await client.rpc('save_secure_trip', {
+                    p_id: targetId,
+                    p_hash: accessHash,
+                    p_data: encryptedData
+                });
+                
+                if (error) { console.error(error); alert("Error saving to cloud: " + error.message); } 
+                else { 
+                    let slotName = targetId === 'manual_trip' ? 'Manual 1' : (targetId === 'manual_trip_2' ? 'Manual 2' : 'Manual 3');
+                    alert(`✅ Securely encrypted and saved to ${slotName}!`); fetchCloudTripNames(); 
+                }
+            } catch (err) { alert("Encryption failed."); console.error(err); }
+            btn.innerText = "S";
+        }
+
+        async function silentCloudSave() {
+            const key = await getValidCloudKey(true); if (!key) return;
+            const client = getSupabaseClient(); if (!client) return;
+            
+            const payloadStr = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, tripNotesDelta, autoColorNotes, lastModified: localLastModified });
+            const statusEl = document.getElementById('cloud-status');
+            
+            try {
+                const encryptedData = await encryptData(key, payloadStr);
+                const accessHash = await generateAccessHash(key);
+                
+                const { error } = await client.rpc('save_secure_trip', {
+                    p_id: 'auto_trip',
+                    p_hash: accessHash,
+                    p_data: encryptedData
+                });
+                
+                if (error) { if(statusEl) statusEl.innerText = "❌ Auto-Sync Failed"; } 
+                else { 
+                    if(statusEl) {
+                        const now = new Date();
+                        statusEl.innerHTML = `✅ Secured <span class="tabular-nums">${now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>`;
+                        statusEl.style.color = "var(--green)";
+                        setTimeout(() => { statusEl.style.color = "var(--secondary)"; }, 5000);
+                        fetchCloudTripNames(); 
+                    }
+                }
+            } catch (err) { console.error("Silent save encryption failed.", err); }
+        }
 
         async function loadFromSupabase(targetId) {
             const key = await getValidCloudKey(); if (!key) return;
@@ -2272,7 +2456,38 @@ async function saveToSupabase(targetId) {
             btn.innerText = originalText;
         }
 
-        // --- 5. CURRENCY & FORMATTING ---
+        // --- HELPER FILTER LOGIC ---
+        function doesExpenseMatchFilters(e, groupsMap) {
+            const cat = e.category || 'Other';
+            if (insightFilter) {
+                const groupMembers = groupsMap[insightFilter.name] || [insightFilter.name];
+                const involvesTarget = groupMembers.includes(e.payer) || e.involved.some(p => groupMembers.includes(p));
+                return (cat === insightFilter.cat && involvesTarget);
+            } else {
+                if (!activeCategoryFilters.has(cat)) return false;
+                
+                const searchInputRaw = searchText.trim();
+                if (!searchInputRaw) return true;
+
+                let requiredTags = [];
+                let requiredText = [];
+                const parts = searchInputRaw.split(/\s+/);
+                parts.forEach(p => {
+                    if (p.startsWith('#') && p.length > 1) requiredTags.push(p.substring(1));
+                    else if (p !== '#') requiredText.push(p);
+                });
+
+                const expTags = (e.tags || []).map(t => t.toLowerCase());
+                const hasAllTags = requiredTags.every(rt => expTags.some(t => t.includes(rt)));
+                
+                const searchableText = `${e.desc} ${e.payer} ${e.notes || ''}`.toLowerCase();
+                const hasAllText = requiredText.every(rt => searchableText.includes(rt));
+
+                return hasAllTags && hasAllText;
+            }
+        }
+
+        // --- CURRENCY & FORMATTING ---
         async function fetchExchangeRate(targetCurrency, isSilent = false) {
             if (!targetCurrency || targetCurrency === 'USD') return false;
             try {
@@ -2316,7 +2531,6 @@ async function saveToSupabase(targetId) {
             const viewSelector = document.getElementById('view-currency');
             const viewContainer = document.getElementById('dashboard-currency-toggle');
             
-            // QUICK CONVERT ELEMENTS
             const qcContainer = document.getElementById('quick-convert-container');
             const qcForeignLabel = document.getElementById('qc-foreign-label');
             const qcNotesContainer = document.getElementById('notes-quick-convert-container');
@@ -2333,12 +2547,10 @@ async function saveToSupabase(targetId) {
                 viewHtml += `<option value="${secondaryCurrency}">🌎 ${secondaryCurrency} (${sym})</option>`;
                 viewContainer.style.display = 'flex';
                 
-                // Show Quick Convert & Update Label (Main Header)
                 qcContainer.style.display = 'flex';
                 qcForeignLabel.innerText = secondaryCurrency;
                 if (document.getElementById('qc-usd').value) quickConvert('usd');
 
-                // Show Quick Convert & Update Label (Notes Header)
                 if (qcNotesContainer) {
                     qcNotesContainer.style.display = 'flex';
                     qcNotesForeignLabel.innerText = secondaryCurrency;
@@ -2378,7 +2590,7 @@ async function saveToSupabase(targetId) {
             return ` <span class="tabular-nums" style="display: inline-block; font-size: 0.75rem; color: var(--primary); font-weight: 700; margin-left: 4px;">(${formatMoney(amount / tripDays)}/d)</span>`;
         }
 
-        // --- 6. PARTICIPANTS CRUD ---
+        // --- PARTICIPANTS CRUD ---
         function handleParticipantKeyPress(event) { if (event.key === 'Enter') { event.preventDefault(); addParticipant(); } }
 
         function addParticipant() {
@@ -2461,7 +2673,7 @@ async function saveToSupabase(targetId) {
             } else { alert("No saved setup found."); }
         }
 
-        // --- 7. INPUT FORM LOGIC ---
+        // --- INPUT FORM LOGIC ---
         function updateFormColor() {
             const cat = document.getElementById('exp-category').value;
             const info = CATEGORIES[cat] || CATEGORIES['Other'];
@@ -2567,7 +2779,7 @@ async function saveToSupabase(targetId) {
             }
         }
 
-        // --- 8. EXPENSE CRUD ---
+        // --- EXPENSE CRUD ---
         function handleSortChange() { currentSort = document.getElementById('ledger-sort').value; saveState(); updateUI(); }
         
         function handleSearchChange() { 
@@ -2595,6 +2807,10 @@ async function saveToSupabase(targetId) {
         function saveExpense() {
             const category = document.getElementById('exp-category').value;
             const desc = document.getElementById('exp-desc').value;
+            
+            const rawTags = document.getElementById('exp-tags').value;
+            const tags = (rawTags.match(/#(\w+)/g) || []).map(t => t.substring(1).toLowerCase());
+            
             const notes = document.getElementById('exp-notes').value.trim();
             const date = document.getElementById('exp-date').value;
             const localAmount = parseFloat(document.getElementById('exp-amount').value);
@@ -2669,7 +2885,7 @@ async function saveToSupabase(targetId) {
                 const index = expenses.findIndex(e => e.id === editingExpenseId);
                 if (index > -1) {
                     expenses[index] = { 
-                        id: editingExpenseId, category, desc, notes, date, amount: amountUsd, localAmount, localCurrency, 
+                        id: editingExpenseId, category, desc, tags, notes, date, amount: amountUsd, localAmount, localCurrency, 
                         payer, splitType, involved: selected, personalExpenses: personalExpensesUsd, fixedShares: fixedSharesUsd, 
                         percentageShares, ignored: expenses[index].ignored, timestamp: expenses[index].timestamp 
                     };
@@ -2677,11 +2893,13 @@ async function saveToSupabase(targetId) {
                 cancelEdit(); 
             } else {
                 expenses.push({ 
-                    id: Math.random().toString(36).substr(2, 9), category, desc, notes, date, amount: amountUsd, localAmount, localCurrency, 
+                    id: Math.random().toString(36).substr(2, 9), category, desc, tags, notes, date, amount: amountUsd, localAmount, localCurrency, 
                     payer, splitType, involved: selected, personalExpenses: personalExpensesUsd, fixedShares: fixedSharesUsd,
                     percentageShares, ignored: false, timestamp: Date.now() 
                 });
-                document.getElementById('exp-desc').value = ''; document.getElementById('exp-notes').value = '';
+                document.getElementById('exp-desc').value = ''; 
+                document.getElementById('exp-tags').value = '';
+                document.getElementById('exp-notes').value = '';
                 document.getElementById('exp-amount').value = ''; 
                 document.querySelectorAll('.part-personal').forEach(input => input.value = ''); 
                 document.querySelectorAll('.part-fixed').forEach(input => input.value = ''); 
@@ -2699,6 +2917,7 @@ async function saveToSupabase(targetId) {
             document.getElementById('activity-title-text').innerText = "✏️ Edit Activity";
             document.getElementById('exp-category').value = exp.category || 'Other';
             document.getElementById('exp-desc').value = exp.desc;
+            document.getElementById('exp-tags').value = exp.tags ? exp.tags.map(t => '#' + t).join(' ') + ' ' : '';
             document.getElementById('exp-notes').value = exp.notes || '';
             document.getElementById('exp-date').value = exp.date;
             document.getElementById('exp-currency').value = exp.localCurrency || 'USD';
@@ -2816,6 +3035,7 @@ async function saveToSupabase(targetId) {
             document.getElementById('cancel-edit-btn').style.display = "none";
             document.getElementById('exp-category').value = 'Other';
             document.getElementById('exp-desc').value = '';
+            document.getElementById('exp-tags').value = '';
             document.getElementById('exp-notes').value = '';
             document.getElementById('exp-amount').value = '';
             document.getElementById('exp-payer').value = '';
@@ -2834,7 +3054,7 @@ async function saveToSupabase(targetId) {
             updateUI();
         }
 
-        // --- 9. RENDERING & UI UPDATES ---
+        // --- RENDERING & UI UPDATES ---
         function toggleCategoryFilter(cat) {
             if (activeCategoryFilters.has(cat)) activeCategoryFilters.delete(cat);
             else activeCategoryFilters.add(cat);
@@ -2903,7 +3123,6 @@ async function saveToSupabase(targetId) {
                 updateSplitTypeUI();
             }
 
-            // Calculations
             const groupsMap = {};
             participants.forEach(p => {
                 const gName = participantGroups[p] || p;
@@ -2942,23 +3161,11 @@ async function saveToSupabase(targetId) {
             let payerCounts = {};
 
             expenses.forEach(e => {
-                const cat = e.category || 'Other';
-                
-                // Search & Insight filtering check
-                let passesFilter = true;
-                if (insightFilter) {
-                    const groupMembers = groupsMap[insightFilter.name] || [insightFilter.name];
-                    const involvesTarget = groupMembers.includes(e.payer) || e.involved.some(p => groupMembers.includes(p));
-                    if (cat !== insightFilter.cat || !involvesTarget) passesFilter = false;
-                } else {
-                    const searchMatch = !searchText || e.desc.toLowerCase().includes(searchText) || e.payer.toLowerCase().includes(searchText) || (e.notes && e.notes.toLowerCase().includes(searchText));
-                    if (!activeCategoryFilters.has(cat) || !searchMatch) passesFilter = false;
-                }
-
-                if (e.ignored || !passesFilter) return; 
+                if (e.ignored || !doesExpenseMatchFilters(e, groupsMap)) return; 
                 
                 validActiveCount++;
                 const payerGroup = participantGroups[e.payer] || e.payer;
+                const cat = e.category || 'Other';
                 
                 if (cat !== 'Transfer') {
                     totalSpent += e.amount;
@@ -3049,13 +3256,11 @@ async function saveToSupabase(targetId) {
                 }
             });
             
-            // Calculate Most Expensive Day
             let mostExpensiveDay = { date: '', amount: 0 };
             Object.keys(dateTotals).forEach(d => {
                 if (dateTotals[d] > mostExpensiveDay.amount) mostExpensiveDay = { date: d, amount: dateTotals[d] };
             });
             
-            // Calculate Trip Banker
             let tripBanker = { name: 'None', paid: 0, count: 0 };
             Object.keys(groupStats).forEach(gName => {
                 groupStats[gName].members.forEach(m => {
@@ -3078,19 +3283,7 @@ async function saveToSupabase(targetId) {
             else if (currentSort === 'amt-asc') { sorted.sort((a,b) => a.amount - b.amount || a.timestamp - b.timestamp); } 
             else if (currentSort === 'payer-asc') { sorted.sort((a,b) => a.payer.localeCompare(b.payer) || new Date(b.date) - new Date(a.date) || b.timestamp - a.timestamp); }
 
-            const filteredExpenses = sorted.filter(e => {
-                const cat = e.category || 'Other';
-                let passesFilter = true;
-                if (insightFilter) {
-                    const groupMembers = groupsMap[insightFilter.name] || [insightFilter.name];
-                    const involvesTarget = groupMembers.includes(e.payer) || e.involved.some(p => groupMembers.includes(p));
-                    if (cat !== insightFilter.cat || !involvesTarget) passesFilter = false;
-                } else {
-                    const searchMatch = !searchText || e.desc.toLowerCase().includes(searchText) || e.payer.toLowerCase().includes(searchText) || (e.notes && e.notes.toLowerCase().includes(searchText));
-                    if (!activeCategoryFilters.has(cat) || !searchMatch) passesFilter = false;
-                }
-                return passesFilter;
-            });
+            const filteredExpenses = sorted.filter(e => doesExpenseMatchFilters(e, groupsMap));
             
             const searchInput = document.getElementById('search-filter');
             const clearBtn = document.getElementById('clear-search-btn');
@@ -3166,6 +3359,8 @@ async function saveToSupabase(targetId) {
                     }).join(', ');
                 }
 
+                const tagsHtml = (e.tags || []).length > 0 ? `<div style="margin-top: 6px;">` + e.tags.map(t => `<span class="tag-pill" style="${getTagStyle(t)}" onclick="selectTagForSearch('${t}')" title="Filter by #${t}">#${t}</span>`).join('') + `</div>` : '';
+
                 let notesHtml = '';
                 if (e.notes && e.notes.trim() !== '') {
                     const isUrl = e.notes.startsWith('http://') || e.notes.startsWith('https://');
@@ -3189,6 +3384,7 @@ async function saveToSupabase(targetId) {
                                 <strong style="color: var(--text);">For:</strong> ${breakdownHtml}
                             </div>
                         </span>
+                        ${tagsHtml}
                         ${notesHtml}
                     </div>
                     <div class="expense-amount-actions">
@@ -3429,17 +3625,9 @@ async function saveToSupabase(targetId) {
                 statsDiv.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--secondary); background: #ffffff; border-radius: var(--radius-sm); border: 1px dashed var(--border);"><em>Ensure you have active expenses and matching filters.</em></div>';
             }
 
-            // Capture metrics globally for PDF export
             currentStats = {
-                groupStats,
-                categoryTotals,
-                categoryParticipations,
-                categoryActivityCounts,
-                biggestSplurge,
-                mostExpensiveDay,
-                tripBanker,
-                totalSpent,
-                validActiveCount
+                groupStats, categoryTotals, categoryParticipations, categoryActivityCounts,
+                biggestSplurge, mostExpensiveDay, tripBanker, totalSpent, validActiveCount
             };
             renderGroupBalances(groupStats, validActiveCount);
         }
@@ -3468,7 +3656,7 @@ async function saveToSupabase(targetId) {
                          </div>`;
             });
 
-            currentGroupBalances = groupBalances; // Global save for PDF
+            currentGroupBalances = groupBalances; 
             
             html += '<div class="section-label" style="margin-top: 24px;">How to Settle Up</div>';
             let debtors = groupBalances.filter(b => b.net < -0.01).map(b => ({ name: b.name, debt: Math.abs(b.net), color: b.color })).sort((a,b) => b.debt - a.debt);
@@ -3499,7 +3687,7 @@ async function saveToSupabase(targetId) {
             bList.innerHTML = html;
         }
 
-        // --- 10. WAKE-UP EVENT LISTENERS ---
+        // --- WAKE-UP EVENT LISTENERS ---
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible') {
                 fetchCloudTripNames();
