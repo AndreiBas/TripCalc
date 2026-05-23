@@ -523,10 +523,14 @@
                     </div>
                     
                     <div class="glass-toolbar" style="padding: 2px 8px;">
-                        <span style="font-size: 0.75rem; font-weight: 700; margin-right: 2px; color: var(--secondary);" title="Leave blank for USD only">Cur:</span>
-                        <input type="text" id="global-currency" class="currency-selector" style="width: 50px; text-align: center; padding: 2px 4px; font-size: 0.8rem;" placeholder="..." maxlength="3" onchange="handleCurrencyChange()">
-                        
-                        <div id="quick-convert-container" style="display: none; align-items: center; gap: 6px; border-left: 1px solid var(--border); padding-left: 8px; margin-left: 4px;">
+    <span style="font-size: 0.75rem; font-weight: 700; margin-right: 2px; color: var(--secondary);" title="Leave blank for USD only">Cur:</span>
+    <input type="text" id="global-currency" class="currency-selector" style="width: 50px; text-align: center; padding: 2px 4px; font-size: 0.8rem;" placeholder="..." maxlength="3" onchange="handleCurrencyChange()">
+    
+    <!-- ✅ NEW: Locked Rate Display and Refresh Button -->
+    <button id="refresh-rate-btn" class="outline small" style="display: none; padding: 2px 4px; font-size: 0.7rem; margin-left: 2px; box-shadow: none;" onclick="refreshExchangeRate()" title="Fetch latest live rate">🔄</button>
+    <span id="rate-display" style="font-size: 0.7rem; color: var(--primary); display: none; font-weight: 700; margin-left: 4px; padding-right: 4px;"></span>
+
+    <div id="quick-convert-container" style="display: none; align-items: center; gap: 6px; border-left: 1px solid var(--border); padding-left: 8px; margin-left: 4px;">
                             <div style="display: flex; align-items: center; gap: 4px; background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 2px 6px;">
                                 <span style="font-size: 0.7rem; font-weight: 800; color: var(--secondary);">USD</span>
                                 <input type="number" id="qc-usd" class="tabular-nums" placeholder="0.00" style="width: 80px; padding: 2px; font-size: 0.85rem; border: none; background: transparent; outline: none; text-align: right; box-shadow: none;" oninput="quickConvert('usd')">
@@ -582,7 +586,7 @@
             <details class="participants-dropdown">
                 <summary>
                     <span>👥 Manage Participants & Groups</span>
-                    <span style="font-size: 0.7rem; color: var(--secondary); font-weight: 600; background: var(--bg); padding: 2px 6px; border-radius: 10px;">v3.3</span>
+                    <span style="font-size: 0.7rem; color: var(--secondary); font-weight: 600; background: var(--bg); padding: 2px 6px; border-radius: 10px;">v3.4</span>
                 </summary>
                 <div style="margin-top: 12px; border-top: 1px solid var(--border); padding-top: 12px;">
                     <div class="form-row">
@@ -1643,7 +1647,7 @@
                     
                     if (secondaryCurrency) {
                         updateCurrencySelectors();
-                        fetchExchangeRate(secondaryCurrency, true); 
+                       // fetchExchangeRate(secondaryCurrency, true); 
                     }
                 } catch(err) {}
             }
@@ -2554,48 +2558,80 @@
         }
 
         function updateCurrencySelectors() {
-            const expSelector = document.getElementById('exp-currency');
-            const viewSelector = document.getElementById('view-currency');
-            const viewContainer = document.getElementById('dashboard-currency-toggle');
-            
-            const qcContainer = document.getElementById('quick-convert-container');
-            const qcForeignLabel = document.getElementById('qc-foreign-label');
-            const qcNotesContainer = document.getElementById('notes-quick-convert-container');
-            const qcNotesForeignLabel = document.getElementById('qc-notes-foreign-label');
-            
-            const currExpVal = expSelector.value;
-            const currViewVal = viewSelector.value;
-            let expHtml = `<option value="USD">USD</option>`;
-            let viewHtml = `<option value="USD">🇺🇸 USD ($)</option>`;
-            
-            if (secondaryCurrency) {
-                const sym = CURRENCY_SYMBOLS[secondaryCurrency] || secondaryCurrency;
-                expHtml += `<option value="${secondaryCurrency}">${secondaryCurrency}</option>`;
-                viewHtml += `<option value="${secondaryCurrency}">🌎 ${secondaryCurrency} (${sym})</option>`;
-                viewContainer.style.display = 'flex';
-                
-                qcContainer.style.display = 'flex';
-                qcForeignLabel.innerText = secondaryCurrency;
-                if (document.getElementById('qc-usd').value) quickConvert('usd');
+    const expSelector = document.getElementById('exp-currency');
+    const viewSelector = document.getElementById('view-currency');
+    const viewContainer = document.getElementById('dashboard-currency-toggle');
+    
+    const qcContainer = document.getElementById('quick-convert-container');
+    const qcForeignLabel = document.getElementById('qc-foreign-label');
+    const qcNotesContainer = document.getElementById('notes-quick-convert-container');
+    const qcNotesForeignLabel = document.getElementById('qc-notes-foreign-label');
+    
+    // ✅ NEW: Grab the rate UI elements
+    const rateBtn = document.getElementById('refresh-rate-btn');
+    const rateDisplay = document.getElementById('rate-display');
+    
+    const currExpVal = expSelector.value;
+    const currViewVal = viewSelector.value;
+    let expHtml = `<option value="USD">USD</option>`;
+    let viewHtml = `<option value="USD">🇺🇸 USD ($)</option>`;
+    
+    if (secondaryCurrency) {
+        const sym = CURRENCY_SYMBOLS[secondaryCurrency] || secondaryCurrency;
+        expHtml += `<option value="${secondaryCurrency}">${secondaryCurrency}</option>`;
+        viewHtml += `<option value="${secondaryCurrency}">🌎 ${secondaryCurrency} (${sym})</option>`;
+        viewContainer.style.display = 'flex';
+        
+        qcContainer.style.display = 'flex';
+        qcForeignLabel.innerText = secondaryCurrency;
+        if (document.getElementById('qc-usd').value) quickConvert('usd');
 
-                if (qcNotesContainer) {
-                    qcNotesContainer.style.display = 'flex';
-                    qcNotesForeignLabel.innerText = secondaryCurrency;
-                    if (document.getElementById('qc-notes-usd').value) quickConvertNotes('usd');
-                }
-                
-            } else { 
-                viewContainer.style.display = 'none'; 
-                qcContainer.style.display = 'none';
-                if (qcNotesContainer) qcNotesContainer.style.display = 'none';
-            }
-            
-            expSelector.innerHTML = expHtml;
-            viewSelector.innerHTML = viewHtml;
-            
-            if(secondaryCurrency && currExpVal === secondaryCurrency) expSelector.value = secondaryCurrency;
-            if(secondaryCurrency && currViewVal === secondaryCurrency) viewSelector.value = secondaryCurrency;
+        if (qcNotesContainer) {
+            qcNotesContainer.style.display = 'flex';
+            qcNotesForeignLabel.innerText = secondaryCurrency;
+            if (document.getElementById('qc-notes-usd').value) quickConvertNotes('usd');
         }
+        
+        // ✅ NEW: Show the locked rate
+        if(rateBtn) rateBtn.style.display = 'inline-block';
+        if(rateDisplay) {
+            rateDisplay.style.display = 'inline-block';
+            rateDisplay.innerText = `1 USD = ${currentExchangeRate.toFixed(4)} ${secondaryCurrency}`;
+        }
+        
+    } else { 
+        viewContainer.style.display = 'none'; 
+        qcContainer.style.display = 'none';
+        if (qcNotesContainer) qcNotesContainer.style.display = 'none';
+        
+        // ✅ NEW: Hide the rate elements
+        if(rateBtn) rateBtn.style.display = 'none';
+        if(rateDisplay) rateDisplay.style.display = 'none';
+    }
+    
+    expSelector.innerHTML = expHtml;
+    viewSelector.innerHTML = viewHtml;
+    
+    if(secondaryCurrency && currExpVal === secondaryCurrency) expSelector.value = secondaryCurrency;
+    if(secondaryCurrency && currViewVal === secondaryCurrency) viewSelector.value = secondaryCurrency;
+}
+
+// ✅ NEW: Add this function below updateCurrencySelectors()
+async function refreshExchangeRate() {
+    if (!secondaryCurrency) return;
+    if (!confirm(`Fetch the latest live exchange rate for ${secondaryCurrency}?\n\nNote: This will adjust all dashboard settlement amounts to reflect today's rate.`)) return;
+    
+    const btn = document.getElementById('refresh-rate-btn');
+    btn.innerText = "⏳";
+    
+    const success = await fetchExchangeRate(secondaryCurrency, false);
+    if (success) {
+        saveState(); 
+        updateCurrencySelectors(); 
+        updateUI();
+    }
+    btn.innerText = "🔄";
+}
 
         function formatMoney(amountInUsd) {
             const displayCur = document.getElementById('view-currency').value || 'USD';
