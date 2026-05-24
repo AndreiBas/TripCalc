@@ -72,6 +72,10 @@
             margin-bottom: 4px;
         }
         
+        /* HEADER COLLAPSE STYLES */
+        .header-collapsed .header-collapsible-item { display: none !important; }
+        .header-collapsed #header-toggle-btn { transform: rotate(180deg); }
+        
         .mobile-quick-nav { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-bottom: 4px; }
 
         details.participants-dropdown {
@@ -505,13 +509,18 @@
         <div class="top-bar-area">
             <div class="header-top-row">
                 
+                <!-- Left Column -->
                 <div style="display: flex; flex-direction: column; justify-content: center; gap: 2px; flex: 1; min-width: 250px;">
-                    <input type="text" id="trip-name" class="trip-name-input" value="My Trip" onchange="updateTripName()">
-                    <input type="text" id="trip-comment" class="trip-comment-input" placeholder="Add a trip comment..." onchange="updateTripComment()">
-                    <span id="cloud-status" style="font-size: 0.7rem; color: var(--secondary); font-weight: 600; min-height: 14px; text-align: center;"></span>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <input type="text" id="trip-name" class="trip-name-input" value="My Trip" onchange="updateTripName()">
+                        <span id="header-toggle-btn" onclick="toggleHeader()" style="cursor: pointer; font-size: 0.9rem; color: var(--secondary); transition: transform 0.2s; padding: 4px; user-select: none;" title="Toggle Header">▲</span>
+                    </div>
+                    <input type="text" id="trip-comment" class="trip-comment-input header-collapsible-item" placeholder="Add a trip comment..." onchange="updateTripComment()">
+                    <span id="cloud-status" class="header-collapsible-item" style="font-size: 0.7rem; color: var(--secondary); font-weight: 600; min-height: 14px; text-align: center;"></span>
                 </div>
 
-                <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1;">
+                <!-- Middle Column -->
+                <div class="header-collapsible-item" style="display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1;">
                     <div id="next-payer-container" style="margin-bottom: -2px;"></div>
                     <div class="glass-toolbar">
                         <button class="outline small" onclick="openNotesModal()" style="background: #f0fdf4; border-color: #bbf7d0; color: var(--green);">📝 Notes</button>
@@ -523,14 +532,10 @@
                     </div>
                     
                     <div class="glass-toolbar" style="padding: 2px 8px;">
-    <span style="font-size: 0.75rem; font-weight: 700; margin-right: 2px; color: var(--secondary);" title="Leave blank for USD only">Cur:</span>
-    <input type="text" id="global-currency" class="currency-selector" style="width: 50px; text-align: center; padding: 2px 4px; font-size: 0.8rem;" placeholder="..." maxlength="3" onchange="handleCurrencyChange()">
-    
-    <!-- ✅ NEW: Locked Rate Display and Refresh Button -->
-    <button id="refresh-rate-btn" class="outline small" style="display: none; padding: 2px 4px; font-size: 0.7rem; margin-left: 2px; box-shadow: none;" onclick="refreshExchangeRate()" title="Fetch latest live rate">🔄</button>
-    <span id="rate-display" style="font-size: 0.7rem; color: var(--primary); display: none; font-weight: 700; margin-left: 4px; padding-right: 4px;"></span>
-
-    <div id="quick-convert-container" style="display: none; align-items: center; gap: 6px; border-left: 1px solid var(--border); padding-left: 8px; margin-left: 4px;">
+                        <span style="font-size: 0.75rem; font-weight: 700; margin-right: 2px; color: var(--secondary);" title="Leave blank for USD only">Cur:</span>
+                        <input type="text" id="global-currency" class="currency-selector" style="width: 50px; text-align: center; padding: 2px 4px; font-size: 0.8rem;" placeholder="..." maxlength="3" onchange="handleCurrencyChange()">
+                        
+                        <div id="quick-convert-container" style="display: none; align-items: center; gap: 6px; border-left: 1px solid var(--border); padding-left: 8px; margin-left: 4px;">
                             <div style="display: flex; align-items: center; gap: 4px; background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 2px 6px;">
                                 <span style="font-size: 0.7rem; font-weight: 800; color: var(--secondary);">USD</span>
                                 <input type="number" id="qc-usd" class="tabular-nums" placeholder="0.00" style="width: 80px; padding: 2px; font-size: 0.85rem; border: none; background: transparent; outline: none; text-align: right; box-shadow: none;" oninput="quickConvert('usd')">
@@ -544,7 +549,8 @@
                     </div>
                 </div>
 
-                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; flex: 1; max-width: 450px; width: 100%;">
+                <!-- Right Column -->
+                <div class="header-collapsible-item" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; flex: 1; max-width: 450px; width: 100%;">
                     <div class="cloud-slot">
                         <span class="slot-label">Manual 1</span>
                         <div class="slot-btns">
@@ -583,7 +589,7 @@
 
             </div>
 
-            <details class="participants-dropdown">
+            <details class="participants-dropdown header-collapsible-item">
                 <summary>
                     <span>👥 Manage Participants & Groups</span>
                     <span style="font-size: 0.7rem; color: var(--secondary); font-weight: 600; background: var(--bg); padding: 2px 6px; border-radius: 10px;">v3.4</span>
@@ -659,13 +665,21 @@
                         <div class="form-row">
                             <div class="amount-currency-group" style="flex: 1.2;">
                                 <input type="number" id="exp-amount" class="tabular-nums" placeholder="Amount" step="0.01">
-                                <select id="exp-currency">
+                                <select id="exp-currency" onchange="updateFormCurrencyUI(); updateSplitTypeUI();">
                                     <option value="USD">USD</option>
                                 </select>
                             </div>
                             <select id="exp-payer" style="flex: 1;" onchange="updatePayerColor()">
                                 <option value="">Who paid?</option>
                             </select>
+                        </div>
+                        
+                        <!-- NEW RATE ROW -->
+                        <div class="form-row" id="rate-row" style="display: none; background: #f8fafc; border: 1px solid var(--border); padding: 8px; border-radius: var(--radius-sm); align-items: center; gap: 8px;">
+                            <span style="font-size: 0.8rem; font-weight: 700; color: var(--secondary);">1 USD =</span>
+                            <input type="number" id="exp-exchange-rate" class="tabular-nums" style="width: 100px; padding: 4px 8px; font-size: 0.9rem; margin: 0; background: #fff;" step="0.0001">
+                            <span id="exp-rate-currency-label" style="font-size: 0.8rem; font-weight: 800; color: var(--primary);"></span>
+                            <button type="button" class="outline small" onclick="refreshFormRate()" style="margin-left: auto;">🔄 Fetch Latest</button>
                         </div>
 
                         <div class="form-row">
@@ -778,7 +792,6 @@
 
     </div>
 
-    <!-- Modals below (Notes, Sync, Reset, PIN, etc.) remain largely the same -->
     <div class="modal-overlay" id="notes-overlay">
         <div class="notes-modal">
             <div class="notes-header">
@@ -957,6 +970,7 @@
         let secondaryCurrency = ""; 
         let currentExchangeRate = 1; 
         let currentSort = 'date-desc';
+        let isHeaderCollapsed = false;
         
         // Cloud & Encryption State
         let supabaseClient = null;
@@ -1044,14 +1058,8 @@
                 }
             });
 
-            // FIX A.1: Intercept and destroy pasted images (Base64 strings)
             const Delta = Quill.import('delta');
-            quill.clipboard.addMatcher('IMG', function(node, delta) {
-                // Return an empty Delta, which effectively deletes the image from the paste
-                return new Delta();
-            });
-
-            // FIX A.2: Prevent dragging and dropping image files directly into the editor
+            quill.clipboard.addMatcher('IMG', function(node, delta) { return new Delta(); });
             document.getElementById('quill-editor').addEventListener('drop', function(e) {
                 if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
                     e.preventDefault();
@@ -1059,9 +1067,7 @@
                 }
             });
 
-            // FIX A.3: Set a hard character limit to prevent massive text dumps
-            const MAX_NOTES_LENGTH = 50000; // ~15-20 pages of text. Very safe for 5MB localStorage.
-
+            const MAX_NOTES_LENGTH = 50000;
             quill.on('selection-change', function(range, oldRange, source) {
                 if (range) lastQuillRange = range;
                 if (range && source === 'user') {
@@ -1071,12 +1077,10 @@
             });
 
             quill.on('text-change', function(delta, oldDelta, source) {
-                // Enforce the character limit instantly
                 if (quill.getLength() > MAX_NOTES_LENGTH) {
                     quill.deleteText(MAX_NOTES_LENGTH, quill.getLength());
                     alert(`⚠️ Character limit reached! To keep the app fast and offline-ready, notes are limited to ${MAX_NOTES_LENGTH} characters.`);
                 }
-
                 if (source === 'user') {
                     isNotesDirty = true;
                     clearTimeout(notesDebounceTimer);
@@ -1087,7 +1091,7 @@
                             applyAutoColor(); 
                             tripNotes = sanitizeHTML(quill.root.innerHTML); 
                             tripNotesDelta = quill.getContents(); 
-                            saveState(true); // Save locally only (tier 1) to prevent lag
+                            saveState(true); 
                         }
                     }, 1500);
                 }
@@ -1122,7 +1126,6 @@
             const value = input.value;
             const popup = document.getElementById('form-tag-suggestions');
             
-            // If field is empty, show all tags to easily select
             if (value.trim() === '') {
                 const allTags = getAllUniqueTags();
                 if (allTags.length > 0) {
@@ -1182,7 +1185,7 @@
         }
 
         function handleSearchInput(e) {
-            handleSearchChange(); // Trigger the standard search timeout
+            handleSearchChange(); 
             
             const input = e.target;
             const value = input.value;
@@ -1246,11 +1249,61 @@
             handleSearchChange(); 
         }
 
-        // Close popups when clicking outside
         document.addEventListener('click', function(e) {
             if (!e.target.closest('#exp-tags')) document.getElementById('form-tag-suggestions').style.display = 'none';
             if (!e.target.closest('#search-filter')) document.getElementById('search-tag-suggestions').style.display = 'none';
         });
+
+        // --- HEADER TOGGLE ---
+        function toggleHeader() {
+            isHeaderCollapsed = !isHeaderCollapsed;
+            applyHeaderState();
+            saveState(true); 
+        }
+
+        function applyHeaderState() {
+            const topBar = document.querySelector('.top-bar-area');
+            if(isHeaderCollapsed) {
+                topBar.classList.add('header-collapsed');
+            } else {
+                topBar.classList.remove('header-collapsed');
+            }
+        }
+
+        // --- FORM CURRENCY TOGGLE ---
+        function updateFormCurrencyUI() {
+            const localCurrency = document.getElementById('exp-currency').value;
+            const rateRow = document.getElementById('rate-row');
+            const rateLabel = document.getElementById('exp-rate-currency-label');
+            const rateInput = document.getElementById('exp-exchange-rate');
+            
+            if (localCurrency !== 'USD') {
+                rateRow.style.display = 'flex';
+                rateLabel.innerText = localCurrency;
+                // Only default it if it's completely empty so we don't overwrite user input unnecessarily
+                if (!rateInput.value && currentExchangeRate > 0) {
+                    rateInput.value = currentExchangeRate;
+                }
+            } else {
+                rateRow.style.display = 'none';
+                rateInput.value = '';
+            }
+        }
+        
+        async function refreshFormRate() {
+            const localCurrency = document.getElementById('exp-currency').value;
+            if (localCurrency === 'USD') return;
+            
+            const btn = document.querySelector('#rate-row button');
+            btn.innerText = "⏳";
+            const success = await fetchExchangeRate(localCurrency, false);
+            if (success && currentExchangeRate > 0) {
+                document.getElementById('exp-exchange-rate').value = currentExchangeRate;
+            }
+            btn.innerText = "🔄 Fetch Latest";
+        }
+
+
         // ------------------------
 
         function openNotesModal() {
@@ -1587,7 +1640,9 @@
                 if (!e.timestamp) e.timestamp = Date.now() + i; 
                 if (!e.localCurrency) e.localCurrency = 'USD';
                 if (!e.localAmount) e.localAmount = e.amount;
-                if (!e.tags) e.tags = []; // New tags array
+                if (!e.tags) e.tags = [];
+                // Fair currency lock repair for old data
+                if (!e.exchangeRate && e.localCurrency !== 'USD') e.exchangeRate = e.localAmount / e.amount;
             });
         }
 
@@ -1597,7 +1652,7 @@
             const payload = { 
                 tripName, tripComment, participants, participantGroups, expenses, 
                 secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay,
-                tripNotes, tripNotesDelta, autoColorNotes, lastModified: localLastModified
+                tripNotes, tripNotesDelta, autoColorNotes, isHeaderCollapsed, lastModified: localLastModified
             };
 
             localStorage.setItem('tripSplitterLatest', JSON.stringify(payload));
@@ -1629,8 +1684,10 @@
                     tripNotes = data.tripNotes || "";
                     tripNotesDelta = data.tripNotesDelta || null;
                     autoColorNotes = data.autoColorNotes || false;
+                    isHeaderCollapsed = data.isHeaderCollapsed || false;
                     localLastModified = data.lastModified || Date.now();
                     
+                    applyHeaderState();
                     repairLegacyData();
                     document.getElementById('trip-name').value = tripName;
                     document.getElementById('trip-comment').value = tripComment;
@@ -1647,7 +1704,7 @@
                     
                     if (secondaryCurrency) {
                         updateCurrencySelectors();
-                       // fetchExchangeRate(secondaryCurrency, true); 
+                        fetchExchangeRate(secondaryCurrency, true); 
                     }
                 } catch(err) {}
             }
@@ -1659,7 +1716,7 @@
                 tripName = "My Trip"; tripComment = ""; participants = []; participantGroups = {}; expenses = [];
                 secondaryCurrency = ""; currentExchangeRate = 1; currentSort = 'date-desc'; tripDays = 1;
                 showPerDay = false; tripNotes = ""; tripNotesDelta = null; autoColorNotes = false;
-                localLastModified = Date.now();
+                isHeaderCollapsed = false; localLastModified = Date.now();
                 
                 document.getElementById('global-currency').value = ""; document.getElementById('ledger-sort').value = "date-desc";
                 document.getElementById('trip-name').value = tripName; document.getElementById('trip-comment').value = tripComment;
@@ -1670,6 +1727,7 @@
                 document.getElementById('qc-usd').value = ''; document.getElementById('qc-foreign').value = '';
                 document.getElementById('qc-notes-usd').value = ''; document.getElementById('qc-notes-foreign').value = '';
                 
+                applyHeaderState();
                 activeCategoryFilters = new Set(Object.keys(CATEGORIES)); cancelEdit(); 
                 localStorage.removeItem('tripSplitterLatest');
                 updateCurrencySelectors(); updateUI();
@@ -1794,7 +1852,7 @@
         }
 
         function exportTrip() {
-            const payload = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, tripNotesDelta, autoColorNotes, lastModified: localLastModified });
+            const payload = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, tripNotesDelta, autoColorNotes, isHeaderCollapsed, lastModified: localLastModified });
             const fileName = tripName.replace(/\s+/g, '_') + ".json";
             saveFileUniversal(payload, fileName, 'application/json');
         }
@@ -1817,7 +1875,7 @@
             const password = prompt("⚠️ Secure Save ⚠️\nEnter a password to encrypt this trip file.\n\nWARNING: If you forget this password, your data cannot be recovered.");
             if (!password) return; 
             
-            const payload = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, tripNotesDelta, autoColorNotes, lastModified: localLastModified });
+            const payload = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, tripNotesDelta, autoColorNotes, isHeaderCollapsed, lastModified: localLastModified });
             
             try {
                 const encryptedData = await encryptData(password, payload);
@@ -1852,8 +1910,10 @@
                     currentExchangeRate = parsedData.currentExchangeRate || 1; currentSort = parsedData.currentSort || 'date-desc';
                     tripDays = parsedData.tripDays || 1; showPerDay = parsedData.showPerDay || false;
                     tripNotes = parsedData.tripNotes || ""; tripNotesDelta = parsedData.tripNotesDelta || null; autoColorNotes = parsedData.autoColorNotes || false;
+                    isHeaderCollapsed = parsedData.isHeaderCollapsed || false;
                     localLastModified = parsedData.lastModified || Date.now();
                     
+                    applyHeaderState();
                     activeCategoryFilters = new Set(Object.keys(CATEGORIES)); repairLegacyData();
                     document.getElementById('trip-name').value = tripName; document.getElementById('trip-comment').value = tripComment;
                     document.getElementById('global-currency').value = secondaryCurrency; document.getElementById('ledger-sort').value = currentSort;
@@ -2374,7 +2434,7 @@
             const key = await getValidCloudKey(); if (!key) return;
             const client = getSupabaseClient(); if (!client) return;
 
-            const payloadStr = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, tripNotesDelta, autoColorNotes, lastModified: localLastModified });
+            const payloadStr = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, tripNotesDelta, autoColorNotes, isHeaderCollapsed, lastModified: localLastModified });
             
             const btnId = targetId === 'manual_trip' ? 'cloud-save-btn-1' : (targetId === 'manual_trip_2' ? 'cloud-save-btn-2' : 'cloud-save-btn-3');
             const btn = document.getElementById(btnId); btn.innerText = "⏳";
@@ -2402,7 +2462,7 @@
             const key = await getValidCloudKey(true); if (!key) return;
             const client = getSupabaseClient(); if (!client) return;
             
-            const payloadStr = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, tripNotesDelta, autoColorNotes, lastModified: localLastModified });
+            const payloadStr = JSON.stringify({ tripName, tripComment, participants, participantGroups, expenses, secondaryCurrency, currentExchangeRate, currentSort, tripDays, showPerDay, tripNotes, tripNotesDelta, autoColorNotes, isHeaderCollapsed, lastModified: localLastModified });
             const statusEl = document.getElementById('cloud-status');
             
             try {
@@ -2461,8 +2521,10 @@
                     currentExchangeRate = parsedData.currentExchangeRate || 1; currentSort = parsedData.currentSort || 'date-desc';
                     tripDays = parsedData.tripDays || 1; showPerDay = parsedData.showPerDay || false;
                     tripNotes = parsedData.tripNotes || ""; tripNotesDelta = parsedData.tripNotesDelta || null; autoColorNotes = parsedData.autoColorNotes || false;
+                    isHeaderCollapsed = parsedData.isHeaderCollapsed || false;
                     localLastModified = parsedData.lastModified || Date.now();
                     
+                    applyHeaderState();
                     activeCategoryFilters = new Set(Object.keys(CATEGORIES)); repairLegacyData();
                     document.getElementById('trip-name').value = tripName; document.getElementById('trip-comment').value = tripComment;
                     document.getElementById('global-currency').value = secondaryCurrency; document.getElementById('ledger-sort').value = currentSort;
@@ -2508,7 +2570,6 @@
                 const expTags = (e.tags || []).map(t => t.toLowerCase());
                 const hasAllTags = requiredTags.every(rt => expTags.some(t => t.includes(rt)));
                 
-                // FIX: Added involved participants to the searchable text string
                 const involvedNames = e.involved ? e.involved.join(' ') : '';
                 const searchableText = `${e.desc} ${e.payer} ${involvedNames} ${e.notes || ''}`.toLowerCase();
                 
@@ -2558,80 +2619,49 @@
         }
 
         function updateCurrencySelectors() {
-    const expSelector = document.getElementById('exp-currency');
-    const viewSelector = document.getElementById('view-currency');
-    const viewContainer = document.getElementById('dashboard-currency-toggle');
-    
-    const qcContainer = document.getElementById('quick-convert-container');
-    const qcForeignLabel = document.getElementById('qc-foreign-label');
-    const qcNotesContainer = document.getElementById('notes-quick-convert-container');
-    const qcNotesForeignLabel = document.getElementById('qc-notes-foreign-label');
-    
-    // ✅ NEW: Grab the rate UI elements
-    const rateBtn = document.getElementById('refresh-rate-btn');
-    const rateDisplay = document.getElementById('rate-display');
-    
-    const currExpVal = expSelector.value;
-    const currViewVal = viewSelector.value;
-    let expHtml = `<option value="USD">USD</option>`;
-    let viewHtml = `<option value="USD">🇺🇸 USD ($)</option>`;
-    
-    if (secondaryCurrency) {
-        const sym = CURRENCY_SYMBOLS[secondaryCurrency] || secondaryCurrency;
-        expHtml += `<option value="${secondaryCurrency}">${secondaryCurrency}</option>`;
-        viewHtml += `<option value="${secondaryCurrency}">🌎 ${secondaryCurrency} (${sym})</option>`;
-        viewContainer.style.display = 'flex';
-        
-        qcContainer.style.display = 'flex';
-        qcForeignLabel.innerText = secondaryCurrency;
-        if (document.getElementById('qc-usd').value) quickConvert('usd');
+            const expSelector = document.getElementById('exp-currency');
+            const viewSelector = document.getElementById('view-currency');
+            const viewContainer = document.getElementById('dashboard-currency-toggle');
+            
+            const qcContainer = document.getElementById('quick-convert-container');
+            const qcForeignLabel = document.getElementById('qc-foreign-label');
+            const qcNotesContainer = document.getElementById('notes-quick-convert-container');
+            const qcNotesForeignLabel = document.getElementById('qc-notes-foreign-label');
+            
+            const currExpVal = expSelector.value;
+            const currViewVal = viewSelector.value;
+            let expHtml = `<option value="USD">USD</option>`;
+            let viewHtml = `<option value="USD">🇺🇸 USD ($)</option>`;
+            
+            if (secondaryCurrency) {
+                const sym = CURRENCY_SYMBOLS[secondaryCurrency] || secondaryCurrency;
+                expHtml += `<option value="${secondaryCurrency}">${secondaryCurrency}</option>`;
+                viewHtml += `<option value="${secondaryCurrency}">🌎 ${secondaryCurrency} (${sym})</option>`;
+                viewContainer.style.display = 'flex';
+                
+                qcContainer.style.display = 'flex';
+                qcForeignLabel.innerText = secondaryCurrency;
+                if (document.getElementById('qc-usd').value) quickConvert('usd');
 
-        if (qcNotesContainer) {
-            qcNotesContainer.style.display = 'flex';
-            qcNotesForeignLabel.innerText = secondaryCurrency;
-            if (document.getElementById('qc-notes-usd').value) quickConvertNotes('usd');
+                if (qcNotesContainer) {
+                    qcNotesContainer.style.display = 'flex';
+                    qcNotesForeignLabel.innerText = secondaryCurrency;
+                    if (document.getElementById('qc-notes-usd').value) quickConvertNotes('usd');
+                }
+            } else { 
+                viewContainer.style.display = 'none'; 
+                qcContainer.style.display = 'none';
+                if (qcNotesContainer) qcNotesContainer.style.display = 'none';
+            }
+            
+            expSelector.innerHTML = expHtml;
+            viewSelector.innerHTML = viewHtml;
+            
+            if(secondaryCurrency && currExpVal === secondaryCurrency) expSelector.value = secondaryCurrency;
+            if(secondaryCurrency && currViewVal === secondaryCurrency) viewSelector.value = secondaryCurrency;
+            
+            updateFormCurrencyUI();
         }
-        
-        // ✅ NEW: Show the locked rate
-        if(rateBtn) rateBtn.style.display = 'inline-block';
-        if(rateDisplay) {
-            rateDisplay.style.display = 'inline-block';
-            rateDisplay.innerText = `1 USD = ${currentExchangeRate.toFixed(4)} ${secondaryCurrency}`;
-        }
-        
-    } else { 
-        viewContainer.style.display = 'none'; 
-        qcContainer.style.display = 'none';
-        if (qcNotesContainer) qcNotesContainer.style.display = 'none';
-        
-        // ✅ NEW: Hide the rate elements
-        if(rateBtn) rateBtn.style.display = 'none';
-        if(rateDisplay) rateDisplay.style.display = 'none';
-    }
-    
-    expSelector.innerHTML = expHtml;
-    viewSelector.innerHTML = viewHtml;
-    
-    if(secondaryCurrency && currExpVal === secondaryCurrency) expSelector.value = secondaryCurrency;
-    if(secondaryCurrency && currViewVal === secondaryCurrency) viewSelector.value = secondaryCurrency;
-}
-
-// ✅ NEW: Add this function below updateCurrencySelectors()
-async function refreshExchangeRate() {
-    if (!secondaryCurrency) return;
-    if (!confirm(`Fetch the latest live exchange rate for ${secondaryCurrency}?\n\nNote: This will adjust all dashboard settlement amounts to reflect today's rate.`)) return;
-    
-    const btn = document.getElementById('refresh-rate-btn');
-    btn.innerText = "⏳";
-    
-    const success = await fetchExchangeRate(secondaryCurrency, false);
-    if (success) {
-        saveState(); 
-        updateCurrencySelectors(); 
-        updateUI();
-    }
-    btn.innerText = "🔄";
-}
 
         function formatMoney(amountInUsd) {
             const displayCur = document.getElementById('view-currency').value || 'USD';
@@ -2820,8 +2850,6 @@ async function refreshExchangeRate() {
                 fixedInputs.forEach(input => { input.placeholder = `= Exact ${sym}`; if(!editingExpenseId) input.value = ''; input.style.display = 'block'; });
             }
         }
-        
-        document.getElementById('exp-currency').addEventListener('change', updateSplitTypeUI);
 
         function calculateRemainingPercentage() {
             if (document.getElementById('exp-split-type').value !== 'percentage') return;
@@ -2929,15 +2957,24 @@ async function refreshExchangeRate() {
                 alert(`Total percentages entered (${totalPercentageEntered}%) cannot exceed 100%.`); return;
             }
 
+            // Determine custom or current rate
+            let rateToUse = 1;
+            if (localCurrency !== 'USD') {
+                rateToUse = parseFloat(document.getElementById('exp-exchange-rate').value);
+                if (isNaN(rateToUse) || rateToUse <= 0) {
+                    rateToUse = currentExchangeRate; // fallback to global live rate if field is corrupted
+                }
+            }
+
             let amountUsd = localAmount;
             let personalExpensesUsd = {};
             let fixedSharesUsd = {};
             
-            if (localCurrency !== 'USD' && currentExchangeRate > 0) {
-                amountUsd = localAmount / currentExchangeRate;
+            if (localCurrency !== 'USD' && rateToUse > 0) {
+                amountUsd = localAmount / rateToUse;
                 if (splitType === 'equal') {
-                    Object.keys(personalExpensesLocal).forEach(k => { personalExpensesUsd[k] = personalExpensesLocal[k] / currentExchangeRate; });
-                    Object.keys(fixedSharesLocal).forEach(k => { fixedSharesUsd[k] = fixedSharesLocal[k] / currentExchangeRate; });
+                    Object.keys(personalExpensesLocal).forEach(k => { personalExpensesUsd[k] = personalExpensesLocal[k] / rateToUse; });
+                    Object.keys(fixedSharesLocal).forEach(k => { fixedSharesUsd[k] = fixedSharesLocal[k] / rateToUse; });
                 }
             } else { 
                 personalExpensesUsd = personalExpensesLocal; 
@@ -2950,7 +2987,8 @@ async function refreshExchangeRate() {
                     expenses[index] = { 
                         id: editingExpenseId, category, desc, tags, notes, date, amount: amountUsd, localAmount, localCurrency, 
                         payer, splitType, involved: selected, personalExpenses: personalExpensesUsd, fixedShares: fixedSharesUsd, 
-                        percentageShares, ignored: expenses[index].ignored, timestamp: expenses[index].timestamp 
+                        percentageShares, ignored: expenses[index].ignored, timestamp: expenses[index].timestamp,
+                        exchangeRate: rateToUse
                     };
                 }
                 cancelEdit(); 
@@ -2958,8 +2996,10 @@ async function refreshExchangeRate() {
                 expenses.push({ 
                     id: Math.random().toString(36).substr(2, 9), category, desc, tags, notes, date, amount: amountUsd, localAmount, localCurrency, 
                     payer, splitType, involved: selected, personalExpenses: personalExpensesUsd, fixedShares: fixedSharesUsd,
-                    percentageShares, ignored: false, timestamp: Date.now() 
+                    percentageShares, ignored: false, timestamp: Date.now(),
+                    exchangeRate: rateToUse
                 });
+                
                 document.getElementById('exp-desc').value = ''; 
                 document.getElementById('exp-tags').value = '';
                 document.getElementById('exp-notes').value = '';
@@ -2968,6 +3008,7 @@ async function refreshExchangeRate() {
                 document.querySelectorAll('.part-fixed').forEach(input => input.value = ''); 
                 calculateRemainingPercentage();
                 updateFormColor();
+                updateFormCurrencyUI(); // refresh the rate input UI 
             }
             saveState(); updateUI();
         }
@@ -2983,7 +3024,13 @@ async function refreshExchangeRate() {
             document.getElementById('exp-tags').value = exp.tags ? exp.tags.map(t => '#' + t).join(' ') + ' ' : '';
             document.getElementById('exp-notes').value = exp.notes || '';
             document.getElementById('exp-date').value = exp.date;
+            
             document.getElementById('exp-currency').value = exp.localCurrency || 'USD';
+            updateFormCurrencyUI();
+            if (exp.localCurrency !== 'USD') {
+                document.getElementById('exp-exchange-rate').value = exp.exchangeRate || currentExchangeRate;
+            }
+            
             document.getElementById('exp-split-type').value = exp.splitType || 'equal';
             
             renderParticipantInputs();
@@ -3000,15 +3047,17 @@ async function refreshExchangeRate() {
                     if (exp.splitType === 'percentage' && exp.percentageShares && exp.percentageShares[name]) {
                         extraInput.value = exp.percentageShares[name];
                     } else if (!exp.splitType || exp.splitType === 'equal') {
+                        // Recover original local amounts based on historical rate
+                        const safeRate = exp.exchangeRate || currentExchangeRate || 1;
                         if (exp.personalExpenses && exp.personalExpenses[name]) {
                             let pVal = exp.personalExpenses[name];
-                            if (exp.localCurrency !== 'USD' && currentExchangeRate > 0) pVal = pVal * currentExchangeRate;
+                            if (exp.localCurrency !== 'USD') pVal = pVal * safeRate;
                             extraInput.value = pVal.toFixed(2);
                         } else { extraInput.value = ''; }
                         
                         if (exp.fixedShares && exp.fixedShares[name] !== undefined) {
                             let fVal = exp.fixedShares[name];
-                            if (exp.localCurrency !== 'USD' && currentExchangeRate > 0) fVal = fVal * currentExchangeRate;
+                            if (exp.localCurrency !== 'USD') fVal = fVal * safeRate;
                             fixedInput.value = fVal.toFixed(2);
                         } else { fixedInput.value = ''; }
                     } else { extraInput.value = ''; fixedInput.value = ''; }
@@ -3023,7 +3072,7 @@ async function refreshExchangeRate() {
             activityCard.classList.add('edit-mode');
             activityCard.classList.remove('activity-collapsed'); 
             
-            document.getElementById('exp-amount').value = exp.localAmount || exp.amount;
+            document.getElementById('exp-amount').value = exp.localAmount || (exp.amount * (exp.exchangeRate||1));
             
             updateUI(); 
             document.getElementById('exp-payer').value = exp.payer; 
@@ -3105,6 +3154,11 @@ async function refreshExchangeRate() {
             document.getElementById('exp-split-type').value = 'equal';
             document.getElementById('activity-card').classList.remove('edit-mode');
             updatePayerColor(); updateSplitTypeUI();
+            
+            const defaultCur = secondaryCurrency || 'USD';
+            document.getElementById('exp-currency').value = defaultCur;
+            updateFormCurrencyUI();
+            if (defaultCur !== 'USD') document.getElementById('exp-exchange-rate').value = currentExchangeRate;
             
             document.querySelectorAll('.part-personal').forEach(input => input.value = ''); 
             document.querySelectorAll('.part-fixed').forEach(input => input.value = ''); 
@@ -3369,7 +3423,10 @@ async function refreshExchangeRate() {
                 let displayMainAmount = `${localSym}${e.localAmount.toFixed(2)}`;
                 let displaySubAmount = '';
                 
-                if (e.localCurrency !== 'USD') displaySubAmount = `<br><span style="font-size: 0.85rem; color: var(--secondary);">($${e.amount.toFixed(2)} USD)</span>`;
+                // Historical rate view
+                if (e.localCurrency !== 'USD') {
+                    displaySubAmount = `<br><span style="font-size: 0.85rem; color: var(--secondary);">($${e.amount.toFixed(2)} USD @ ${(e.exchangeRate||1).toFixed(4)})</span>`;
+                }
 
                 if (e.splitType === 'percentage') {
                     let totalEnteredPerc = 0; let unenteredCount = 0;
