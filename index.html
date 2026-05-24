@@ -592,7 +592,7 @@
             <details class="participants-dropdown header-collapsible-item">
                 <summary>
                     <span>👥 Manage Participants & Groups</span>
-                    <span style="font-size: 0.7rem; color: var(--secondary); font-weight: 600; background: var(--bg); padding: 2px 6px; border-radius: 10px;">v3.4</span>
+                    <span style="font-size: 0.7rem; color: var(--secondary); font-weight: 600; background: var(--bg); padding: 2px 6px; border-radius: 10px;">v3.5</span>
                 </summary>
                 <div style="margin-top: 12px; border-top: 1px solid var(--border); padding-top: 12px;">
                     <div class="form-row">
@@ -1282,7 +1282,7 @@
                 rateLabel.innerText = localCurrency;
                 // Only default it if it's completely empty so we don't overwrite user input unnecessarily
                 if (!rateInput.value && currentExchangeRate > 0) {
-                    rateInput.value = currentExchangeRate;
+                    rateInput.value = currentExchangeRate.toFixed(2);
                 }
             } else {
                 rateRow.style.display = 'none';
@@ -1298,7 +1298,7 @@
             btn.innerText = "⏳";
             const success = await fetchExchangeRate(localCurrency, false);
             if (success && currentExchangeRate > 0) {
-                document.getElementById('exp-exchange-rate').value = currentExchangeRate;
+                document.getElementById('exp-exchange-rate').value = currentExchangeRate.toFixed(2);
             }
             btn.innerText = "🔄 Fetch Latest";
         }
@@ -3028,7 +3028,7 @@
             document.getElementById('exp-currency').value = exp.localCurrency || 'USD';
             updateFormCurrencyUI();
             if (exp.localCurrency !== 'USD') {
-                document.getElementById('exp-exchange-rate').value = exp.exchangeRate || currentExchangeRate;
+                document.getElementById('exp-exchange-rate').value = (exp.exchangeRate || currentExchangeRate).toFixed(2);
             }
             
             document.getElementById('exp-split-type').value = exp.splitType || 'equal';
@@ -3158,7 +3158,7 @@
             const defaultCur = secondaryCurrency || 'USD';
             document.getElementById('exp-currency').value = defaultCur;
             updateFormCurrencyUI();
-            if (defaultCur !== 'USD') document.getElementById('exp-exchange-rate').value = currentExchangeRate;
+            if (defaultCur !== 'USD') document.getElementById('exp-exchange-rate').value = currentExchangeRate.toFixed(2);
             
             document.querySelectorAll('.part-personal').forEach(input => input.value = ''); 
             document.querySelectorAll('.part-fixed').forEach(input => input.value = ''); 
