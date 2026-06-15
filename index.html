@@ -51,6 +51,7 @@
             line-height: 1.4;
             box-sizing: border-box;
             -webkit-font-smoothing: antialiased;
+			overscroll-behavior-y: none; /* Prevents mobile pull-to-refresh */
         }
 
         .tabular-nums { font-variant-numeric: tabular-nums; }
@@ -592,7 +593,7 @@
             <details class="participants-dropdown header-collapsible-item">
                 <summary>
                     <span>👥 Manage Participants & Groups</span>
-                    <span style="font-size: 0.7rem; color: var(--secondary); font-weight: 600; background: var(--bg); padding: 2px 6px; border-radius: 10px;">v3.5</span>
+                    <span style="font-size: 0.7rem; color: var(--secondary); font-weight: 600; background: var(--bg); padding: 2px 6px; border-radius: 10px;">v3.6</span>
                 </summary>
                 <div style="margin-top: 12px; border-top: 1px solid var(--border); padding-top: 12px;">
                     <div class="form-row">
@@ -818,6 +819,7 @@
                     </div>
                 </div>
                 <div style="display:flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+				<button id="copy-notes-btn" class="outline small" onclick="copyTripNotes()" title="Copy entire note to clipboard">📋 Copy All</button>
                     <button class="outline small" onclick="toggleCalculator()" title="Open Calculator">🧮 Calc</button>
                     <label style="font-size: 0.85rem; font-weight: 700; display:flex; align-items:center; gap:6px; cursor: pointer; color: var(--secondary);">
                         <input type="checkbox" id="auto-color-toggle" onchange="toggleAutoColor()" style="width: 16px; height: 16px; accent-color: var(--primary);"> Auto-Color
@@ -939,6 +941,20 @@
     </div>
 
     <script>
+	function copyTripNotes() {
+    if (!quill) return;
+    const text = quill.getText();
+    navigator.clipboard.writeText(text).then(() => {
+        const btn = document.getElementById('copy-notes-btn');
+        const originalText = btn.innerHTML;
+        btn.innerHTML = "✅ Copied!";
+        setTimeout(() => { btn.innerHTML = originalText; }, 2000);
+    }).catch(err => {
+        alert("Failed to copy notes to clipboard.");
+        console.error(err);
+    });
+}
+	
         // --- HELPER: HTML SANITIZATION ---
         function sanitizeHTML(html) {
             if (!html) return "";
@@ -1121,68 +1137,59 @@
             return Array.from(tagSet).sort();
         }
 
-        function handleFormTagInput(e) {
-            const input = e.target;
-            const value = input.value;
-            const popup = document.getElementById('form-tag-suggestions');
-            
-            if (value.trim() === '') {
-                const allTags = getAllUniqueTags();
-                if (allTags.length > 0) {
-                    popup.innerHTML = allTags.map(t => `<div class="suggestion-item" onclick="selectTagForForm('${t}')"><span class="tag-pill" style="${getTagStyle(t)}">#${t}</span></div>`).join('');
-                    popup.style.display = 'block';
-                    popup.style.top = (input.offsetTop + input.offsetHeight) + 'px';
-                } else {
-                    popup.style.display = 'none';
-                }
-                return;
-            }
+       function handleFormTagInput(e) {
+    const input = e.target;
+    const value = input.value;
+    const popup = document.getElementById('form-tag-suggestions');
+    const allTags = getAllUniqueTags();
 
-            const cursorPos = input.selectionStart;
-            const textBeforeCursor = value.substring(0, cursorPos);
-            const words = textBeforeCursor.split(/\s+/);
-            const currentWord = words[words.length - 1];
+    if (allTags.length === 0) {
+        popup.style.display = 'none';
+        return;
+    }
 
-            if (currentWord.startsWith('#')) {
-                const query = currentWord.substring(1).toLowerCase();
-                const allTags = getAllUniqueTags();
-                const matches = allTags.filter(t => t.toLowerCase().includes(query));
+    const cursorPos = input.selectionStart;
+    const textBeforeCursor = value.substring(0, cursorPos);
+    const words = textBeforeCursor.split(/\s+/);
+    const currentWord = words[words.length - 1];
 
-                if (matches.length > 0) {
-                    popup.innerHTML = matches.map(t => `<div class="suggestion-item" onclick="selectTagForForm('${t}')"><span class="tag-pill" style="${getTagStyle(t)}">#${t}</span></div>`).join('');
-                    popup.style.display = 'block';
-                    popup.style.top = (input.offsetTop + input.offsetHeight) + 'px';
-                } else {
-                    popup.style.display = 'none';
-                }
-            } else {
-                popup.style.display = 'none';
-            }
-        }
+    // If the word starts with #, strip it for the search. Otherwise, just use the word.
+    const query = currentWord.startsWith('#') ? currentWord.substring(1).toLowerCase() : currentWord.toLowerCase();
+    
+    // Show matches, or show all if the query is empty
+    const matches = allTags.filter(t => t.toLowerCase().includes(query));
 
-        function selectTagForForm(tag) {
-            const input = document.getElementById('exp-tags');
-            const value = input.value;
-            
-            if (value.trim() === '') {
-                input.value = '#' + tag + ' ';
-            } else {
-                const cursorPos = input.selectionStart;
-                const textBeforeCursor = value.substring(0, cursorPos);
-                const wordsBefore = textBeforeCursor.split(/\s+/);
-                const currentWord = wordsBefore[wordsBefore.length - 1];
-                
-                if (currentWord.startsWith('#')) {
-                    wordsBefore[wordsBefore.length - 1] = '#' + tag;
-                    const newTextBefore = wordsBefore.join(' ') + ' ';
-                    input.value = newTextBefore + value.substring(cursorPos);
-                } else {
-                    input.value = value + (value.endsWith(' ') ? '' : ' ') + '#' + tag + ' ';
-                }
-            }
-            document.getElementById('form-tag-suggestions').style.display = 'none';
-            input.focus();
-        }
+    if (matches.length > 0) {
+        popup.innerHTML = matches.map(t => `<div class="suggestion-item" onclick="selectTagForForm('${t}')"><span class="tag-pill" style="${getTagStyle(t)}">#${t}</span></div>`).join('');
+        popup.style.display = 'block';
+        popup.style.top = (input.offsetTop + input.offsetHeight) + 'px';
+    } else {
+        popup.style.display = 'none';
+    }
+}
+
+function selectTagForForm(tag) {
+    const input = document.getElementById('exp-tags');
+    const value = input.value;
+    const cursorPos = input.selectionStart;
+    const textBeforeCursor = value.substring(0, cursorPos);
+    const wordsBefore = textBeforeCursor.split(/\s+/);
+    const currentWord = wordsBefore[wordsBefore.length - 1];
+
+    if (currentWord !== "") {
+        // Replace the partial word they were typing (with or without the #)
+        wordsBefore[wordsBefore.length - 1] = '#' + tag;
+        const newTextBefore = wordsBefore.join(' ') + ' ';
+        input.value = newTextBefore + value.substring(cursorPos);
+    } else {
+        // Append cleanly if they just clicked on an empty space
+        const prefix = (value.length > 0 && !textBeforeCursor.endsWith(' ')) ? ' ' : '';
+        input.value = textBeforeCursor + prefix + '#' + tag + ' ' + value.substring(cursorPos);
+    }
+    
+    document.getElementById('form-tag-suggestions').style.display = 'none';
+    input.focus();
+}
 
         function handleSearchInput(e) {
             handleSearchChange(); 
@@ -3823,6 +3830,12 @@
         fetchCloudTripNames();
     </script>
     <script>
+	window.addEventListener('beforeunload', function (e) {
+    // Triggers the browser's native "Leave site? Changes you made may not be saved" prompt
+    e.preventDefault();
+    e.returnValue = '';
+    return '';
+});
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/TripCalc/sw.js')
