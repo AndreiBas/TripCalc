@@ -1,12 +1,22 @@
 // Bump this version number every time you update your HTML/CSS/JS!
-const CACHE_NAME = 'trip-calc-cache-v2'; 
+const CACHE_NAME = 'trip-calc-cache-v5'; 
 const REPO_NAME = '/TripCalc';
 
 // ONLY put guaranteed local files here. Do NOT put external CDNs here.
 const localUrlsToCache = [
   `${REPO_NAME}/`,
   `${REPO_NAME}/index.html`,
-  `${REPO_NAME}/manifest.json`
+  `${REPO_NAME}/manifest.json`,
+  `${REPO_NAME}/css/styles.css`,
+  `${REPO_NAME}/js/config.js`,
+  `${REPO_NAME}/js/state.js`,
+  `${REPO_NAME}/js/db.js`,
+  `${REPO_NAME}/js/currency.js`,
+  `${REPO_NAME}/js/calculator.js`,
+  `${REPO_NAME}/js/notes.js`,
+  `${REPO_NAME}/js/pdf.js`,
+  `${REPO_NAME}/js/ui.js`,
+  `${REPO_NAME}/js/app.js`
 ];
 
 // 1. Install & Cache Local Files Immediately
