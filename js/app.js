@@ -4,6 +4,7 @@ import { initCalculatorFocusTracker, initCalculatorDraggable } from './calculato
 import { applyHeaderState, updateUI, updateFormColor, syncStateToDOM } from './ui.js';
 import { updateCurrencySelectors } from './currency.js';
 import { fetchCloudTripNames, updateSyncBtnState } from './db.js';
+import './export.js';
 
 // Boot Sequence
 function bootApp() {

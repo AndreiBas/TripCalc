@@ -1008,11 +1008,13 @@ export function toggleIgnore(id) {
     }
 }
 
-export function toggleAllExpenses(ignoreState) {
+export function toggleAllExpenses() {
     if (state.expenses.length === 0) return;
-    const actionText = ignoreState ? "ignore" : "include";
+    const hasActive = state.expenses.some(e => !e.ignored);
+    const targetIgnoreState = hasActive;
+    const actionText = targetIgnoreState ? "ignore" : "include";
     if (confirm(`Are you sure you want to ${actionText} ALL activities?`)) {
-        state.expenses.forEach(e => e.ignored = ignoreState); 
+        state.expenses.forEach(e => e.ignored = targetIgnoreState); 
         saveState(); 
         updateUI();
     }
@@ -1120,6 +1122,23 @@ export function syncStateToDOM() {
 export function updateUI() {
     updateAutocomplete(); 
     renderCategoryFilters();
+
+    const toggleAllBtn = document.getElementById('toggle-all-btn');
+    if (toggleAllBtn) {
+        if (state.expenses.length === 0) {
+            toggleAllBtn.style.display = 'none';
+        } else {
+            toggleAllBtn.style.display = 'inline-flex';
+            const hasActive = state.expenses.some(e => !e.ignored);
+            if (hasActive) {
+                toggleAllBtn.innerHTML = '🚫 All';
+                toggleAllBtn.title = 'Ignore all activities in calculations';
+            } else {
+                toggleAllBtn.innerHTML = '✅ All';
+                toggleAllBtn.title = 'Include all activities in calculations';
+            }
+        }
+    }
 
     const pList = document.getElementById('participant-list');
     if (pList) {
@@ -1404,12 +1423,12 @@ export function updateUI() {
             if (e.notes && e.notes.trim() !== '') {
                 const isUrl = e.notes.startsWith('http://') || e.notes.startsWith('https://');
                 const noteContent = isUrl ? `<a href="${e.notes}" target="_blank" style="color: var(--primary); text-decoration: underline; word-break: break-all;">${e.notes}</a>` : `<span style="word-break: break-word;">${e.notes}</span>`;
-                notesHtml = `<div style="margin-top: 8px; padding: 6px 10px; background: rgba(0,0,0,0.02); border-radius: 6px; font-size: 0.85rem; color: var(--secondary); border-left: 3px solid ${catInfo.color}60;">${noteContent}</div>`;
+                notesHtml = `<div style="margin-top: 10px; padding: 8px 12px; background: rgba(255, 255, 255, 0.5); border-radius: var(--radius-sm); font-size: 0.85rem; color: var(--secondary); border: 1px solid rgba(226, 232, 240, 0.6); border-left: 4px solid ${catInfo.color};">${noteContent}</div>`;
             }
 
             const isEditing = state.editingExpenseId === e.id; 
             const editingClass = isEditing ? 'is-editing' : '';
-            let cardStyle = `background: ${catInfo.bg}; border: 1px solid ${catInfo.color}40; border-left: 5px solid ${catInfo.color};`; 
+            let cardStyle = `background: linear-gradient(135deg, ${catInfo.bg}, rgba(255, 255, 255, 0.45)); border: 1px solid ${catInfo.color}30; border-left: 6px solid ${catInfo.color};`; 
             const ignoredClass = e.ignored ? 'ignored' : '';
 
             return `
