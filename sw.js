@@ -1,5 +1,5 @@
 // Bump this version number every time you update your HTML/CSS/JS!
-const CACHE_NAME = 'trip-calc-cache-v5'; 
+const CACHE_NAME = 'trip-calc-cache-v6'; 
 const REPO_NAME = '/TripCalc';
 
 // ONLY put guaranteed local files here. Do NOT put external CDNs here.
