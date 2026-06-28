@@ -83,7 +83,7 @@ export function repairLegacyData() {
 }
 
 export function saveState(skipAutoSync = false) {
-    state.localLastModified = Date.now();
+    state.localLastModified = Math.max(state.localLastModified || 0, Date.now()) + 1;
     
     const payload = { 
         tripName: state.tripName, 

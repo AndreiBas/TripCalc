@@ -11,13 +11,13 @@ async function getUI() {
     return uiModule;
 }
 
-// Register cloud sync callback in state so saveState can run it without importing db.js
-state.triggerCloudSync = () => {
+state.triggerCloudSync = (skipAutoSync = false) => {
+    if (skipAutoSync) return;
     if (state.supabaseClient) {
         const el = document.getElementById('cloud-status');
         if (el) el.innerText = "⏳ Syncing...";
         clearTimeout(state.cloudSyncTimeout);
-        state.cloudSyncTimeout = setTimeout(silentCloudSave, 3000);
+        state.cloudSyncTimeout = setTimeout(silentCloudSave, 1500);
     }
 };
 
