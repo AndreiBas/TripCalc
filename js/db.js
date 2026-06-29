@@ -529,6 +529,12 @@ export async function fetchCloudTripNames() {
     if (elements.auto_trip) elements.auto_trip.innerText = names.auto_trip;
     
     compareVersions();
+
+    // Offline reconciliation: if local lastModified is newer than cloud auto_trip, trigger sync up to cloud
+    if (state.cloudTripNames['auto_trip'] === state.tripName && state.localLastModified > (state.cloudTimestamps['auto_trip'] || 0)) {
+        console.log("Local offline changes detected. Syncing up to the cloud...");
+        silentCloudSave();
+    }
 }
 
 export async function saveToSupabase(targetId) {

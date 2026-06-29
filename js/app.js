@@ -39,6 +39,10 @@ window.addEventListener('focus', () => {
     fetchCloudTripNames();
 });
 
+window.addEventListener('online', () => {
+    fetchCloudTripNames();
+});
+
 window.addEventListener('beforeunload', function (e) {
     // Triggers the browser's native "Leave site? Changes you made may not be saved" prompt
     e.preventDefault();
