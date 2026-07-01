@@ -279,7 +279,7 @@ export function initNotesEditor() {
                     state.tripNotesDelta = state.quill.getContents(); 
                     saveState(); 
                 }
-            }, 1500);
+            }, 15000);
         }
     });
     
@@ -295,6 +295,18 @@ export function initNotesEditor() {
         }
     });
 }
+
+// Force-save notes if they are dirty when the tab/app goes into background (screen off / lock)
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden' && state.isNotesDirty && state.quill) {
+        clearTimeout(state.notesDebounceTimer);
+        applyAutoColor();
+        state.tripNotes = sanitizeHTML(state.quill.root.innerHTML);
+        state.tripNotesDelta = state.quill.getContents();
+        saveState();
+        state.isNotesDirty = false;
+    }
+});
 
 // Bind to window for HTML event handlers compatibility
 window.openNotesModal = openNotesModal;

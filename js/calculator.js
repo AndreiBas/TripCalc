@@ -191,6 +191,44 @@ export function initCalculatorDraggable() {
     }
 }
 
+// Register keyboard event listener for PC mode
+document.addEventListener('keydown', (e) => {
+    // 1. Check if calculator is visible
+    const calc = document.getElementById('mini-calculator');
+    if (!calc || calc.style.display !== 'block') return;
+
+    // 2. Check if we are in PC mode (screen width >= 1024)
+    if (window.innerWidth < 1024) return;
+
+    // 3. Ignore if user is currently typing in an input field, textarea, or Quill editor
+    const activeEl = document.activeElement;
+    if (activeEl && (
+        activeEl.tagName === 'INPUT' || 
+        activeEl.tagName === 'TEXTAREA' || 
+        activeEl.isContentEditable || 
+        activeEl.closest('.ql-editor') ||
+        activeEl.closest('.ql-container')
+    )) {
+        return;
+    }
+
+    // 4. Handle key mappings
+    const key = e.key;
+    if (/[0-9+\-*/.()%]/.test(key)) {
+        e.preventDefault();
+        calcInput(key);
+    } else if (key === 'Backspace') {
+        e.preventDefault();
+        calcDelete();
+    } else if (key === 'Escape' || key === 'Delete') {
+        e.preventDefault();
+        calcClear();
+    } else if (key === 'Enter' || key === '=') {
+        e.preventDefault();
+        calcSolve();
+    }
+});
+
 // Bind to window for HTML event handlers compatibility
 window.toggleCalculator = toggleCalculator;
 window.calcInput = calcInput;
