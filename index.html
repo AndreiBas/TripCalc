@@ -147,7 +147,7 @@
             <details class="participants-dropdown header-collapsible-item">
                 <summary>
                     <span>👥 Participants and settings</span>
-                    <span style="font-size: 0.7rem; color: var(--secondary); font-weight: 600; background: var(--bg); padding: 2px 6px; border-radius: 10px;">v4.8</span>
+                    <span style="font-size: 0.7rem; color: var(--secondary); font-weight: 600; background: var(--bg); padding: 2px 6px; border-radius: 10px;">v4.9</span>
                 </summary>
                 <div style="margin-top: 12px; border-top: 1px solid var(--border); padding-top: 12px;">
                     <div class="form-row">
@@ -357,50 +357,115 @@
                 <span style="cursor: pointer; font-size: 1.6rem; line-height: 1; color: var(--secondary);" onclick="toggleHelpModal()">&times;</span>
             </div>
             
-            <div style="flex: 1; overflow-y: auto; padding-right: 12px; font-size: 0.92rem; line-height: 1.6; color: var(--text);">
+            <div style="flex: 1; overflow-y: auto; padding-right: 12px; font-size: 0.9rem; line-height: 1.6; color: var(--text);">
+                <!-- QUICK START EXAMPLE -->
+                <section style="margin-bottom: 24px; background: rgba(79, 70, 229, 0.04); padding: 16px; border-radius: 12px; border: 1px solid rgba(79, 70, 229, 0.1);">
+                    <h3 style="color: var(--primary); margin-top: 0; border-bottom: 1px solid rgba(79, 70, 229, 0.15); padding-bottom: 6px; display: flex; align-items: center; gap: 6px;">🚀 60-Second Quick Start</h3>
+                    <p style="margin-top: 6px; font-size: 0.88rem;">Imagine a weekend trip with <strong>Alice</strong>, <strong>Bob</strong>, and a couple <strong>John & Jane</strong>:</p>
+                    <ol style="margin-bottom: 0; padding-left: 20px; font-size: 0.88rem;">
+                        <li><strong>Add Names</strong>: Type <code>Alice</code>, <code>Bob</code>, <code>John</code>, <code>Jane</code> under Participants.</li>
+                        <li><strong>Form Groups</strong>: Click 👥 on John & Jane's badges, group them as <code>Smith Family</code>. Their individual balances will combine.</li>
+                        <li><strong>Add Bill (Equal + Addons)</strong>: Alice pays <strong>$100</strong> for dinner. Under <em>Equal Split</em>, check Bob & Smith Family.
+                            <ul>
+                                <li>John ordered an extra drink for $10. In <strong>+ Extra $</strong> next to John's name, type <code>10</code>. The app splits the rest equally.</li>
+                            </ul>
+                        </li>
+                        <li><strong>Check Standings</strong>: Look at the standings and settlement block. It instantly displays who owes whom.</li>
+                        <li><strong>Export Report</strong>: Click <strong>📄 Export HTML</strong> to save a beautiful, print-ready summary report.</li>
+                    </ol>
+                </section>
+
+                <!-- EXPENSES & SPLITS -->
                 <section style="margin-bottom: 24px;">
-                    <h3 style="color: var(--primary); margin-top: 0; border-bottom: 1px dashed var(--border); padding-bottom: 4px;">➕ Adding & Splitting Expenses</h3>
-                    <p>Enter the date, choose a category, and describe the activity. You can add searchable <strong>#tags</strong> (e.g. <code>#dinner #tickets</code>) in the tag input field.</p>
-                    <ul>
-                        <li><strong>Equal Split:</strong> Splitting equally among selected people. You can add <strong>+ Extra $</strong> (extras bought only by that person) or specify an <strong>Exact Share $</strong> (overrides the equal split for them).</li>
-                        <li><strong>Percentage Split:</strong> Assign exact percentages (e.g. 60% and 40%) for the cost split. Must sum to 100%.</li>
+                    <h3 style="color: var(--primary); border-bottom: 1px dashed var(--border); padding-bottom: 4px; display: flex; align-items: center; gap: 6px;">➕ Expenses & Advanced Splits</h3>
+                    <p>Enter the date, choose a category, type a description, and input the amount. You can add searchable <strong>#tags</strong> (e.g. <code>#taxi</code> or <code>#lunch</code>) in the tag field.</p>
+                    <ul style="padding-left: 20px;">
+                        <li><strong>Equal Split:</strong> Cost is shared evenly.
+                            <ul>
+                                <li><strong>+ Extra $ (Addon)</strong>: Individual extras (e.g., John ordered steak, others had soup). It adds this amount to John's debt *before* splitting the remainder.</li>
+                                <li><strong>Exact Share $ (Override)</strong>: Fixes the exact cost for this person, bypassing the equal share division entirely.</li>
+                            </ul>
+                        </li>
+                        <li><strong>Percentage Split:</strong> Define custom splitting ratios (e.g., 60% / 40%). The sum of all selected percentages must equal 100%.</li>
                     </ul>
                 </section>
 
+                <!-- PARTICIPANTS & SETUP MEMORY -->
                 <section style="margin-bottom: 24px;">
-                    <h3 style="color: var(--primary); border-bottom: 1px dashed var(--border); padding-bottom: 4px;">👥 Participants and settings</h3>
-                    <p>Add participant names. Click on their name badge to rename them or click the <code>👥 Edit Group</code> button on their badge to assign them to families/groups (e.g. <code>Smith Family</code>).</p>
-                    <p><strong>Setup Memory:</strong> Use <em>Save Setup Memory</em> to store your active participant names and groups in local memory. Clicking <em>Load Setup Memory</em> recovers them instantly for a new trip.</p>
-                </section>
-
-                <section style="margin-bottom: 24px;">
-                    <h3 style="color: var(--primary); border-bottom: 1px dashed var(--border); padding-bottom: 4px;">💱 Multiple Currencies</h3>
-                    <p>Set a secondary currency (e.g., EUR, CZK, CAD) in the <code>Cur:</code> field in the header. The app automatically fetches the latest conversion rate against USD, which you can customize or manual refresh with the <strong>Fetch Latest Rate</strong> button. All inputs in that currency are converted to USD in the final standings.</p>
-                </section>
-
-                <section style="margin-bottom: 24px;">
-                    <h3 style="color: var(--primary); border-bottom: 1px dashed var(--border); padding-bottom: 4px;">☁️ Supabase Cloud Sync</h3>
-                    <p>Keep your trips safely synced in the cloud. Click <strong>Sync</strong> (or Connect Cloud) to enter your Supabase connection parameters (URL, Key, and a custom security PIN).</p>
-                    <ul>
-                        <li>Your data is encrypted <strong>locally in your browser</strong> using AES-256 before being sent to the database. The database stores only ciphertext. No one can read your data without your security PIN.</li>
-                        <li>Use <strong>S</strong> (Save) and <strong>L</strong> (Load) on slots 1, 2, or 3.</li>
-                        <li>Toggle <strong>Auto-Sync</strong> to automatically push local updates to the cloud in real-time.</li>
+                    <h3 style="color: var(--primary); border-bottom: 1px dashed var(--border); padding-bottom: 4px; display: flex; align-items: center; gap: 6px;">👥 Grouping & Setup Memory</h3>
+                    <p>Consolidate balances by grouping couples, roommates, or families:</p>
+                    <ul style="padding-left: 20px;">
+                        <li><strong>Assign Group</strong>: Click the 👥 icon on any participant badge to add them to a custom group.</li>
+                        <li><strong>Rename Badges</strong>: Click directly on a participant's name badge to change their name instantly.</li>
+                        <li><strong>Setup Memory</strong>: Don't re-type names for every new trip! Click <strong>Save Setup Memory</strong> to save names and groups locally. Click <strong>Load Setup Memory</strong> to restore them instantly for a new sheet.</li>
                     </ul>
                 </section>
 
+                <!-- INTERACTIVE LEDGER FILTERS -->
                 <section style="margin-bottom: 24px;">
-                    <h3 style="color: var(--primary); border-bottom: 1px dashed var(--border); padding-bottom: 4px;">📂 File Export & Import</h3>
-                    <p>Save backups locally on your device:</p>
-                    <ul>
-                        <li><strong>Save:</strong> Exports a standard JSON file containing all trip data.</li>
-                        <li><strong>🔐 Secure Save:</strong> Exports an encrypted JSON file protected by a password PIN. Can only be loaded if the user enters the correct PIN.</li>
-                        <li><strong>Load:</strong> Click to import standard or secure JSON backup files.</li>
+                    <h3 style="color: var(--primary); border-bottom: 1px dashed var(--border); padding-bottom: 4px; display: flex; align-items: center; gap: 6px;">📜 Activity Ledger & Smart Filters</h3>
+                    <p>Navigate and isolate transactions in the ledger card:</p>
+                    <ul style="padding-left: 20px;">
+                        <li><strong>Collapsible View</strong>: Click the arrow triangle `▼` to collapse the ledger list out of sight.</li>
+                        <li><strong>Sorting</strong>: Sort by Date, Amount, Description, or Category in ascending/descending order.</li>
+                        <li><strong>All-in-One Toggle</strong>: Tap the dynamic <strong>🚫 All</strong> or <strong>✅ All</strong> button next to the title to ignore or include all activities in calculations instantly.</li>
+                        <li><strong>Click-to-Filter Insights</strong>:
+                            <ul>
+                                <li>Click on a <strong>Category Icon</strong> (e.g. 🍔 Food) in the Category Breakdown table to view only Food activities.</li>
+                                <li>Click on a <strong>Name</strong> in the Standings table to show only activities paid by or involving that person.</li>
+                                <li>Click the **"All"** category filter item or refresh the page to clear filters.</li>
+                            </ul>
+                        </li>
                     </ul>
                 </section>
 
+                <!-- MULTI-CURRENCY -->
                 <section style="margin-bottom: 24px;">
-                    <h3 style="color: var(--primary); border-bottom: 1px dashed var(--border); padding-bottom: 4px;">💸 Final Settlements</h3>
-                    <p>The app automatically calculates the net balance for each group or individual, listing who owes whom. It runs an optimization algorithm to resolve all debts in the absolute minimum number of payments.</p>
+                    <h3 style="color: var(--primary); border-bottom: 1px dashed var(--border); padding-bottom: 4px; display: flex; align-items: center; gap: 6px;">💱 Multi-Currency Handling</h3>
+                    <p>Add expenses in foreign currencies seamlessly:</p>
+                    <ul style="padding-left: 20px;">
+                        <li><strong>Secondary Currency</strong>: Type a code (e.g. <code>EUR</code>, <code>CAD</code>, <code>JPY</code>) in the <strong>Cur:</strong> header field.</li>
+                        <li><strong>Live Exchange Rates</strong>: Click the update button to query live rates from a currency exchange API. You can manually adjust this rate at any time.</li>
+                        <li><strong>Input Conversion</strong>: Expenses entered under the secondary currency display converted amounts in the ledger, calculated against your base currency.</li>
+                    </ul>
+                </section>
+
+                <!-- SMART TRIP NOTES -->
+                <section style="margin-bottom: 24px;">
+                    <h3 style="color: var(--primary); border-bottom: 1px dashed var(--border); padding-bottom: 4px; display: flex; align-items: center; gap: 6px;">📝 Smart Trip Notes</h3>
+                    <p>Write travel details, lists, and itineraries inside the Notes overlay editor:</p>
+                    <ul style="padding-left: 20px;">
+                        <li><strong>🔍 Live Search</strong>: Search text inside notes. Matching terms are highlighted.</li>
+                        <li><strong>📖 Table of Contents</strong>: Format sections using <strong>Heading 2 (H2)</strong>. A clickable Table of Contents dynamically displays in the search bar to jump to sections instantly.</li>
+                        <li><strong>🎨 Auto-Color Highlight</strong>: When enabled, the editor auto-colors date strings, currency symbols, and numbers in the editor for quick scanning.</li>
+                        <li><strong>Reliable Auto-Save & Sync</strong>: Edits auto-save to browser storage every 15 seconds during typing, and trigger **instant local save and cloud sync** when closing the modal, locking your phone, or turning off the screen.</li>
+                    </ul>
+                </section>
+
+                <!-- CLOUD SYNC & BACKUPS -->
+                <section style="margin-bottom: 24px;">
+                    <h3 style="color: var(--primary); border-bottom: 1px dashed var(--border); padding-bottom: 4px; display: flex; align-items: center; gap: 6px;">☁️ Cloud Sync & Backups</h3>
+                    <p>Ensure real-time sync across your PC, mobile, and web app:</p>
+                    <ul style="padding-left: 20px;">
+                        <li><strong>Zero-Knowledge Encryption</strong>: All cloud backups are encrypted client-side using AES-256. The cloud database only stores ciphertext; it is impossible to read without your **Session PIN**.</li>
+                        <li><strong>Sync Slots</strong>: Save or load manual backups across 3 slots (S1/L1, S2/L2, S3/L3).</li>
+                        <li><strong>Auto-Sync</strong>: Real-time synchronization is triggered after any transaction edit or notes change.</li>
+                        <li><strong>Offline Reconciliation</strong>: If you edit offline, changes save locally. When your connection returns (e.g. WiFi turns on), the app detects the local edits and pushes them to the cloud automatically.</li>
+                        <li><strong>📄 Export HTML</strong>: Downloads a print-ready standalone HTML report containing standings, category distributions, settlements, and nested group details.</li>
+                    </ul>
+                </section>
+
+                <!-- CALCULATOR HOTKEYS -->
+                <section style="margin-bottom: 24px;">
+                    <h3 style="color: var(--primary); border-bottom: 1px dashed var(--border); padding-bottom: 4px; display: flex; align-items: center; gap: 6px;">⌨️ PC Calculator Shortcuts</h3>
+                    <p>When the calculator overlay is active on desktop screens, you can use your keyboard directly:</p>
+                    <ul style="padding-left: 20px;">
+                        <li><code>0</code>-<code>9</code>, <code>+</code>, <code>-</code>, <code>*</code>, <code>/</code>, <code>.</code>, <code>%</code>, <code>(</code>, <code>)</code> to enter expressions.</li>
+                        <li><code>Backspace</code> to delete a digit.</li>
+                        <li><code>Escape</code> or <code>Delete</code> to clear.</li>
+                        <li><code>Enter</code> or <code>=</code> to calculate the result.</li>
+                        <li><em>(Keyboard captures are ignored when typing inside text boxes or the notes editor).</em></li>
+                    </ul>
                 </section>
             </div>
             
