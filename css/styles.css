@@ -1036,7 +1036,7 @@ details.indiv-details[open] summary::after {
     position: fixed; 
     bottom: 20px; 
     right: 20px;
-    background: rgba(255, 255, 255, 0.7); 
+    background: rgba(254, 240, 138, 0.75); 
     backdrop-filter: blur(20px); 
     -webkit-backdrop-filter: blur(20px);
     border: 1px solid rgba(255, 255, 255, 0.6); 
@@ -1049,6 +1049,30 @@ details.indiv-details[open] summary::after {
 @media (max-width: 1023px) {
     #mini-calculator { 
         bottom: 80px; 
+        right: 50%; 
+        transform: translateX(50%); 
+    }
+}
+
+#mini-calendar {
+    display: none; 
+    position: fixed; 
+    bottom: 20px; 
+    right: 240px;
+    background: rgba(187, 247, 208, 0.75); 
+    backdrop-filter: blur(20px); 
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.6); 
+    border-radius: var(--radius); 
+    padding: 12px; 
+    box-shadow: 0 10px 25px rgba(15, 23, 42, 0.15); 
+    z-index: 10001; 
+    width: 240px;
+    flex-direction: column;
+}
+@media (max-width: 1023px) {
+    #mini-calendar { 
+        bottom: 120px; 
         right: 50%; 
         transform: translateX(50%); 
     }
