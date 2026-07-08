@@ -124,6 +124,12 @@ The settlement list uses an optimization algorithm to simplify payments:
 * **Individual/Group Cards:** Displays the total paid, owed, and net balance for each member.
 * **Per Day Calculation:** Toggle **Per Day** and enter the number of days of your trip to see your daily averages!
 
+## 📅 Floating Calendar
+Open the draggable calendar overlay by clicking the 📅 button next to the Activity Ledger header or within the Trip Notes modal:
+* **Month Navigation**: Use the ◀ and ▶ buttons to navigate months.
+* **Click-to-Paste**: Click any day to insert that date (formatted as `YYYY-MM-DD` for form fields, or `Month Day, Year` for notes) into your active cursor/input location.
+* **Paste Today**: Click the bottom button to quickly copy/paste today's date.
+
 ---
 
 ## ⌨️ PC Calculator Shortcuts

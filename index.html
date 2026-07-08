@@ -59,6 +59,31 @@
         <button class="outline small" id="calc-copy-btn" onclick="calcCopy()" style="width: 100%; margin-top: 6px;">📋 Copy & Paste Result</button>
     </div>
 
+    <div id="mini-calendar">
+        <div id="mini-calendar-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid var(--border); padding-bottom: 6px; cursor: move; user-select: none;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <h3 style="margin: 0; font-size: 0.9rem; font-weight: 800; color: #000000;">📅 Calendar</h3>
+                <button class="outline small" onclick="calendarGoToToday()" style="padding: 1px 6px; font-size: 0.7rem; cursor: pointer; border-radius: 4px;">Today</button>
+            </div>
+            <span style="cursor: pointer; font-size: 1.2rem; line-height: 1; color: var(--secondary);" onclick="toggleCalendar()">&times;</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <button class="outline small" onclick="prevMonth()" style="padding: 2px 6px; cursor: pointer; border-radius: 4px;">◀</button>
+            <span id="calendar-month-year" style="font-weight: 700; font-size: 0.85rem; color: #000000;">Month Year</span>
+            <button class="outline small" onclick="nextMonth()" style="padding: 2px 6px; cursor: pointer; border-radius: 4px;">▶</button>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; font-size: 0.72rem; font-weight: 700; color: var(--secondary); margin-bottom: 4px;">
+            <div>Mo</div><div>Tu</div><div>We</div><div>Th</div><div>Fr</div><div style="color: #ef4444;">Sa</div><div style="color: #ef4444;">Su</div>
+        </div>
+        <div id="calendar-days-grid" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px;">
+            <!-- Days rendered dynamically -->
+        </div>
+        <div style="display: flex; gap: 6px; margin-top: 8px;">
+            <button class="primary small" onclick="calendarFilterLedger()" style="flex: 1; font-size: 0.8rem; padding: 4px; cursor: pointer; border-radius: 4px;">🔍 Filter Ledger</button>
+            <button class="outline small" onclick="calendarClearFilter()" style="padding: 4px 8px; font-size: 0.8rem; cursor: pointer; border-radius: 4px;">Clear</button>
+        </div>
+    </div>
+
     <div class="app-container">
         
         <div class="top-bar-area">
@@ -147,7 +172,7 @@
             <details class="participants-dropdown header-collapsible-item">
                 <summary>
                     <span>👥 Participants and settings</span>
-                    <span style="font-size: 0.7rem; color: var(--secondary); font-weight: 600; background: var(--bg); padding: 2px 6px; border-radius: 10px;">v4.9</span>
+                    <span style="font-size: 0.7rem; color: var(--secondary); font-weight: 600; background: var(--bg); padding: 2px 6px; border-radius: 10px;">v5.6</span>
                 </summary>
                 <div style="margin-top: 12px; border-top: 1px solid var(--border); padding-top: 12px;">
                     <div class="form-row">
@@ -289,6 +314,7 @@
                                 <option value="payer-asc">👤 Payer (A-Z)</option>
                             </select>
                             <button id="toggle-all-btn" class="outline small" onclick="toggleAllExpenses()" title="Toggle Include/Ignore All">🚫 All</button>
+                            <button class="outline small" onclick="toggleCalendar()" title="Open Calendar" style="padding: 4px 6px;">📅</button>
                         </div>
                     </div>
                     
@@ -454,6 +480,16 @@
                         <li><strong>📄 Export HTML</strong>: Downloads a print-ready standalone HTML report containing standings, category distributions, settlements, and nested group details.</li>
                     </ul>
                 </section>
+                <!-- FLOATING CALENDAR -->
+                <section style="margin-bottom: 24px;">
+                    <h3 style="color: var(--primary); border-bottom: 1px dashed var(--border); padding-bottom: 4px; display: flex; align-items: center; gap: 6px;">📅 Floating Calendar</h3>
+                    <p>Open the draggable calendar by clicking 📅 next to the Activity Ledger header or inside the Trip Notes modal:</p>
+                    <ul style="padding-left: 20px;">
+                        <li><strong>Month Navigation</strong>: Use the ◀ and ▶ buttons to change months.</li>
+                        <li><strong>Click to Paste</strong>: Clicking any day button instantly writes that date (e.g. <code>2026-07-08</code> or <code>July 8, 2026</code>) into the active form input or notes cursor location automatically.</li>
+                        <li><strong>Paste Today</strong>: Click the bottom button to quickly copy/paste today's current date.</li>
+                    </ul>
+                </section>
 
                 <!-- CALCULATOR HOTKEYS -->
                 <section style="margin-bottom: 24px;">
@@ -503,6 +539,7 @@
                 <div style="display:flex; gap: 12px; align-items: center; flex-wrap: wrap;">
                     <button id="copy-notes-btn" class="outline small" onclick="copyTripNotes()" title="Copy entire note to clipboard">📋 Copy All</button>
                     <button class="outline small" onclick="toggleCalculator()" title="Open Calculator">🧮 Calc</button>
+                    <button class="outline small" onclick="toggleCalendar()" title="Open Calendar">📅 Calendar</button>
                     <label style="font-size: 0.85rem; font-weight: 700; display:flex; align-items:center; gap:6px; cursor: pointer; color: var(--secondary);">
                         <input type="checkbox" id="auto-color-toggle" onchange="toggleAutoColor()" style="width: 16px; height: 16px; accent-color: var(--primary);"> Auto-Color
                     </label>
