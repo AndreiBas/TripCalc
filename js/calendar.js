@@ -65,16 +65,52 @@ export function renderCalendar() {
             // Day from previous month
             const prevDay = totalDaysOfPrevMonth - firstDayIndex + i + 1;
             const prevBtn = document.createElement('div');
-            prevBtn.innerText = prevDay;
             prevBtn.style.padding = "2px 0";
             prevBtn.style.fontSize = "0.75rem";
             prevBtn.style.height = "32px";
             prevBtn.style.width = "100%";
             prevBtn.style.display = "flex";
+            prevBtn.style.flexDirection = "column";
             prevBtn.style.alignItems = "center";
             prevBtn.style.justifyContent = "center";
-            prevBtn.style.opacity = "0.35";
-            prevBtn.style.color = "var(--secondary)";
+            
+            const textSpan = document.createElement('span');
+            textSpan.innerText = prevDay;
+            textSpan.style.lineHeight = "1.1";
+            prevBtn.appendChild(textSpan);
+            
+            // Check if this date is selected
+            let prevYear = currentYear;
+            let prevMonthIndex = currentMonth - 1;
+            if (prevMonthIndex < 0) {
+                prevMonthIndex = 11;
+                prevYear--;
+            }
+            const pad = (n) => n.toString().padStart(2, '0');
+            const prevDateStr = `${prevYear}-${pad(prevMonthIndex + 1)}-${pad(prevDay)}`;
+            const isSelected = state.selectedCalendarDates && state.selectedCalendarDates.has(prevDateStr);
+
+            if (isSelected) {
+                prevBtn.style.background = "var(--primary)";
+                prevBtn.style.color = "#ffffff";
+                prevBtn.style.borderRadius = "4px";
+                prevBtn.style.opacity = "0.4";
+            } else {
+                prevBtn.style.opacity = "0.35";
+                prevBtn.style.color = "var(--secondary)";
+            }
+
+            // Draw Activity Dot Indicator for previous month day
+            if (activityDates.has(prevDateStr)) {
+                const dot = document.createElement('span');
+                dot.style.width = "4px";
+                dot.style.height = "4px";
+                dot.style.borderRadius = "50%";
+                dot.style.background = isSelected ? "#ffffff" : "var(--primary)";
+                dot.style.marginTop = "2px";
+                prevBtn.appendChild(dot);
+            }
+
             daysGrid.appendChild(prevBtn);
         } else if (i >= firstDayIndex && i < firstDayIndex + totalDays) {
             // Current month day
@@ -153,16 +189,52 @@ export function renderCalendar() {
             // Day from next month
             const nextDay = i - (firstDayIndex + totalDays) + 1;
             const nextBtn = document.createElement('div');
-            nextBtn.innerText = nextDay;
             nextBtn.style.padding = "2px 0";
             nextBtn.style.fontSize = "0.75rem";
             nextBtn.style.height = "32px";
             nextBtn.style.width = "100%";
             nextBtn.style.display = "flex";
+            nextBtn.style.flexDirection = "column";
             nextBtn.style.alignItems = "center";
             nextBtn.style.justifyContent = "center";
-            nextBtn.style.opacity = "0.35";
-            nextBtn.style.color = "var(--secondary)";
+            
+            const textSpan = document.createElement('span');
+            textSpan.innerText = nextDay;
+            textSpan.style.lineHeight = "1.1";
+            nextBtn.appendChild(textSpan);
+            
+            // Check if this date is selected
+            let nextYear = currentYear;
+            let nextMonthIndex = currentMonth + 1;
+            if (nextMonthIndex > 11) {
+                nextMonthIndex = 0;
+                nextYear++;
+            }
+            const pad = (n) => n.toString().padStart(2, '0');
+            const nextDateStr = `${nextYear}-${pad(nextMonthIndex + 1)}-${pad(nextDay)}`;
+            const isSelected = state.selectedCalendarDates && state.selectedCalendarDates.has(nextDateStr);
+
+            if (isSelected) {
+                nextBtn.style.background = "var(--primary)";
+                nextBtn.style.color = "#ffffff";
+                nextBtn.style.borderRadius = "4px";
+                nextBtn.style.opacity = "0.4";
+            } else {
+                nextBtn.style.opacity = "0.35";
+                nextBtn.style.color = "var(--secondary)";
+            }
+
+            // Draw Activity Dot Indicator for next month day
+            if (activityDates.has(nextDateStr)) {
+                const dot = document.createElement('span');
+                dot.style.width = "4px";
+                dot.style.height = "4px";
+                dot.style.borderRadius = "50%";
+                dot.style.background = isSelected ? "#ffffff" : "var(--primary)";
+                dot.style.marginTop = "2px";
+                nextBtn.appendChild(dot);
+            }
+
             daysGrid.appendChild(nextBtn);
         }
     }
