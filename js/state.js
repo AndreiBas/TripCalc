@@ -49,7 +49,8 @@ export const state = {
     lastQuillRange: null, 
     isNotesDirty: false,
 
-    activeCategoryFilters: new Set(Object.keys(CATEGORIES))
+    activeCategoryFilters: new Set(Object.keys(CATEGORIES)),
+    selectedCalendarDates: new Set()
 };
 
 export function repairLegacyData() {

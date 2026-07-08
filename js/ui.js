@@ -117,6 +117,12 @@ export function showToast(message, type = 'success') {
 // --- FILTER MATCHING ---
 export function doesExpenseMatchFilters(e, groupsMap) {
     const cat = e.category || 'Other';
+    
+    // Calendar Date Filter
+    if (state.selectedCalendarDates && state.selectedCalendarDates.size > 0) {
+        if (!state.selectedCalendarDates.has(e.date)) return false;
+    }
+
     if (state.insightFilter) {
         const groupMembers = groupsMap[state.insightFilter.name] || [state.insightFilter.name];
         const involvesTarget = groupMembers.includes(e.payer) || e.involved.some(p => groupMembers.includes(p));
@@ -721,8 +727,17 @@ export function handleSearchChange() {
     }, 200);
 }
 
-export function clearSearch() {
+export async function clearSearch() {
     state.insightFilter = null;
+    if (state.selectedCalendarDates) {
+        state.selectedCalendarDates.clear();
+    }
+    try {
+        const { renderCalendar } = await import('./calendar.js');
+        renderCalendar();
+    } catch(e) {
+        console.error(e);
+    }
     const searchInput = document.getElementById('search-filter');
     if (searchInput) {
         searchInput.value = '';
@@ -1347,12 +1362,27 @@ export function updateUI() {
     
     const searchInput = document.getElementById('search-filter');
     const clearBtn = document.getElementById('clear-search-btn');
-    if (state.insightFilter && searchInput && clearBtn) {
+    if (state.selectedCalendarDates && state.selectedCalendarDates.size > 0 && searchInput && clearBtn) {
+        const count = state.selectedCalendarDates.size;
+        searchInput.value = `📅 Date Filter Active (${count} day${count > 1 ? 's' : ''})`;
+        searchInput.style.color = "var(--primary)";
+        searchInput.style.fontWeight = "700";
+        searchInput.readOnly = true;
+        clearBtn.style.display = 'block';
+    } else if (state.insightFilter && searchInput && clearBtn) {
         searchInput.value = `Filtered by ${state.insightFilter.name} (${state.insightFilter.cat})`;
         searchInput.style.color = "var(--primary)";
         searchInput.style.fontWeight = "700";
         searchInput.readOnly = true;
         clearBtn.style.display = 'block';
+    } else if (searchInput && clearBtn) {
+        if (!state.searchText) {
+            searchInput.value = '';
+            clearBtn.style.display = 'none';
+        }
+        searchInput.readOnly = false;
+        searchInput.style.color = 'var(--text)';
+        searchInput.style.fontWeight = '500';
     }
 
     const ledgerCountEl = document.getElementById('ledger-count');

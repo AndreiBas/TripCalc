@@ -1,6 +1,7 @@
 import { loadState } from './state.js';
 import { initNotesEditor } from './notes.js';
 import { initCalculatorFocusTracker, initCalculatorDraggable } from './calculator.js';
+import { initCalendarFocusTracker, initCalendarDraggable } from './calendar.js';
 import { applyHeaderState, updateUI, updateFormColor, syncStateToDOM } from './ui.js';
 import { updateCurrencySelectors } from './currency.js';
 import { fetchCloudTripNames, updateSyncBtnState } from './db.js';
@@ -17,6 +18,8 @@ function bootApp() {
     initNotesEditor();
     initCalculatorFocusTracker();
     initCalculatorDraggable();
+    initCalendarFocusTracker();
+    initCalendarDraggable();
     fetchCloudTripNames();
     updateSyncBtnState();
 }

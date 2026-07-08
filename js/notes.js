@@ -97,9 +97,26 @@ export function applyAutoColor() {
     const text = state.quill.getText();
     const formattedIndices = new Set(); 
     const rules = [
-        { regex: /(?:[$€£]|USD|EUR)[ \t]*\d+(?:,\d{3})*(?:\.\d{2})?/gi, color: AUTO_COLORS.currency }, 
-        { regex: /\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{1,2}(?:st|nd|rd|th)?,? \d{2,4}\b|\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b/gi, color: AUTO_COLORS.date }, 
-        { regex: /\b\d+(?:,\d{3})*(?:\.\d+)?\b/g, color: AUTO_COLORS.number } 
+        // Currency / Price Range (e.g. $200, $200-300, 200-300$, USD 200)
+        { 
+            regex: /(?:[$€£]|USD|EUR)[ \t]*\d+(?:,\d{3})*(?:\.\d{2})?(?:\s*[\-\–\—]\s*\d+(?:,\d{3})*(?:\.\d{2})?)?\b|\b\d+(?:,\d{3})*(?:\.\d{2})?\s*[\-\–\—]\s*\d+(?:,\d{3})*(?:\.\d{2})?\s*(?:[$€£]|USD|EUR)\b/gi, 
+            color: AUTO_COLORS.currency 
+        }, 
+        // Date / Date Range (e.g. June 25, 6/23-6/26, 12/05/2026)
+        { 
+            regex: /\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{1,2}(?:st|nd|rd|th)?,? \d{2,4}\b|\b\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?\s*[\-\–\—]\s*\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?\b|\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b/gi, 
+            color: AUTO_COLORS.date 
+        },
+        // Time / Time Range (e.g. 8:30 AM, 14:00, 14:00-16:00)
+        {
+            regex: /\b\d{1,2}:\d{2}(?:\s*[AP]M)?(?:\s*[\-\–\—]\s*\d{1,2}:\d{2}(?:\s*[AP]M)?)?\b/gi,
+            color: AUTO_COLORS.date
+        },
+        // Standard Numbers
+        { 
+            regex: /\b\d+(?:,\d{3})*(?:\.\d+)?\b/g, 
+            color: AUTO_COLORS.number 
+        } 
     ];
     rules.forEach(rule => {
         let match;
