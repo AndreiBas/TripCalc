@@ -50,7 +50,8 @@ export const state = {
     isNotesDirty: false,
 
     activeCategoryFilters: new Set(Object.keys(CATEGORIES)),
-    selectedCalendarDates: new Set()
+    selectedCalendarDates: new Set(),
+    defaultTags: ['car', 'guess', 'flight', 'stay', 'grocery', 'restaurant']
 };
 
 export function repairLegacyData() {
@@ -81,6 +82,10 @@ export function repairLegacyData() {
             e.exchangeRate = e.localAmount / e.amount;
         }
     });
+
+    if (!state.defaultTags || !Array.isArray(state.defaultTags)) {
+        state.defaultTags = ['car', 'guess', 'flight', 'stay', 'grocery', 'restaurant'];
+    }
 }
 
 export function saveState(skipAutoSync = false) {
@@ -101,6 +106,7 @@ export function saveState(skipAutoSync = false) {
         tripNotesDelta: state.tripNotesDelta, 
         autoColorNotes: state.autoColorNotes, 
         isHeaderCollapsed: state.isHeaderCollapsed, 
+        defaultTags: state.defaultTags,
         lastModified: state.localLastModified
     };
 
@@ -131,6 +137,7 @@ export function loadState() {
             state.autoColorNotes = data.autoColorNotes || false;
             state.isHeaderCollapsed = data.isHeaderCollapsed || false;
             state.localLastModified = data.lastModified || Date.now();
+            state.defaultTags = data.defaultTags || ['car', 'guess', 'flight', 'stay', 'grocery', 'restaurant'];
             
             repairLegacyData();
             return true;

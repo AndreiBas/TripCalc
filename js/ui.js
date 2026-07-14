@@ -44,7 +44,7 @@ export function getTagStyle(tag) {
 }
 
 export function getAllUniqueTags() {
-    const tagSet = new Set();
+    const tagSet = new Set(state.defaultTags || []);
     state.expenses.forEach(e => {
         if (e.tags && Array.isArray(e.tags)) {
             e.tags.forEach(t => tagSet.add(t));
@@ -240,15 +240,16 @@ export function deleteParticipant(name) {
 }
 
 export function saveGroupTemplate() {
-    if (state.participants.length === 0) { 
-        alert("No participants to save."); 
+    if (state.participants.length === 0 && (!state.defaultTags || state.defaultTags.length === 0)) { 
+        alert("Nothing to save."); 
         return; 
     }
     localStorage.setItem('tripSplitter_GroupTemplate', JSON.stringify({
         participants: state.participants, 
-        participantGroups: state.participantGroups
+        participantGroups: state.participantGroups,
+        defaultTags: state.defaultTags
     }));
-    alert("Group setup saved! You can load them instantly on your next trip.");
+    alert("Group and tags setup saved! You can load them instantly on your next trip.");
 }
 
 export function loadGroupTemplate() {
@@ -257,17 +258,30 @@ export function loadGroupTemplate() {
         const data = JSON.parse(saved);
         const savedParticipants = Array.isArray(data) ? data : data.participants;
         const savedGroups = Array.isArray(data) ? {} : (data.participantGroups || {});
-        let added = 0;
+        
+        let addedPeople = 0;
         savedParticipants.forEach(p => { 
             if (!state.participants.includes(p)) { 
                 state.participants.push(p); 
                 state.participantGroups[p] = savedGroups[p] || p; 
-                added++; 
+                addedPeople++; 
             } 
         });
+        
+        let addedTags = 0;
+        if (data && data.defaultTags && Array.isArray(data.defaultTags)) {
+            if (!state.defaultTags) state.defaultTags = [];
+            data.defaultTags.forEach(t => {
+                if (!state.defaultTags.includes(t)) {
+                    state.defaultTags.push(t);
+                    addedTags++;
+                }
+            });
+        }
+        
         saveState(); 
         updateUI(); 
-        alert(`Loaded ${added} participants from your saved setup.`);
+        alert(`Loaded ${addedPeople} participants and ${addedTags} default tags from your saved setup.`);
     } else { 
         alert("No saved setup found."); 
     }
@@ -290,6 +304,7 @@ export async function resetTrip() {
         state.tripNotesDelta = null; 
         state.autoColorNotes = false;
         state.isHeaderCollapsed = false; 
+        state.defaultTags = ['car', 'guess', 'flight', 'stay', 'grocery', 'restaurant'];
         state.localLastModified = Date.now();
         
         document.getElementById('global-currency').value = ""; 
@@ -553,6 +568,112 @@ export async function refreshFormRate() {
 }
 
 // --- DYNAMIC TAG SUGGESTIONS ---
+export function getRecentTags() {
+    const recent = [];
+    const sortedExpenses = [...state.expenses].sort((a, b) => b.timestamp - a.timestamp);
+    for (const e of sortedExpenses) {
+        if (!e.ignored && e.tags && Array.isArray(e.tags)) {
+            for (const t of e.tags) {
+                // Exclude default tags from recency ranking
+                if (state.defaultTags && state.defaultTags.includes(t.toLowerCase())) {
+                    continue;
+                }
+                const lowerTag = t.toLowerCase();
+                if (!recent.includes(lowerTag)) {
+                    recent.push(lowerTag);
+                    if (recent.length === 2) return recent;
+                }
+            }
+        }
+    }
+    return recent;
+}
+
+export function addDefaultTag() {
+    const input = document.getElementById('new-default-tag');
+    if (!input) return;
+    let val = input.value.trim().toLowerCase();
+    if (val.startsWith('#')) val = val.substring(1).trim();
+    val = val.replace(/[^a-z0-9]/g, ''); // tags should be alphanumeric
+    if (!val) return;
+    
+    if (!state.defaultTags) state.defaultTags = [];
+    if (state.defaultTags.includes(val)) {
+        alert("Tag already exists in defaults!");
+        return;
+    }
+    state.defaultTags.push(val);
+    input.value = '';
+    saveState();
+    updateUI();
+}
+
+export function handleDefaultTagKeyPress(event) {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        addDefaultTag();
+    }
+}
+
+export function renameDefaultTag(oldTag) {
+    const newTagInput = prompt(`Rename tag #${oldTag} to (alphanumeric only):`, oldTag);
+    if (!newTagInput) return;
+    let newTag = newTagInput.trim().toLowerCase();
+    if (newTag.startsWith('#')) newTag = newTag.substring(1).trim();
+    newTag = newTag.replace(/[^a-z0-9]/g, '');
+    if (newTag === oldTag || newTag === "") return;
+    
+    const isDefault = state.defaultTags && state.defaultTags.includes(oldTag);
+    if (isDefault && state.defaultTags.includes(newTag)) {
+        alert("Tag already exists in defaults.");
+        return;
+    }
+    
+    // Update defaults array if applicable
+    if (isDefault) {
+        const idx = state.defaultTags.indexOf(oldTag);
+        if (idx > -1) {
+            state.defaultTags[idx] = newTag;
+        }
+    }
+    
+    // Update in all expenses
+    state.expenses.forEach(e => {
+        if (e.tags && Array.isArray(e.tags)) {
+            const tIdx = e.tags.indexOf(oldTag);
+            if (tIdx > -1) {
+                if (e.tags.includes(newTag)) {
+                    e.tags.splice(tIdx, 1);
+                } else {
+                    e.tags[tIdx] = newTag;
+                }
+                e.tags.sort((a, b) => a.localeCompare(b));
+            }
+        }
+    });
+    
+    saveState();
+    updateUI();
+}
+
+export function deleteDefaultTag(tag) {
+    if (confirm(`Remove tag #${tag} globally? This will delete it from all activities and defaults.`)) {
+        if (state.defaultTags) {
+            state.defaultTags = state.defaultTags.filter(t => t !== tag);
+        }
+        
+        // Remove from all activities
+        state.expenses.forEach(e => {
+            if (e.tags && Array.isArray(e.tags)) {
+                e.tags = e.tags.filter(t => t !== tag);
+            }
+        });
+        
+        saveState();
+        updateUI();
+    }
+}
+
 export function handleFormTagInput(e) {
     const input = e.target;
     const value = input.value;
@@ -577,10 +698,41 @@ export function handleFormTagInput(e) {
     }
 
     const query = currentWord.substring(1).toLowerCase();
-    const matches = allTags.filter(t => t.toLowerCase().includes(query));
+    
+    // Filter out tags already typed in the input field (excluding current query)
+    const typedTags = (value.match(/#(\w+)/g) || [])
+        .map(t => t.substring(1).toLowerCase())
+        .filter(t => t !== query);
+        
+    const filteredTags = allTags.filter(t => !typedTags.includes(t.toLowerCase()));
+    const matches = filteredTags.filter(t => t.toLowerCase().includes(query));
 
     if (matches.length > 0) {
-        popup.innerHTML = matches.map(t => `<div class="suggestion-item" onclick="selectTagForForm('${t}')"><span class="tag-pill" style="${getTagStyle(t)}">#${t}</span></div>`).join('');
+        const recentTags = getRecentTags();
+        const recentMatches = [];
+        const normalMatches = [];
+        
+        matches.forEach(m => {
+            if (recentTags.includes(m.toLowerCase())) {
+                recentMatches.push(m);
+            } else {
+                normalMatches.push(m);
+            }
+        });
+        
+        recentMatches.sort((a, b) => {
+            return recentTags.indexOf(a.toLowerCase()) - recentTags.indexOf(b.toLowerCase());
+        });
+        
+        normalMatches.sort((a, b) => a.localeCompare(b));
+        
+        const finalMatches = [...recentMatches, ...normalMatches];
+        
+        popup.innerHTML = finalMatches.map(t => {
+            const isRecent = recentTags.includes(t.toLowerCase());
+            const label = isRecent ? `🕒 #${t}` : `#${t}`;
+            return `<div class="suggestion-item" onclick="selectTagForForm('${t}')"><span class="tag-pill" style="${getTagStyle(t)}">${label}</span></div>`;
+        }).join('');
         popup.style.display = 'block';
         popup.style.top = (input.offsetTop + input.offsetHeight) + 'px';
     } else {
@@ -847,7 +999,7 @@ export function saveExpense() {
             state.expenses[index] = { 
                 id: state.editingExpenseId, category, desc, tags, notes, date, amount: amountUsd, localAmount, localCurrency, 
                 payer, splitType, involved: selected, personalExpenses: personalExpensesUsd, fixedShares: fixedSharesUsd, 
-                percentageShares, ignored: state.expenses[index].ignored, timestamp: state.expenses[index].timestamp,
+                percentageShares, ignored: state.expenses[index].ignored, timestamp: Date.now(),
                 exchangeRate: rateToUse
             };
         }
@@ -1172,6 +1324,18 @@ export function updateUI() {
         }).join('') : '<em style="color:var(--secondary); font-size:0.9rem;">No participants added yet.</em>';
     }
 
+    const tList = document.getElementById('default-tags-list');
+    if (tList) {
+        const allTags = getAllUniqueTags();
+        tList.innerHTML = allTags.length ? allTags.map(t => {
+            return `
+            <div class="tag" style="${getTagStyle(t)}; margin-top: 4px;" title="${t}">
+                <span class="tag-name" onclick="renameDefaultTag('${t}')">#${t}</span>
+                <span class="tag-del" onclick="deleteDefaultTag('${t}')">&times;</span>
+            </div>`
+        }).join('') : '<em style="color:var(--secondary); font-size:0.9rem;">No tags added yet.</em>';
+    }
+
     const pSelect = document.getElementById('exp-payer');
     if (pSelect) {
         const currentPayer = pSelect.value;
@@ -1386,7 +1550,14 @@ export function updateUI() {
     }
 
     const ledgerCountEl = document.getElementById('ledger-count');
-    if(ledgerCountEl) ledgerCountEl.innerText = `(${filteredExpenses.length})`;
+    if (ledgerCountEl) {
+        const activeFilteredCount = filteredExpenses.filter(e => !e.ignored).length;
+        if (activeFilteredCount !== filteredExpenses.length) {
+            ledgerCountEl.innerText = `(${activeFilteredCount}/${filteredExpenses.length})`;
+        } else {
+            ledgerCountEl.innerText = `(${filteredExpenses.length})`;
+        }
+    }
 
     if (eList) {
         eList.innerHTML = filteredExpenses.length ? filteredExpenses.map(e => {
@@ -1481,6 +1652,7 @@ export function updateUI() {
                     <div class="expense-actions">
                         <button class="outline small" style="background: white;" onclick="duplicateExpense('${e.id}')" title="Duplicate Activity">📋</button>
                         <button class="outline small" style="background: white;" onclick="toggleIgnore('${e.id}')" title="Toggle Ignore">${e.ignored ? '✅' : '🚫'}</button>
+                        <button class="outline small" style="background: white;" onclick="openMultipleEditTags()" title="Multiple Edit">🏷️</button>
                         <button class="outline small" style="background: white;" onclick="editExpense('${e.id}')" title="Edit">✏️</button>
                         <button class="outline small" style="background: white; color: var(--danger);" onclick="deleteExpense('${e.id}')" title="Delete">🗑️</button>
                     </div>
@@ -1887,3 +2059,202 @@ export function closeHelpModalOnOverlay(e) {
 
 window.toggleHelpModal = toggleHelpModal;
 window.closeHelpModalOnOverlay = closeHelpModalOnOverlay;
+window.addDefaultTag = addDefaultTag;
+window.handleDefaultTagKeyPress = handleDefaultTagKeyPress;
+window.renameDefaultTag = renameDefaultTag;
+window.deleteDefaultTag = deleteDefaultTag;
+
+export function openMultipleEditTags() {
+    try {
+        const groupsMap = {};
+        state.participants.forEach(p => {
+            const gName = state.participantGroups[p] || p;
+            if (!groupsMap[gName]) groupsMap[gName] = [];
+            groupsMap[gName].push(p);
+        });
+        
+        const filteredActivities = state.expenses.filter(e => !e.ignored && doesExpenseMatchFilters(e, groupsMap));
+        
+        if (filteredActivities.length === 0) {
+            alert("No active activities match the current filters.");
+            return;
+        }
+        
+        state.bulkEditActivities = filteredActivities;
+        state.bulkRemovedTags = new Set();
+        state.bulkAddedTags = [];
+        
+        const descEl = document.getElementById('bulk-edit-description');
+        if (descEl) {
+            descEl.innerText = `Modifying tags for ${filteredActivities.length} active, filtered activities.`;
+        }
+        
+        let commonTags = [];
+        if (filteredActivities[0] && filteredActivities[0].tags) {
+            commonTags = [...filteredActivities[0].tags];
+        }
+        filteredActivities.forEach(e => {
+            const eTags = e.tags || [];
+            commonTags = commonTags.filter(t => eTags.includes(t));
+        });
+        state.bulkCommonTags = commonTags;
+        
+        const input = document.getElementById('bulk-new-tag');
+        if (input) input.value = '';
+        const suggestions = document.getElementById('bulk-tag-suggestions');
+        if (suggestions) suggestions.style.display = 'none';
+        
+        renderBulkEditTagsList();
+        
+        const overlay = document.getElementById('multiple-edit-overlay');
+        if (overlay) {
+            overlay.classList.add('active');
+        } else {
+            console.error("multiple-edit-overlay not found in DOM! Please force reload (Ctrl+F5) to clear PWA cache.");
+            alert("Bulk editor overlay element not found. Please force reload (Ctrl+F5) to refresh cache.");
+        }
+    } catch (err) {
+        console.error("Error opening multiple edit modal:", err);
+        alert("Error opening bulk editor: " + err.message);
+    }
+}
+
+export function renderBulkEditTagsList() {
+    const commonContainer = document.getElementById('bulk-common-tags');
+    if (commonContainer) {
+        const visibleCommon = state.bulkCommonTags.filter(t => !state.bulkRemovedTags.has(t));
+        commonContainer.innerHTML = visibleCommon.length ? visibleCommon.map(t => {
+            return `
+            <div class="tag" style="${getTagStyle(t)}" title="${t}">
+                <span class="tag-name">#${t}</span>
+                <span class="tag-del" onclick="removeCommonTagFromBulk('${t}')">&times;</span>
+            </div>`;
+        }).join('') : '<span style="font-size:0.8rem; color:var(--secondary); font-style:italic;">No common tags found.</span>';
+    }
+    
+    const addedContainer = document.getElementById('bulk-added-tags');
+    if (addedContainer) {
+        addedContainer.innerHTML = state.bulkAddedTags.map(t => {
+            return `
+            <div class="tag" style="${getTagStyle(t)}" title="${t}">
+                <span class="tag-name">#${t}</span>
+                <span class="tag-del" onclick="removeAddedTagFromBulk('${t}')">&times;</span>
+            </div>`;
+        }).join('');
+    }
+}
+
+export function removeCommonTagFromBulk(tag) {
+    state.bulkRemovedTags.add(tag);
+    renderBulkEditTagsList();
+}
+
+export function addTagToBulkList() {
+    const input = document.getElementById('bulk-new-tag');
+    if (!input) return;
+    let val = input.value.trim().toLowerCase();
+    if (val.startsWith('#')) val = val.substring(1).trim();
+    val = val.replace(/[^a-z0-9]/g, '');
+    if (!val) return;
+    
+    if (state.bulkRemovedTags.has(val)) {
+        state.bulkRemovedTags.delete(val);
+    } else if (!state.bulkCommonTags.includes(val) && !state.bulkAddedTags.includes(val)) {
+        state.bulkAddedTags.push(val);
+    }
+    
+    input.value = '';
+    const suggestions = document.getElementById('bulk-tag-suggestions');
+    if (suggestions) suggestions.style.display = 'none';
+    
+    renderBulkEditTagsList();
+}
+
+export function removeAddedTagFromBulk(tag) {
+    state.bulkAddedTags = state.bulkAddedTags.filter(t => t !== tag);
+    renderBulkEditTagsList();
+}
+
+export function closeBulkEditTagsModal() {
+    document.getElementById('multiple-edit-overlay').classList.remove('active');
+}
+
+export function applyBulkEditTags() {
+    if (!state.bulkEditActivities || state.bulkEditActivities.length === 0) return;
+    
+    state.bulkEditActivities.forEach(e => {
+        let currentTags = [...e.tags];
+        currentTags = currentTags.filter(t => !state.bulkRemovedTags.has(t));
+        state.bulkAddedTags.forEach(t => {
+            if (!currentTags.includes(t)) {
+                currentTags.push(t);
+            }
+        });
+        currentTags.sort((a, b) => a.localeCompare(b));
+        e.tags = currentTags;
+    });
+    
+    saveState();
+    updateUI();
+    showToast(`Tags updated for ${state.bulkEditActivities.length} activities!`, 'edit');
+    closeBulkEditTagsModal();
+}
+
+export function handleBulkTagAutocomplete(e) {
+    const input = e.target;
+    const value = input.value;
+    const popup = document.getElementById('bulk-tag-suggestions');
+    const allTags = getAllUniqueTags();
+    if (!popup) return;
+    
+    let query = value.trim().toLowerCase();
+    if (query.startsWith('#')) query = query.substring(1);
+    
+    if (!query) {
+        popup.style.display = 'none';
+        return;
+    }
+    
+    const matches = allTags.filter(t => {
+        const lower = t.toLowerCase();
+        if (state.bulkAddedTags.includes(lower)) return false;
+        if (state.bulkCommonTags.includes(lower) && !state.bulkRemovedTags.has(lower)) return false;
+        return lower.includes(query);
+    });
+    
+    if (matches.length > 0) {
+        popup.innerHTML = matches.map(t => `<div class="suggestion-item" onclick="selectTagForBulk('${t}')"><span class="tag-pill" style="${getTagStyle(t)}">#${t}</span></div>`).join('');
+        popup.style.display = 'block';
+        popup.style.top = (input.offsetTop + input.offsetHeight) + 'px';
+    } else {
+        popup.style.display = 'none';
+    }
+}
+
+export function selectTagForBulk(tag) {
+    const input = document.getElementById('bulk-new-tag');
+    if (input) {
+        input.value = tag;
+    }
+    const popup = document.getElementById('bulk-tag-suggestions');
+    if (popup) popup.style.display = 'none';
+    input.focus();
+}
+
+export function handleBulkNewTagKeyPress(event) {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        addTagToBulkList();
+    }
+}
+
+window.openMultipleEditTags = openMultipleEditTags;
+window.removeCommonTagFromBulk = removeCommonTagFromBulk;
+window.addTagToBulkList = addTagToBulkList;
+window.removeAddedTagFromBulk = removeAddedTagFromBulk;
+window.closeBulkEditTagsModal = closeBulkEditTagsModal;
+window.applyBulkEditTags = applyBulkEditTags;
+window.handleBulkTagAutocomplete = handleBulkTagAutocomplete;
+window.selectTagForBulk = selectTagForBulk;
+window.handleBulkNewTagKeyPress = handleBulkNewTagKeyPress;
+
