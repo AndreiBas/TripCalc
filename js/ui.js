@@ -53,6 +53,25 @@ export function getAllUniqueTags() {
     return Array.from(tagSet).sort((a, b) => a.localeCompare(b));
 }
 
+export function getTagsFromShownExpenses(cleanSearchText) {
+    const groupsMap = {};
+    state.participants.forEach(p => {
+        const gName = state.participantGroups[p] || p;
+        if (!groupsMap[gName]) groupsMap[gName] = [];
+        groupsMap[gName].push(p);
+    });
+    
+    const tagSet = new Set();
+    state.expenses.forEach(e => {
+        if (!e.ignored && doesExpenseMatchFilters(e, groupsMap, cleanSearchText)) {
+            if (e.tags && Array.isArray(e.tags)) {
+                e.tags.forEach(t => tagSet.add(t));
+            }
+        }
+    });
+    return Array.from(tagSet).sort((a, b) => a.localeCompare(b));
+}
+
 export function showToast(message, type = 'success') {
     let container = document.getElementById('toast-container');
     if (!container) {
@@ -115,7 +134,7 @@ export function showToast(message, type = 'success') {
 }
 
 // --- FILTER MATCHING ---
-export function doesExpenseMatchFilters(e, groupsMap) {
+export function doesExpenseMatchFilters(e, groupsMap, overrideSearchText) {
     const cat = e.category || 'Other';
     
     // Calendar Date Filter
@@ -130,26 +149,33 @@ export function doesExpenseMatchFilters(e, groupsMap) {
     } else {
         if (!state.activeCategoryFilters.has(cat)) return false;
         
-        const searchInputRaw = state.searchText.trim();
+        const searchInputRaw = (overrideSearchText !== undefined ? overrideSearchText : state.searchText).trim();
         if (!searchInputRaw) return true;
 
         let requiredTags = [];
+        let excludedTags = [];
         let requiredText = [];
         const parts = searchInputRaw.split(/\s+/);
         parts.forEach(p => {
-            if (p.startsWith('#') && p.length > 1) requiredTags.push(p.substring(1).toLowerCase());
-            else if (p !== '#') requiredText.push(p.toLowerCase());
+            if (p.startsWith('-#') && p.length > 2) {
+                excludedTags.push(p.substring(2).toLowerCase());
+            } else if (p.startsWith('#') && p.length > 1) {
+                requiredTags.push(p.substring(1).toLowerCase());
+            } else if (p !== '#' && p !== '-#') {
+                requiredText.push(p.toLowerCase());
+            }
         });
 
         const expTags = (e.tags || []).map(t => t.toLowerCase());
         const hasAllTags = requiredTags.every(rt => expTags.some(t => t.includes(rt)));
+        const hasNoExcludedTags = !excludedTags.some(et => expTags.some(t => t.includes(et)));
         
         const involvedNames = e.involved ? e.involved.join(' ') : '';
         const searchableText = `${e.desc} ${e.payer} ${involvedNames} ${e.notes || ''}`.toLowerCase();
         
         const hasAllText = requiredText.every(rt => searchableText.includes(rt));
 
-        return hasAllTags && hasAllText;
+        return hasAllTags && hasNoExcludedTags && hasAllText;
     }
 }
 
@@ -773,9 +799,9 @@ export function handleSearchInput(e) {
     if (!popup) return;
 
     if (value.trim() === '') {
-        const allTags = getAllUniqueTags();
+        const allTags = getTagsFromShownExpenses('');
         if (allTags.length > 0) {
-            popup.innerHTML = allTags.map(t => `<div class="suggestion-item" onclick="selectTagForSearch('${t}')"><span class="tag-pill" style="${getTagStyle(t)}">#${t}</span></div>`).join('');
+            popup.innerHTML = allTags.map(t => `<div class="suggestion-item" onclick="selectTagForSearch('${t}', false)"><span class="tag-pill" style="${getTagStyle(t)}">#${t}</span></div>`).join('');
             popup.style.display = 'block';
         } else {
             popup.style.display = 'none';
@@ -788,13 +814,21 @@ export function handleSearchInput(e) {
     const words = textBeforeCursor.split(/\s+/);
     const currentWord = words[words.length - 1];
 
-    if (currentWord.startsWith('#')) {
-        const query = currentWord.substring(1).toLowerCase();
-        const allTags = getAllUniqueTags();
+    const isNegative = currentWord.startsWith('-#');
+    const isPositive = currentWord.startsWith('#');
+
+    if (isNegative || isPositive) {
+        const prefix = isNegative ? '-#' : '#';
+        const query = currentWord.substring(prefix.length).toLowerCase();
+        
+        const wordIdx = textBeforeCursor.lastIndexOf(currentWord);
+        const cleanSearchText = (wordIdx > -1) ? (textBeforeCursor.substring(0, wordIdx) + textBeforeCursor.substring(wordIdx + currentWord.length)) : textBeforeCursor;
+        
+        const allTags = getTagsFromShownExpenses(cleanSearchText);
         const matches = allTags.filter(t => t.toLowerCase().includes(query));
 
         if (matches.length > 0) {
-            popup.innerHTML = matches.map(t => `<div class="suggestion-item" onclick="selectTagForSearch('${t}')"><span class="tag-pill" style="${getTagStyle(t)}">#${t}</span></div>`).join('');
+            popup.innerHTML = matches.map(t => `<div class="suggestion-item" onclick="selectTagForSearch('${t}', ${isNegative})"><span class="tag-pill" style="${getTagStyle(t)}">${prefix}${t}</span></div>`).join('');
             popup.style.display = 'block';
         } else {
             popup.style.display = 'none';
@@ -804,25 +838,30 @@ export function handleSearchInput(e) {
     }
 }
 
-export function selectTagForSearch(tag) {
+export function selectTagForSearch(tag, isNegative) {
     const input = document.getElementById('search-filter');
     if (!input) return;
     const value = input.value;
+    const prefix = isNegative ? '-#' : '#';
     
     if (value.trim() === '') {
-        input.value = '#' + tag + ' ';
+        input.value = prefix + tag + ' ';
     } else {
         const cursorPos = input.selectionStart;
         const textBeforeCursor = value.substring(0, cursorPos);
         const wordsBefore = textBeforeCursor.split(/\s+/);
         const currentWord = wordsBefore[wordsBefore.length - 1];
         
-        if (currentWord.startsWith('#')) {
+        if (currentWord.startsWith('-#')) {
+            wordsBefore[wordsBefore.length - 1] = '-#' + tag;
+            const newTextBefore = wordsBefore.join(' ') + ' ';
+            input.value = newTextBefore + value.substring(cursorPos);
+        } else if (currentWord.startsWith('#')) {
             wordsBefore[wordsBefore.length - 1] = '#' + tag;
             const newTextBefore = wordsBefore.join(' ') + ' ';
             input.value = newTextBefore + value.substring(cursorPos);
         } else {
-            input.value = value + (value.endsWith(' ') ? '' : ' ') + '#' + tag + ' ';
+            input.value = value + (value.endsWith(' ') ? '' : ' ') + prefix + tag + ' ';
         }
     }
     
@@ -1523,6 +1562,7 @@ export function updateUI() {
     }
 
     const filteredExpenses = sorted.filter(e => doesExpenseMatchFilters(e, groupsMap));
+    state.filteredExpenses = filteredExpenses;
     
     const searchInput = document.getElementById('search-filter');
     const clearBtn = document.getElementById('clear-search-btn');
