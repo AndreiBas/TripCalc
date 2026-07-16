@@ -41,7 +41,8 @@ Splits the total bill based on specific percentage weights.
 * Enter a percentage for each checked participant. The system requires the total sum of percentages to equal exactly **100%** before saving.
 
 ### 3. Search Tags
-* Add hashtags (e.g. `#dinner #taxi`) inside the tag field when logging an activity. You can filter the ledger list by searching these tags.
+* Add hashtags (e.g. `#dinner #taxi`) inside the tag field when logging an activity. You can filter the ledger list by searching these tags, or type `-#tag` to exclude activities containing that tag. Autocomplete suggestions dynamically list tags present in shown activities.
+* **Bulk Edit Tags**: Click the 🏷️ **Multiple Edit** button on any activity card to open a bulk tag editor modal. You can add or remove tags globally across all currently filtered, active activities at once.
 
 ---
 
@@ -66,6 +67,8 @@ Navigate, sorting, and isolating your transactions:
 * **Collapsible Ledger**: Click the arrow triangle `▼` to collapse/expand the ledger list.
 * **Sorting**: Sort activities by Date, Amount, Description, or Category in ascending or descending order.
 * **Ignore / Include All**: Tap the dynamic **🚫 All** or **✅ All** button next to the ledger header to toggle all expenses on/off instantly from calculations.
+* **Search & Exclude Tags**: Type `#tag` to filter by that tag, or type `-#tag` to exclude activities containing that tag. Autocomplete suggestions dynamically list tags present in shown activities.
+* **Bulk Edit Tags**: Click the 🏷️ **Multiple Edit** button on any activity card to open a bulk tag editor modal. You can add or remove tags globally across all currently filtered, active activities at once.
 * **Click-to-Filter Insights**:
   * Click on a **Category Icon** (e.g. 🍔 Food) in the Category Breakdown table to instantly filter the ledger to show only food items.
   - Click on a **Name** in the Standings table to show only activities paid by or involving that person.
