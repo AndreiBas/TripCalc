@@ -143,40 +143,41 @@ export function doesExpenseMatchFilters(e, groupsMap, overrideSearchText) {
     }
 
     if (state.insightFilter) {
+        if (cat !== state.insightFilter.cat) return false;
         const groupMembers = groupsMap[state.insightFilter.name] || [state.insightFilter.name];
         const involvesTarget = groupMembers.includes(e.payer) || e.involved.some(p => groupMembers.includes(p));
-        return (cat === state.insightFilter.cat && involvesTarget);
+        if (!involvesTarget) return false;
     } else {
         if (!state.activeCategoryFilters.has(cat)) return false;
-        
-        const searchInputRaw = (overrideSearchText !== undefined ? overrideSearchText : state.searchText).trim();
-        if (!searchInputRaw) return true;
-
-        let requiredTags = [];
-        let excludedTags = [];
-        let requiredText = [];
-        const parts = searchInputRaw.split(/\s+/);
-        parts.forEach(p => {
-            if (p.startsWith('-#') && p.length > 2) {
-                excludedTags.push(p.substring(2).toLowerCase());
-            } else if (p.startsWith('#') && p.length > 1) {
-                requiredTags.push(p.substring(1).toLowerCase());
-            } else if (p !== '#' && p !== '-#') {
-                requiredText.push(p.toLowerCase());
-            }
-        });
-
-        const expTags = (e.tags || []).map(t => t.toLowerCase());
-        const hasAllTags = requiredTags.every(rt => expTags.some(t => t.includes(rt)));
-        const hasNoExcludedTags = !excludedTags.some(et => expTags.some(t => t.includes(et)));
-        
-        const involvedNames = e.involved ? e.involved.join(' ') : '';
-        const searchableText = `${e.desc} ${e.payer} ${involvedNames} ${e.notes || ''}`.toLowerCase();
-        
-        const hasAllText = requiredText.every(rt => searchableText.includes(rt));
-
-        return hasAllTags && hasNoExcludedTags && hasAllText;
     }
+    
+    const searchInputRaw = (overrideSearchText !== undefined ? overrideSearchText : state.searchText).trim();
+    if (!searchInputRaw) return true;
+
+    let requiredTags = [];
+    let excludedTags = [];
+    let requiredText = [];
+    const parts = searchInputRaw.split(/\s+/);
+    parts.forEach(p => {
+        if (p.startsWith('-#') && p.length > 2) {
+            excludedTags.push(p.substring(2).toLowerCase());
+        } else if (p.startsWith('#') && p.length > 1) {
+            requiredTags.push(p.substring(1).toLowerCase());
+        } else if (p !== '#' && p !== '-#') {
+            requiredText.push(p.toLowerCase());
+        }
+    });
+
+    const expTags = (e.tags || []).map(t => t.toLowerCase());
+    const hasAllTags = requiredTags.every(rt => expTags.some(t => t.includes(rt)));
+    const hasNoExcludedTags = !excludedTags.some(et => expTags.some(t => t.includes(et)));
+    
+    const involvedNames = e.involved ? e.involved.join(' ') : '';
+    const searchableText = `${e.desc} ${e.payer} ${involvedNames} ${e.notes || ''}`.toLowerCase();
+    
+    const hasAllText = requiredText.every(rt => searchableText.includes(rt));
+
+    return hasAllTags && hasNoExcludedTags && hasAllText;
 }
 
 // --- PARTICIPANTS CRUD ---
@@ -943,6 +944,21 @@ export async function clearSearch() {
     updateUI();
 }
 
+export function clearCalendarFilter() {
+    if (state.selectedCalendarDates) {
+        state.selectedCalendarDates.clear();
+    }
+    try {
+        import('./calendar.js').then(({ renderCalendar }) => renderCalendar());
+    } catch (e) {}
+    updateUI();
+}
+
+export function clearInsightFilter() {
+    state.insightFilter = null;
+    updateUI();
+}
+
 // --- EXPENSES OPERATIONS ---
 export function saveExpense() {
     const category = document.getElementById('exp-category').value;
@@ -1566,27 +1582,48 @@ export function updateUI() {
     
     const searchInput = document.getElementById('search-filter');
     const clearBtn = document.getElementById('clear-search-btn');
-    if (state.selectedCalendarDates && state.selectedCalendarDates.size > 0 && searchInput && clearBtn) {
-        const count = state.selectedCalendarDates.size;
-        searchInput.value = `📅 Date Filter Active (${count} day${count > 1 ? 's' : ''})`;
-        searchInput.style.color = "var(--primary)";
-        searchInput.style.fontWeight = "700";
-        searchInput.readOnly = true;
-        clearBtn.style.display = 'block';
-    } else if (state.insightFilter && searchInput && clearBtn) {
-        searchInput.value = `Filtered by ${state.insightFilter.name} (${state.insightFilter.cat})`;
-        searchInput.style.color = "var(--primary)";
-        searchInput.style.fontWeight = "700";
-        searchInput.readOnly = true;
-        clearBtn.style.display = 'block';
-    } else if (searchInput && clearBtn) {
-        if (!state.searchText) {
-            searchInput.value = '';
-            clearBtn.style.display = 'none';
-        }
+    if (searchInput && clearBtn) {
+        const hasText = state.searchText && state.searchText.length > 0;
+        const hasCalendar = state.selectedCalendarDates && state.selectedCalendarDates.size > 0;
+        const hasInsight = !!state.insightFilter;
+        
+        clearBtn.style.display = (hasText || hasCalendar || hasInsight) ? 'block' : 'none';
         searchInput.readOnly = false;
         searchInput.style.color = 'var(--text)';
         searchInput.style.fontWeight = '500';
+        if (!state.searchText) {
+            searchInput.value = '';
+        }
+    }
+
+    const activeFiltersBar = document.getElementById('active-filters-bar');
+    if (activeFiltersBar) {
+        let badgesHtml = '';
+        
+        if (state.selectedCalendarDates && state.selectedCalendarDates.size > 0) {
+            const count = state.selectedCalendarDates.size;
+            badgesHtml += `
+            <div class="tag" style="background: rgba(187, 247, 208, 0.4); color: var(--primary); border: 1px solid rgba(187, 247, 208, 0.8); font-size: 0.8rem; font-weight: 700; padding: 2px 6px; display: inline-flex; align-items: center; gap: 4px; border-radius: var(--radius-sm);">
+                <span>📅 Calendar (${count} day${count > 1 ? 's' : ''})</span>
+                <span style="cursor: pointer; font-weight: 800; font-size: 0.95rem; margin-left: 2px;" onclick="clearCalendarFilter()">&times;</span>
+            </div>`;
+        }
+        
+        if (state.insightFilter) {
+            badgesHtml += `
+            <div class="tag" style="background: rgba(199, 210, 254, 0.4); color: #4f46e5; border: 1px solid rgba(199, 210, 254, 0.8); font-size: 0.8rem; font-weight: 700; padding: 2px 6px; display: inline-flex; align-items: center; gap: 4px; border-radius: var(--radius-sm);">
+                <span>👤 Filter: ${state.insightFilter.name} (${state.insightFilter.cat})</span>
+                <span style="cursor: pointer; font-weight: 800; font-size: 0.95rem; margin-left: 2px;" onclick="clearInsightFilter()">&times;</span>
+            </div>`;
+        }
+        
+        if (badgesHtml) {
+            activeFiltersBar.innerHTML = badgesHtml;
+            activeFiltersBar.style.display = 'flex';
+        } else {
+            activeFiltersBar.innerHTML = '';
+            activeFiltersBar.style.display = 'none';
+        }
     }
 
     const ledgerCountEl = document.getElementById('ledger-count');
@@ -2297,4 +2334,6 @@ window.applyBulkEditTags = applyBulkEditTags;
 window.handleBulkTagAutocomplete = handleBulkTagAutocomplete;
 window.selectTagForBulk = selectTagForBulk;
 window.handleBulkNewTagKeyPress = handleBulkNewTagKeyPress;
+window.clearCalendarFilter = clearCalendarFilter;
+window.clearInsightFilter = clearInsightFilter;
 
