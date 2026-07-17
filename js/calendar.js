@@ -279,8 +279,15 @@ export function selectCalendarDate(year, month, day) {
     }
     renderCalendar();
 
+    // Instantly filter the ledger when date selection changes
+    import('./ui.js').then(({ updateUI }) => updateUI()).catch(e => console.error(e));
+
     // Paste into last active input (as a convenience)
     if (lastActiveInput && !document.body.contains(lastActiveInput)) {
+        lastActiveInput = null;
+    }
+
+    if (lastActiveInput && lastActiveInput.id === 'search-filter') {
         lastActiveInput = null;
     }
 
