@@ -1243,6 +1243,7 @@ export function toggleAllExpenses() {
 }
 
 export function cancelEdit() {
+    const prevEditedId = state.editingExpenseId;
     state.editingExpenseId = null;
     document.getElementById('activity-title-text').innerText = "➕ Add Activity";
     document.getElementById('save-expense-btn').innerText = "Save Activity";
@@ -1274,6 +1275,26 @@ export function cancelEdit() {
     
     updateFormColor();
     updateUI();
+
+    if (prevEditedId) {
+        setTimeout(() => {
+            const activeRow = document.getElementById(`exp-row-${prevEditedId}`);
+            if (activeRow) {
+                if (window.innerWidth >= 1024) {
+                    const colMid = document.querySelector('.col-mid');
+                    if (colMid) colMid.scrollTo({ top: activeRow.offsetTop - 120, behavior: 'smooth' });
+                } else {
+                    activeRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+                
+                // Add a temporary highlight flash
+                activeRow.classList.add('updated-flash');
+                setTimeout(() => {
+                    activeRow.classList.remove('updated-flash');
+                }, 1000);
+            }
+        }, 80);
+    }
 }
 
 // --- RENDERING ROUTINES ---
