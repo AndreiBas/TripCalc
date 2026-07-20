@@ -1,4 +1,4 @@
-export const AUTO_COLORS = { currency: '#059669', date: '#0284c7', number: '#7c3aed' };
+export const AUTO_COLORS = { currency: '#059669', date: '#0284c7', time: '#ea580c', number: '#7c3aed' };
 export const AUTO_COLOR_VALUES = Object.values(AUTO_COLORS);
 
 export const CATEGORIES = {

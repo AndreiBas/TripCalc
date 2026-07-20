@@ -102,15 +102,15 @@ export function applyAutoColor() {
             regex: /(?:[$€£]|USD|EUR)[ \t]*\d+(?:,\d{3})*(?:\.\d{2})?(?:\s*[\-\–\—]\s*\d+(?:,\d{3})*(?:\.\d{2})?)?\b|\b\d+(?:,\d{3})*(?:\.\d{2})?\s*[\-\–\—]\s*\d+(?:,\d{3})*(?:\.\d{2})?\s*(?:[$€£]|USD|EUR)\b/gi, 
             color: AUTO_COLORS.currency 
         }, 
-        // Date / Date Range (e.g. June 25, 6/23-6/26, 12/05/2026)
+        // Date / Date Range (e.g. June 25, Nov 11, Nov 3-11, Tue, Sunday)
         { 
-            regex: /\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{1,2}(?:st|nd|rd|th)?,? \d{2,4}\b|\b\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?\s*[\-\–\—]\s*\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?\b|\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b/gi, 
+            regex: /\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{1,2}\s*[\-\–\—]\s*\d{1,2}\b|\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{1,2}(?:st|nd|rd|th)?(?:,?\s*\d{2,4}(?!\s*:))?\b|\b\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?\s*[\-\–\—]\s*\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?\b|\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b|\b(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b/gi, 
             color: AUTO_COLORS.date 
         },
-        // Time / Time Range (e.g. 8:30 AM, 14:00, 14:00-16:00)
+        // Time / Time Range (e.g. 10:55 AM) & Durations (e.g. 2:25 h, 1h 30m)
         {
-            regex: /\b\d{1,2}:\d{2}(?:\s*[AP]M)?(?:\s*[\-\–\—]\s*\d{1,2}:\d{2}(?:\s*[AP]M)?)?\b/gi,
-            color: AUTO_COLORS.date
+            regex: /\b\d{1,2}:\d{2}\s*h(?:our)?s?(?![a-zA-Z\u00C0-\u017F0-9])|\b\d+(?:\.\d+)?\s*h(?:our)?s?[ \t\u202f\u00a0]*\d+(?:\.\d+)?\s*m(?:in(?:ute)?s?)?(?![a-zA-Z\u00C0-\u017F0-9])|\b\d{1,2}:\d{2}(?:[\s\u202f\u00a0]*[AP]M)?(?:\s*[\-\–\—]\s*\d{1,2}:\d{2}(?:[\s\u202f\u00a0]*[AP]M)?)?\b|\b\d+(?:\.\d+)?\s*h(?:our)?s?(?![a-zA-Z\u00C0-\u017F0-9])|\b\d+(?:\.\d+)?\s*m(?:in(?:ute)?s?)?(?![a-zA-Z\u00C0-\u017F0-9])/gi,
+            color: AUTO_COLORS.time
         },
         // Standard Numbers
         { 
@@ -120,6 +120,7 @@ export function applyAutoColor() {
     ];
     rules.forEach(rule => {
         let match;
+        rule.regex.lastIndex = 0;
         while ((match = rule.regex.exec(text)) !== null) {
             let overlap = false;
             for (let i = match.index; i < match.index + match[0].length; i++) {
