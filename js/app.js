@@ -1,4 +1,4 @@
-import { loadState } from './state.js';
+import { state, loadState } from './state.js';
 import { initNotesEditor } from './notes.js';
 import { initCalculatorFocusTracker, initCalculatorDraggable } from './calculator.js';
 import { initCalendarFocusTracker, initCalendarDraggable } from './calendar.js';

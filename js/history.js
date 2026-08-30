@@ -25,11 +25,20 @@ function buildPayload() {
     };
 }
 
+// Track which cloud slot is currently active so history saves to the right place
+let currentSlotId = 'auto_trip';
+export function setCurrentHistorySlot(slotId) {
+    currentSlotId = slotId;
+}
+
+// Guard flag: prevent pushHistorySnapshot from running during a restore
+let isApplyingSnapshot = false;
+
 let historyCloudSyncTimeout = null;
 function scheduleHistoryCloudSync() {
     clearTimeout(historyCloudSyncTimeout);
     historyCloudSyncTimeout = setTimeout(() => {
-        import('./db.js').then(DB => DB.saveHistoryToCloud('auto_trip'));
+        import('./db.js').then(DB => DB.saveHistoryToCloud(currentSlotId));
     }, 1500);
 }
 
@@ -42,6 +51,7 @@ function persistHistoryLocal() {
 
 export function pushHistorySnapshot() {
     if (!state.historyEnabled) return;
+    if (isApplyingSnapshot) return;  // Guard: don't snapshot during a restore
     const savedAt = Date.now();
     
     const currentPayload = buildPayload();
@@ -81,7 +91,10 @@ export async function restoreHistoryState(index) {
     state.defaultTags = payload.defaultTags || ['car', 'guess', 'flight', 'stay', 'grocery', 'restaurant'];
 
     repairLegacyData();
+    
+    isApplyingSnapshot = true;  // Prevent recursive snapshot
     saveState(true); 
+    isApplyingSnapshot = false;
     
     const UI = await import('./ui.js');
     UI.applyHeaderState();

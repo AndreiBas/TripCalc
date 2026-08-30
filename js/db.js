@@ -739,6 +739,7 @@ export async function loadFromSupabase(targetId) {
             if(targetId === 'manual_trip_3') slotName = "Manual 3";
             alert(`✅ Decrypted and loaded from the ${slotName} slot!`);
             
+            import('./history.js').then(H => H.setCurrentHistorySlot(targetId));
             loadHistoryFromCloud(targetId);
         } catch(e) { 
             alert("Error parsing cloud data."); 
