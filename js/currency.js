@@ -17,7 +17,7 @@ export async function fetchExchangeRate(targetCurrency, isSilent = false) {
     } catch (e) {
         console.error(e);
         if (!isSilent) alert("Failed to connect to currency API. Using offline rate if available.");
-        return true; 
+        return false; 
     }
 }
 
@@ -39,7 +39,7 @@ export async function handleCurrencyChange() {
         return;
     }
     if (inputVal.length !== 3) { 
-        document.getElementById('global-currency').value = state.secondaryCurrency; 
+        document.getElementById('global-currency').value = state.secondaryCurrency || ""; 
         return; 
     }
     const success = await fetchExchangeRate(inputVal, false);
@@ -50,7 +50,7 @@ export async function handleCurrencyChange() {
         const UI = await import('./ui.js');
         UI.updateUI();
     } else {
-        document.getElementById('global-currency').value = state.secondaryCurrency;
+        document.getElementById('global-currency').value = state.secondaryCurrency || "";
     }
 }
 

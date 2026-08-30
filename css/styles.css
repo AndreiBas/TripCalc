@@ -1055,8 +1055,7 @@ details.indiv-details[open] summary::after {
 @media (max-width: 1023px) {
     #mini-calculator { 
         bottom: 80px; 
-        right: 50%; 
-        transform: translateX(50%); 
+        left: calc(50% - 100px); 
     }
 }
 
@@ -1079,8 +1078,7 @@ details.indiv-details[open] summary::after {
 @media (max-width: 1023px) {
     #mini-calendar { 
         bottom: 120px; 
-        right: 50%; 
-        transform: translateX(50%); 
+        left: calc(50% - 120px); 
     }
 }
 
@@ -1120,7 +1118,7 @@ details.indiv-details[open] summary::after {
     display: flex; 
     flex-direction: column; 
     box-shadow: var(--shadow-lg);
-    overflow: hidden; 
+    overflow: visible; 
     border: 1px solid rgba(255, 255, 255, 0.6);
 }
 .notes-header {

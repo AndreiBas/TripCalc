@@ -161,7 +161,10 @@ export async function submitChangePin() {
     btn.disabled = true;
 
     try {
-        const { data } = await client.from('trip_sync').select('id, trip_data').in('id', ['manual_trip', 'manual_trip_2', 'manual_trip_3', 'auto_trip']);
+        const { data } = await client.from('trip_sync').select('id, trip_data').in('id', [
+            'manual_trip', 'manual_trip_2', 'manual_trip_3', 'auto_trip',
+            'manual_trip_history', 'manual_trip_2_history', 'manual_trip_3_history', 'auto_trip_history'
+        ]);
 
         if (data && data.length > 0) {
             for (const row of data) {
@@ -222,7 +225,10 @@ export async function submitNuclearReset() {
 
     const client = getSupabaseClient();
     if (client) {
-        const { error } = await client.from('trip_sync').delete().in('id', ['manual_trip', 'manual_trip_2', 'manual_trip_3', 'auto_trip']);
+        const { error } = await client.from('trip_sync').delete().in('id', [
+            'manual_trip', 'manual_trip_2', 'manual_trip_3', 'auto_trip',
+            'manual_trip_history', 'manual_trip_2_history', 'manual_trip_3_history', 'auto_trip_history'
+        ]);
         if (error) {
             console.error("Delete error", error);
             alert("Error deleting remote data. Check your connection/access code.");
@@ -482,7 +488,19 @@ export async function fetchCloudTripNames() {
         if (el) el.innerText = "Checking...";
     });
     
-    const { data, error } = await client.from('trip_sync').select('id, trip_data').in('id', ['manual_trip', 'manual_trip_2', 'manual_trip_3', 'auto_trip']);
+    const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Cloud check timed out')), 5000)
+    );
+
+    const { data, error } = await Promise.race([
+        client.from('trip_sync').select('id, trip_data').in('id', ['manual_trip', 'manual_trip_2', 'manual_trip_3', 'auto_trip']),
+        timeoutPromise
+    ]).catch(err => {
+        Object.values(elements).forEach(el => {
+            if (el) el.innerText = "Offline";
+        });
+        return { data: null, error: err };
+    });
     
     if (error) {
         console.error("Fetch names error:", error);
@@ -531,7 +549,10 @@ export async function fetchCloudTripNames() {
     compareVersions();
 
     // Offline reconciliation: if local lastModified is newer than cloud auto_trip, trigger sync up to cloud
-    if (state.cloudTripNames['auto_trip'] === state.tripName && state.localLastModified > (state.cloudTimestamps['auto_trip'] || 0)) {
+    if (state.cloudTripNames['auto_trip'] !== "🔒 Locked (Wrong PIN?)" && 
+        state.cloudTripNames['auto_trip'] !== "🔒 Locked" &&
+        state.cloudTripNames['auto_trip'] === state.tripName && 
+        state.localLastModified > (state.cloudTimestamps['auto_trip'] || 0)) {
         console.log("Local offline changes detected. Syncing up to the cloud...");
         silentCloudSave();
     }
@@ -586,6 +607,7 @@ export async function saveToSupabase(targetId) {
             let slotName = targetId === 'manual_trip' ? 'Manual 1' : (targetId === 'manual_trip_2' ? 'Manual 2' : 'Manual 3');
             alert(`✅ Securely encrypted and saved to ${slotName}!`); 
             fetchCloudTripNames(); 
+            saveHistoryToCloud(targetId);
         }
     } catch (err) { 
         alert("Encryption failed."); 
@@ -716,6 +738,8 @@ export async function loadFromSupabase(targetId) {
             if(targetId === 'manual_trip_2') slotName = "Manual 2";
             if(targetId === 'manual_trip_3') slotName = "Manual 3";
             alert(`✅ Decrypted and loaded from the ${slotName} slot!`);
+            
+            loadHistoryFromCloud(targetId);
         } catch(e) { 
             alert("Error parsing cloud data."); 
             console.error(e); 
@@ -724,6 +748,72 @@ export async function loadFromSupabase(targetId) {
         alert("No trip data found in this slot."); 
     }
     if (btn) btn.innerText = originalText;
+}
+
+function historySlotId(id) {
+    return id + '_history';
+}
+
+export async function saveHistoryToCloud(slotId = 'auto_trip') {
+    if (!state.historyEnabled) return;
+    const key = await getValidCloudKey(true); 
+    if (!key) return;
+    const client = getSupabaseClient();
+    if (!client) return;
+
+    const histData = JSON.stringify({
+        tripName: state.tripName,
+        historyStack: state.historyStack,
+        lastModified: Date.now()
+    });
+
+    try {
+        const encryptedData = await encryptData(key, histData);
+        const accessHash = await generateAccessHash(key);
+        await client.rpc('save_secure_trip', {
+            p_id: historySlotId(slotId),
+            p_hash: accessHash,
+            p_data: encryptedData
+        });
+    } catch(err) {
+        console.warn('History save failed', err);
+    }
+}
+
+export async function loadHistoryFromCloud(slotId) {
+    if (!state.historyEnabled) return;
+    const key = await getValidCloudKey(true);
+    if (!key) return;
+    const client = getSupabaseClient();
+    if (!client) return;
+
+    const { data } = await client.from('trip_sync')
+        .select('trip_data')
+        .eq('id', historySlotId(slotId))
+        .maybeSingle();
+
+    if (!data || !data.trip_data) {
+        import('./history.js').then(H => H.clearHistory());
+        return;
+    }
+
+    try {
+        const parsed = typeof data.trip_data === 'string'
+            ? JSON.parse(data.trip_data) : data.trip_data;
+        const decryptedStr = await decryptData(key, parsed);
+        if (!decryptedStr) return;
+        const histData = JSON.parse(decryptedStr);
+
+        if (histData.tripName === state.tripName) {
+            state.historyStack = histData.historyStack || [];
+        } else {
+            state.historyStack = [];
+        }
+        const UI = await getUI();
+        if (UI.renderHistoryUI) UI.renderHistoryUI();
+    } catch(e) {
+        console.warn('History load failed', e);
+    }
 }
 
 // --- LOCAL FILE SYNC (IMPORT / EXPORT) ---
@@ -802,7 +892,7 @@ export async function exportSecureTrip() {
         try {
             fileHandle = await window.showSaveFilePicker({
                 suggestedName: fileName,
-                types: [{ description: 'Trip File', accept: { 'text/plain': ['.tsplit'] } }]
+                types: [{ description: 'Trip File', accept: { 'application/x-tsplit': ['.tsplit'] } }]
             });
         } catch (err) {
             if (err.name === 'AbortError') return;
@@ -885,6 +975,9 @@ export async function importTrip(e) {
             updateCurrencySelectors(); 
             UI.updateUI(); 
             UI.cancelEdit();
+            
+            import('./history.js').then(H => H.clearHistory());
+            if (UI.renderHistoryUI) UI.renderHistoryUI();
         }
         document.getElementById('file-import').value = "";
     };

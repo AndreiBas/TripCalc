@@ -145,7 +145,7 @@ export function doesExpenseMatchFilters(e, groupsMap, overrideSearchText) {
     if (state.insightFilter) {
         if (cat !== state.insightFilter.cat) return false;
         const groupMembers = groupsMap[state.insightFilter.name] || [state.insightFilter.name];
-        const involvesTarget = groupMembers.includes(e.payer) || e.involved.some(p => groupMembers.includes(p));
+        const involvesTarget = groupMembers.includes(e.payer) || (e.involved || []).some(p => groupMembers.includes(p));
         if (!involvesTarget) return false;
     } else {
         if (!state.activeCategoryFilters.has(cat)) return false;
@@ -221,6 +221,12 @@ export function renameParticipant(oldName) {
     state.participants[idx] = newName;
     state.participantGroups[newName] = state.participantGroups[oldName] === oldName ? newName : state.participantGroups[oldName];
     delete state.participantGroups[oldName];
+    
+    Object.keys(state.participantGroups).forEach(p => {
+        if (state.participantGroups[p] === oldName) state.participantGroups[p] = newName;
+    });
+    
+    if (state.insightFilter?.name === oldName) state.insightFilter.name = newName;
 
     state.expenses.forEach(e => {
         if (e.payer === oldName) e.payer = newName;
@@ -253,7 +259,7 @@ export function changeGroup(name) {
 }
 
 export function deleteParticipant(name) {
-    const inUse = state.expenses.some(e => e.payer === name || e.involved.includes(name));
+    const inUse = state.expenses.some(e => e.payer === name || (e.involved || []).includes(name));
     if (inUse) { 
         alert(`Cannot delete ${name} because they are tied to an existing activity.`); 
         return; 
@@ -261,6 +267,7 @@ export function deleteParticipant(name) {
     if (confirm(`Remove ${name} from the trip?`)) {
         state.participants = state.participants.filter(p => p !== name);
         delete state.participantGroups[name];
+        if (state.insightFilter?.name === name) state.insightFilter = null;
         saveState(); 
         updateUI();
     }
@@ -424,6 +431,8 @@ export function updateTripDays() {
         state.tripDays = val; 
         saveState(); 
         updateUI(); 
+    } else {
+        document.getElementById('trip-days-input').value = state.tripDays;
     }
 }
 
@@ -518,7 +527,7 @@ export function updateSplitTypeUI() {
         extraInputs.forEach(input => { 
             input.placeholder = "Share %"; 
             input.max = "100"; 
-            if(!state.editingExpenseId) input.value = ''; 
+            input.value = ''; 
         });
         fixedInputs.forEach(input => input.style.display = 'none');
         calculateRemainingPercentage();
@@ -529,7 +538,7 @@ export function updateSplitTypeUI() {
         extraInputs.forEach(input => { 
             input.placeholder = `+ Extra ${sym}`; 
             input.removeAttribute('max'); 
-            if(!state.editingExpenseId) input.value = ''; 
+            input.value = ''; 
         });
         fixedInputs.forEach(input => { 
             input.placeholder = `= Exact ${sym}`; 
@@ -914,7 +923,13 @@ export function handleSearchChange() {
     state.searchTimeout = setTimeout(() => {
         state.searchText = document.getElementById('search-filter').value.toLowerCase(); 
         const clearBtn = document.getElementById('clear-search-btn');
-        if (clearBtn) clearBtn.style.display = state.searchText.length > 0 ? 'block' : 'none';
+        if (clearBtn) {
+            clearBtn.style.display = (
+                state.searchText.length > 0 || 
+                (state.selectedCalendarDates && state.selectedCalendarDates.size > 0) || 
+                state.insightFilter
+            ) ? 'block' : 'none';
+        }
         updateUI(); 
     }, 200);
 }
@@ -962,7 +977,7 @@ export function clearInsightFilter() {
 // --- EXPENSES OPERATIONS ---
 export function saveExpense() {
     const category = document.getElementById('exp-category').value;
-    const desc = document.getElementById('exp-desc').value;
+    const desc = document.getElementById('exp-desc').value.trim();
     
     const rawTags = document.getElementById('exp-tags').value;
     const tags = (rawTags.match(/#(\w+)/g) || []).map(t => t.substring(1).toLowerCase()).sort((a, b) => a.localeCompare(b));
@@ -1022,6 +1037,11 @@ export function saveExpense() {
     }
     if (splitType === 'percentage' && totalPercentageEntered > 100.01) {
         alert(`Total percentages entered (${totalPercentageEntered}%) cannot exceed 100%.`); 
+        return;
+    }
+    const unenteredCount = selected.length - Object.keys(percentageShares).length;
+    if (splitType === 'percentage' && unenteredCount === 0 && totalPercentageEntered < 99.99) {
+        alert("Percentages must total 100%.");
         return;
     }
 
@@ -1093,7 +1113,7 @@ export function editExpense(id) {
     document.getElementById('exp-desc').value = exp.desc;
     document.getElementById('exp-tags').value = exp.tags ? exp.tags.map(t => '#' + t).join(' ') + ' ' : '';
     document.getElementById('exp-notes').value = exp.notes || '';
-    document.getElementById('exp-date').value = exp.date;
+    document.getElementById('exp-date').value = exp.date || new Date().toISOString().split('T')[0];
     
     document.getElementById('exp-currency').value = exp.localCurrency || 'USD';
     updateFormCurrencyUI();
@@ -1250,6 +1270,9 @@ export function cancelEdit() {
     document.getElementById('cancel-edit-btn').style.display = "none";
     document.getElementById('exp-category').value = 'Other';
     document.getElementById('exp-desc').value = '';
+    
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('exp-date').value = today;
     document.getElementById('exp-tags').value = '';
     document.getElementById('exp-notes').value = '';
     document.getElementById('exp-amount').value = '';
@@ -1359,6 +1382,11 @@ export function syncStateToDOM() {
     if (daysInput) {
         daysInput.value = state.tripDays || 1;
         daysInput.style.display = state.showPerDay ? 'block' : 'none';
+    }
+    
+    const dateInput = document.getElementById('exp-date');
+    if (dateInput && !dateInput.value) {
+        dateInput.value = new Date().toISOString().split('T')[0];
     }
 }
 
@@ -2014,6 +2042,8 @@ export function updateUI() {
     state.currentTotalSpent = totalSpent;
 
     renderGroupBalances(groupStats, validActiveCount);
+    
+    renderHistoryUI();
 }
 
 export function renderGroupBalances(groupStats, activeCount) {
@@ -2281,7 +2311,7 @@ export function applyBulkEditTags() {
     if (!state.bulkEditActivities || state.bulkEditActivities.length === 0) return;
     
     state.bulkEditActivities.forEach(e => {
-        let currentTags = [...e.tags];
+        let currentTags = [...(e.tags || [])];
         currentTags = currentTags.filter(t => !state.bulkRemovedTags.has(t));
         state.bulkAddedTags.forEach(t => {
             if (!currentTags.includes(t)) {
@@ -2346,6 +2376,41 @@ export function handleBulkNewTagKeyPress(event) {
     }
 }
 
+export function toggleHistoryEnabled() {
+    state.historyEnabled = document.getElementById('history-enabled-toggle').checked;
+    if (!state.historyEnabled) {
+        import('./history.js').then(H => H.clearHistory());
+    }
+    saveState();
+    renderHistoryUI();
+}
+
+export function renderHistoryUI() {
+    const container = document.getElementById('history-list-container');
+    const toggle = document.getElementById('history-enabled-toggle');
+    if (!container) return;
+
+    if (toggle) toggle.checked = state.historyEnabled || false;
+
+    if (!state.historyEnabled || !state.historyStack || state.historyStack.length === 0) {
+        container.style.display = 'none';
+        return;
+    }
+
+    container.style.display = 'flex';
+    
+    let html = '<div style="font-size:0.8rem; color:var(--secondary); margin-bottom:4px; font-weight:600;">Recent Restore Points:</div>';
+    
+    for (let i = state.historyStack.length - 1; i >= 0; i--) {
+        const snap = state.historyStack[i];
+        html += `<div style="display:flex; justify-content:space-between; align-items:center; padding:4px 8px; background:var(--bg); border:1px solid var(--border); border-radius:4px; margin-bottom:4px;">
+            <span style="font-size:0.8rem;">🕒 ${snap.label}</span>
+            <button class="outline small" onclick="restoreHistoryState(${i})" style="padding:2px 8px; font-size:0.75rem;">Restore</button>
+        </div>`;
+    }
+    container.innerHTML = html;
+}
+
 window.openMultipleEditTags = openMultipleEditTags;
 window.removeCommonTagFromBulk = removeCommonTagFromBulk;
 window.addTagToBulkList = addTagToBulkList;
@@ -2357,4 +2422,6 @@ window.selectTagForBulk = selectTagForBulk;
 window.handleBulkNewTagKeyPress = handleBulkNewTagKeyPress;
 window.clearCalendarFilter = clearCalendarFilter;
 window.clearInsightFilter = clearInsightFilter;
+window.toggleHistoryEnabled = toggleHistoryEnabled;
+
 

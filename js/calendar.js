@@ -301,6 +301,8 @@ export function selectCalendarDate(year, month, day) {
                 }
             } else if (lastActiveInput.id === 'exp-date') {
                 lastActiveInput.value = formattedISO;
+            } else if (lastActiveInput.type === 'date' || lastActiveInput.type === 'number') {
+                lastActiveInput.value = lastActiveInput.type === 'date' ? formattedISO : formattedHuman;
             } else {
                 const start = lastActiveInput.selectionStart;
                 const end = lastActiveInput.selectionEnd;

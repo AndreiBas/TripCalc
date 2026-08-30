@@ -282,7 +282,7 @@ export function initNotesEditor() {
 
     state.quill.on('text-change', function(delta, oldDelta, source) {
         if (state.quill.getLength() > MAX_NOTES_LENGTH) {
-            state.quill.deleteText(MAX_NOTES_LENGTH, state.quill.getLength());
+            state.quill.deleteText(MAX_NOTES_LENGTH, state.quill.getLength() - MAX_NOTES_LENGTH);
             alert(`⚠️ Character limit reached! To keep the app fast and offline-ready, notes are limited to ${MAX_NOTES_LENGTH} characters.`);
         }
         if (source === 'user') {

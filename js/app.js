@@ -6,10 +6,12 @@ import { applyHeaderState, updateUI, updateFormColor, syncStateToDOM } from './u
 import { updateCurrencySelectors } from './currency.js';
 import { fetchCloudTripNames, updateSyncBtnState } from './db.js';
 import './export.js';
+import { loadHistoryLocal, restoreHistoryState } from './history.js';
 
 // Boot Sequence
 function bootApp() {
     loadState();
+    loadHistoryLocal();
     syncStateToDOM();
     applyHeaderState();
     updateCurrencySelectors();
@@ -32,25 +34,28 @@ if (document.readyState === 'loading') {
 }
 
 // --- WAKE-UP EVENT LISTENERS ---
+let isFetchingCloudNames = false;
+const debouncedFetch = () => {
+    if (isFetchingCloudNames) return;
+    isFetchingCloudNames = true;
+    fetchCloudTripNames().finally(() => {
+        setTimeout(() => isFetchingCloudNames = false, 500);
+    });
+};
+
 document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
-        fetchCloudTripNames();
-    }
+    if (document.visibilityState === 'visible') debouncedFetch();
 });
 
-window.addEventListener('focus', () => {
-    fetchCloudTripNames();
-});
-
-window.addEventListener('online', () => {
-    fetchCloudTripNames();
-});
+window.addEventListener('focus', debouncedFetch);
+window.addEventListener('online', debouncedFetch);
 
 window.addEventListener('beforeunload', function (e) {
-    // Triggers the browser's native "Leave site? Changes you made may not be saved" prompt
-    e.preventDefault();
-    e.returnValue = '';
-    return '';
+    if (state.isNotesDirty || state.cloudSyncTimeout) {
+        e.preventDefault();
+        e.returnValue = '';
+        return '';
+    }
 });
 
 // PWA Service Worker Registration
@@ -65,3 +70,5 @@ if ('serviceWorker' in navigator) {
             });
     });
 }
+
+window.restoreHistoryState = restoreHistoryState;

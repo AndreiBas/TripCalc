@@ -34,7 +34,7 @@ export function calcDelete() {
         return; 
     }
     calcExpr = calcExpr.toString().slice(0, -1);
-    if (calcExpr === "") calcExpr = "0";
+    if (calcExpr === "" || calcExpr === "-") calcExpr = "0";
     const display = document.getElementById('calc-display');
     if (display) display.innerText = calcExpr;
 }
@@ -52,7 +52,7 @@ export function calcSolve() {
         safeExpr = safeExpr.replace(/(\d+(?:\.\d+)?)[\s]*([+-])[\s]*(\d+(?:\.\d+)?)%/g, '$1$2($1*$3/100)');
         safeExpr = safeExpr.replace(/(\d+(?:\.\d+)?)%/g, '($1/100)');
         let result = Function('"use strict";return (' + safeExpr + ')')();
-        result = Math.round(result * 100) / 100;
+        result = Math.round((result + Number.EPSILON) * 100) / 100;
         calcExpr = result.toString();
         const display = document.getElementById('calc-display');
         if (display) display.innerText = calcExpr;
@@ -107,7 +107,7 @@ export function calcCopy() {
             if (btn) {
                 setTimeout(() => btn.innerText = "📋 Copy & Paste Result", 1500);
             }
-        });
+        }).catch(err => console.error('Clipboard denied', err));
     }
 }
 
@@ -214,7 +214,7 @@ document.addEventListener('keydown', (e) => {
 
     // 4. Handle key mappings
     const key = e.key;
-    if (/[0-9+\-*/.()%]/.test(key)) {
+    if (/^[0-9+\-*/.()%]$/.test(key)) {
         e.preventDefault();
         calcInput(key);
     } else if (key === 'Backspace') {

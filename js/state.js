@@ -51,7 +51,11 @@ export const state = {
 
     activeCategoryFilters: new Set(Object.keys(CATEGORIES)),
     selectedCalendarDates: new Set(),
-    defaultTags: ['car', 'guess', 'flight', 'stay', 'grocery', 'restaurant']
+    defaultTags: ['car', 'guess', 'flight', 'stay', 'grocery', 'restaurant'],
+    
+    // Trip History
+    historyEnabled: false,
+    historyStack: []
 };
 
 export function repairLegacyData() {
@@ -76,10 +80,11 @@ export function repairLegacyData() {
         if (!e.localCurrency) e.localCurrency = 'USD';
         if (!e.localAmount) e.localAmount = e.amount;
         if (!e.tags) e.tags = [];
+        if (!e.date) e.date = new Date().toISOString().split('T')[0];
         
         // Fair currency lock repair for old data
         if (!e.exchangeRate && e.localCurrency !== 'USD') {
-            e.exchangeRate = e.localAmount / e.amount;
+            e.exchangeRate = e.amount !== 0 ? (e.localAmount / e.amount) : 1;
         }
     });
 
@@ -89,7 +94,9 @@ export function repairLegacyData() {
 }
 
 export function saveState(skipAutoSync = false) {
-    state.localLastModified = Math.max(state.localLastModified || 0, Date.now()) + 1;
+    import('./history.js').then(H => H.pushHistorySnapshot());
+    const now = Date.now();
+    state.localLastModified = now <= state.localLastModified ? state.localLastModified + 1 : now;
     
     const payload = { 
         tripName: state.tripName, 
@@ -107,6 +114,7 @@ export function saveState(skipAutoSync = false) {
         autoColorNotes: state.autoColorNotes, 
         isHeaderCollapsed: state.isHeaderCollapsed, 
         defaultTags: state.defaultTags,
+        historyEnabled: state.historyEnabled,
         lastModified: state.localLastModified
     };
 
@@ -138,6 +146,7 @@ export function loadState() {
             state.isHeaderCollapsed = data.isHeaderCollapsed || false;
             state.localLastModified = data.lastModified || Date.now();
             state.defaultTags = data.defaultTags || ['car', 'guess', 'flight', 'stay', 'grocery', 'restaurant'];
+            state.historyEnabled = data.historyEnabled || false;
             
             repairLegacyData();
             return true;

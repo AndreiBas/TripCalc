@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trip Splitter Pro Max</title>
+    <title>TripCalc v5.31</title>
     <link rel="manifest" href="/TripCalc/manifest.json">
+    <link rel="apple-touch-icon" href="/TripCalc/icon-192.png">
     <meta name="theme-color" content="#4f46e5">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -23,7 +24,7 @@
     <div id="mini-calculator">
         <div id="mini-calc-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px; cursor: move; user-select: none;">
             <h3 style="margin: 0; font-size: 0.9rem; font-weight: 800;">🧮 Calculator</h3>
-            <span style="cursor: pointer; font-size: 1.2rem; line-height: 1; color: var(--secondary);" onclick="toggleCalculator()">&times;</span>
+            <span role="button" tabindex="0" aria-label="Close Calculator" style="cursor: pointer; font-size: 1.2rem; line-height: 1; color: var(--secondary);" onclick="toggleCalculator()">&times;</span>
         </div>
         <div id="calc-display" class="tabular-nums" style="background: #ffffff; border: 1px solid var(--primary); border-radius: var(--radius-sm); padding: 8px 12px; font-size: 1.2rem; font-weight: 900; text-align: right; margin-bottom: 12px; color: var(--primary); box-shadow: inset 0 2px 4px rgba(0,0,0,0.05); min-height: 24px; word-break: break-all;">0</div>
         
@@ -65,7 +66,7 @@
                 <h3 style="margin: 0; font-size: 0.9rem; font-weight: 800; color: #000000;">📅 Calendar</h3>
                 <button class="outline small" onclick="calendarGoToToday()" style="padding: 1px 6px; font-size: 0.7rem; cursor: pointer; border-radius: 4px;">Today</button>
             </div>
-            <span style="cursor: pointer; font-size: 1.2rem; line-height: 1; color: var(--secondary);" onclick="toggleCalendar()">&times;</span>
+            <span role="button" tabindex="0" aria-label="Close Calendar" style="cursor: pointer; font-size: 1.2rem; line-height: 1; color: var(--secondary);" onclick="toggleCalendar()">&times;</span>
         </div>
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
             <button class="outline small" onclick="prevMonth()" style="padding: 2px 6px; cursor: pointer; border-radius: 4px;">◀</button>
@@ -93,7 +94,7 @@
                 <div style="display: flex; flex-direction: column; justify-content: center; gap: 2px; flex: 1; min-width: 250px;">
                     <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%;">
                         <input type="text" id="trip-name" class="trip-name-input" value="My Trip" onchange="updateTripName()" style="flex: 1; text-align: left; padding: 2px 4px;">
-                        <span id="header-toggle-btn" onclick="toggleHeader()" title="Toggle Header Menu" style="margin-left: auto;">▼</span>
+                        <span id="header-toggle-btn" role="button" tabindex="0" aria-label="Toggle Header Menu" onclick="toggleHeader()" title="Toggle Header Menu" style="margin-left: auto;">▼</span>
                     </div>
                     <input type="text" id="trip-comment" class="trip-comment-input header-collapsible-item" placeholder="Add a comment..." onchange="updateTripComment()" style="font-size: 0.8rem; padding: 2px 4px; max-width: 220px;">
                     <span id="cloud-status" class="header-collapsible-item" style="font-size: 0.7rem; color: var(--secondary); font-weight: 600; min-height: 14px; text-align: left; margin-left: 8px;"></span>
@@ -108,7 +109,7 @@
                         <button class="danger outline small" onclick="resetTrip()">New</button>
                         <button class="secondary outline small" onclick="exportTrip()">Save</button>
                         <button class="secondary outline small" onclick="document.getElementById('file-import').click()">Load</button>
-                        <input type="file" id="file-import" accept=".json, .tsplit" style="display:none;" onchange="importTrip(event)">
+                        <input type="file" id="file-import" accept=".json, .tsplit" style="display:none;" onclick="this.value=null" onchange="importTrip(event)">
                         
                         <div style="display: flex; align-items: center; gap: 4px; border-left: 1px solid var(--border); padding-left: 6px; margin-left: 4px;">
                             <span style="font-size: 0.75rem; font-weight: 700; color: var(--secondary);" title="Leave blank for USD only">Cur:</span>
@@ -172,7 +173,7 @@
             <details class="participants-dropdown header-collapsible-item">
                 <summary>
                     <span>👥 Participants and settings</span>
-                    <span style="font-size: 0.7rem; color: var(--secondary); font-weight: 600; background: var(--bg); padding: 2px 6px; border-radius: 10px;">v5.28</span>
+                    <span style="font-size: 0.7rem; color: var(--secondary); font-weight: 600; background: var(--bg); padding: 2px 6px; border-radius: 10px;">v5.31</span>
                 </summary>
                 <div style="margin-top: 12px; border-top: 1px solid var(--border); padding-top: 12px;">
                     <div class="form-row">
@@ -201,6 +202,16 @@
                             <button class="outline small" onclick="loadGroupTemplate()">Load Setup Memory</button>
                         </div>
                     </div>
+                    
+                    <div id="history-settings-row" style="margin-top:12px; padding-top:12px; border-top:1px dashed var(--border); display:flex; flex-direction:column; gap:8px;">
+                        <label style="font-weight:700; font-size:0.85rem; display:flex; align-items:center; gap:8px; cursor:pointer;">
+                            <input type="checkbox" id="history-enabled-toggle" onchange="toggleHistoryEnabled()">
+                            Enable Trip History (saves up to 3 restore points to cloud)
+                        </label>
+                        
+                        <div id="history-list-container" style="display:none; flex-direction:column; gap:4px; margin-top:4px;">
+                        </div>
+                    </div>
                 </div>
             </details>
             
@@ -215,7 +226,7 @@
 
         <div class="col-left">
             <div class="card" id="activity-card">
-                <span id="activity-toggle-icon" class="corner-toggle" onclick="event.stopPropagation(); toggleActivityCard()">▼</span>
+                <span id="activity-toggle-icon" class="corner-toggle" role="button" tabindex="0" aria-label="Toggle Activity Card" onclick="event.stopPropagation(); toggleActivityCard()">▼</span>
                 <h2 id="activity-header" style="cursor: pointer; user-select: none; display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px;" onclick="toggleActivityCard()">
                     <div style="display: flex; align-items: center; gap: 12px; margin-right: 28px;">
                         <span id="activity-title-text">➕ Add Activity</span>
@@ -306,7 +317,7 @@
         <div class="col-mid">
             <div class="card ledger-card" id="ledger-card-wrapper">
                 <div class="sticky-ledger-header">
-                    <span id="ledger-toggle-icon" class="corner-toggle" onclick="toggleLedger()">▼</span>
+                    <span id="ledger-toggle-icon" class="corner-toggle" role="button" tabindex="0" aria-label="Toggle Ledger" onclick="toggleLedger()">▼</span>
                     <div style="display:flex; justify-content: flex-start; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 12px; margin-right: 28px;">
                         <h2 style="margin: 0; border: none; padding: 0; cursor: pointer; display: flex; align-items: center; user-select: none;" onclick="toggleLedger()" title="Click to expand/collapse">
                             📜 Activity Ledger <span id="ledger-count" class="tabular-nums" style="font-size: 0.9rem; color: var(--secondary); margin-left: 8px; font-weight: 700;">(0)</span>
@@ -483,6 +494,7 @@
                     <p>Ensure real-time sync across your PC, mobile, and web app:</p>
                     <ul style="padding-left: 20px;">
                         <li><strong>Zero-Knowledge Encryption</strong>: All cloud backups are encrypted client-side using AES-256. The cloud database only stores ciphertext; it is impossible to read without your **Session PIN**.</li>
+                        <li><strong>Trip History (Restore Points)</strong>: Enable this in Settings to automatically keep up to 3 encrypted restore points per trip slot, allowing you to easily undo mistakes.</li>
                         <li><strong>Sync Slots</strong>: Save or load manual backups across 3 slots (S1/L1, S2/L2, S3/L3).</li>
                         <li><strong>Auto-Sync</strong>: Real-time synchronization is triggered after any transaction edit or notes change.</li>
                         <li><strong>Offline Reconciliation</strong>: If you edit offline, changes save locally. When your connection returns (e.g. WiFi turns on), the app detects the local edits and pushes them to the cloud automatically.</li>

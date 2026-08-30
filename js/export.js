@@ -89,7 +89,7 @@ export async function exportHTMLReport() {
 
         let settlementItems = '';
         if (state.currentGroupBalances && state.currentGroupBalances.length > 0) {
-            if (state.currentSettlements.length === 0) { 
+            if (!state.currentSettlements || state.currentSettlements.length === 0) { 
                 settlementItems = `<div class="settled-alert">🎉 Everyone is fully settled!</div>`;
             } else {
                 state.currentSettlements.forEach(s => { 
