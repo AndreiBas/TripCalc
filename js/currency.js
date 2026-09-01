@@ -1,5 +1,5 @@
 import { state, saveState } from './state.js';
-import { CURRENCY_SYMBOLS } from './config.js';
+import { CURRENCY_SYMBOLS, COMMON_CURRENCIES } from './config.js';
 
 export async function fetchExchangeRate(targetCurrency, isSilent = false) {
     if (!targetCurrency || targetCurrency === 'USD') return false;
@@ -45,6 +45,11 @@ export async function handleCurrencyChange() {
     const success = await fetchExchangeRate(inputVal, false);
     if (success) {
         state.secondaryCurrency = inputVal; 
+        if (inputVal !== 'USD') {
+            state.recentCurrencies = (state.recentCurrencies || []).filter(c => c !== inputVal);
+            state.recentCurrencies.unshift(inputVal);
+            if (state.recentCurrencies.length > 5) state.recentCurrencies.pop();
+        }
         saveState(); 
         updateCurrencySelectors(); 
         const UI = await import('./ui.js');
@@ -159,7 +164,116 @@ export function quickConvertNotes(source) {
     }
 }
 
+// --- Currency Picker Logic ---
+let pickerEl = null;
+
+export function showCurrencyPicker() {
+    const inputEl = document.getElementById('global-currency');
+    if (!inputEl) return;
+
+    if (!pickerEl) {
+        pickerEl = document.createElement('div');
+        pickerEl.className = 'currency-picker';
+        const wrapper = document.getElementById('currency-picker-wrapper');
+        if (wrapper) wrapper.appendChild(pickerEl);
+        
+        document.addEventListener('mousedown', (e) => {
+            const globalInput = document.getElementById('global-currency');
+            if (pickerEl && pickerEl.classList.contains('show') && !pickerEl.contains(e.target) && e.target !== globalInput) {
+                hideCurrencyPicker();
+                if (globalInput && globalInput.value.trim().toUpperCase() !== (state.secondaryCurrency || "")) {
+                    handleCurrencyChange();
+                }
+            }
+        });
+    }
+
+    renderCurrencyPicker(inputEl.value);
+    pickerEl.classList.add('show');
+}
+
+export function hideCurrencyPicker() {
+    if (pickerEl) pickerEl.classList.remove('show');
+}
+
+export function renderCurrencyPicker(filterText = '') {
+    if (!pickerEl) return;
+    
+    const filter = filterText.trim().toLowerCase();
+    let html = '';
+    const recents = state.recentCurrencies || [];
+
+    if (recents.length > 0 && !filter) {
+        html += `<div class="currency-picker-section-label">Recent</div>`;
+        recents.forEach(code => {
+            const currencyInfo = COMMON_CURRENCIES.find(c => c.code === code) || { code, flag: '🌍', name: 'Custom' };
+            html += `<div class="currency-picker-item recent" onmousedown="applyCurrencyFromPicker('${code}'); event.preventDefault();">
+                        <span class="currency-picker-flag">${currencyInfo.flag}</span>
+                        <span class="currency-picker-code">${code}</span>
+                        <span class="currency-picker-name">${currencyInfo.name}</span>
+                     </div>`;
+        });
+    }
+
+    let filteredCommon = COMMON_CURRENCIES;
+    if (filter) {
+        filteredCommon = COMMON_CURRENCIES.filter(c => c.code.toLowerCase().includes(filter) || c.name.toLowerCase().includes(filter));
+    }
+
+    if (filteredCommon.length > 0) {
+        html += `<div class="currency-picker-section-label">${filter ? 'Results' : 'Common'}</div>`;
+        filteredCommon.forEach(c => {
+            if (!filter && recents.includes(c.code)) return;
+            html += `<div class="currency-picker-item" onmousedown="applyCurrencyFromPicker('${c.code}'); event.preventDefault();">
+                        <span class="currency-picker-flag">${c.flag}</span>
+                        <span class="currency-picker-code">${c.code}</span>
+                        <span class="currency-picker-name">${c.name}</span>
+                     </div>`;
+        });
+    }
+
+    if (html === '') {
+        html = `<div style="padding: 12px; text-align: center; font-size: 0.8rem; color: var(--secondary);">No matches</div>`;
+    }
+
+    pickerEl.innerHTML = html;
+}
+
+export function applyCurrencyFromPicker(code) {
+    const inputEl = document.getElementById('global-currency');
+    if (inputEl) {
+        inputEl.value = code;
+        hideCurrencyPicker();
+        handleCurrencyChange();
+    }
+}
+
+export function handleCurrencyInput() {
+    const inputEl = document.getElementById('global-currency');
+    if (inputEl) {
+        renderCurrencyPicker(inputEl.value);
+        if (pickerEl) pickerEl.classList.add('show');
+    }
+}
+
+export function handleCurrencyKeyDown(e) {
+    if (e.key === 'Escape') {
+        hideCurrencyPicker();
+        const inputEl = document.getElementById('global-currency');
+        if (inputEl) inputEl.value = state.secondaryCurrency || ""; 
+    } else if (e.key === 'Enter') {
+        hideCurrencyPicker();
+        handleCurrencyChange();
+        e.target.blur();
+    }
+}
+
 // Bind to window for HTML event handlers compatibility
 window.handleCurrencyChange = handleCurrencyChange;
 window.quickConvert = quickConvert;
 window.quickConvertNotes = quickConvertNotes;
+window.showCurrencyPicker = showCurrencyPicker;
+window.hideCurrencyPicker = hideCurrencyPicker;
+window.applyCurrencyFromPicker = applyCurrencyFromPicker;
+window.handleCurrencyInput = handleCurrencyInput;
+window.handleCurrencyKeyDown = handleCurrencyKeyDown;

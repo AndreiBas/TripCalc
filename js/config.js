@@ -33,3 +33,36 @@ export const TAG_COLORS = [
 ];
 
 export const CURRENCY_SYMBOLS = { USD: '$', EUR: '€', GBP: '£', CAD: 'C$', AUD: 'A$', JPY: '¥', MXN: 'M$' };
+
+export const COMMON_CURRENCIES = [
+    { code: 'EUR', flag: '🇪🇺', name: 'Euro' },
+    { code: 'GBP', flag: '🇬🇧', name: 'British Pound' },
+    { code: 'CAD', flag: '🇨🇦', name: 'Canadian Dollar' },
+    { code: 'AUD', flag: '🇦🇺', name: 'Australian Dollar' },
+    { code: 'JPY', flag: '🇯🇵', name: 'Japanese Yen' },
+    { code: 'CHF', flag: '🇨🇭', name: 'Swiss Franc' },
+    { code: 'MXN', flag: '🇲🇽', name: 'Mexican Peso' },
+    { code: 'INR', flag: '🇮🇳', name: 'Indian Rupee' },
+    { code: 'BRL', flag: '🇧🇷', name: 'Brazilian Real' },
+    { code: 'KRW', flag: '🇰🇷', name: 'South Korean Won' },
+    { code: 'CNY', flag: '🇨🇳', name: 'Chinese Yuan' },
+    { code: 'HKD', flag: '🇭🇰', name: 'Hong Kong Dollar' },
+    { code: 'SGD', flag: '🇸🇬', name: 'Singapore Dollar' },
+    { code: 'NOK', flag: '🇳🇴', name: 'Norwegian Krone' },
+    { code: 'SEK', flag: '🇸🇪', name: 'Swedish Krona' },
+    { code: 'DKK', flag: '🇩🇰', name: 'Danish Krone' },
+    { code: 'NZD', flag: '🇳🇿', name: 'New Zealand Dollar' },
+    { code: 'ZAR', flag: '🇿🇦', name: 'South African Rand' },
+    { code: 'AED', flag: '🇦🇪', name: 'UAE Dirham' },
+    { code: 'THB', flag: '🇹🇭', name: 'Thai Baht' },
+    { code: 'TRY', flag: '🇹🇷', name: 'Turkish Lira' },
+    { code: 'PLN', flag: '🇵🇱', name: 'Polish Zloty' },
+    { code: 'CZK', flag: '🇨🇿', name: 'Czech Koruna' },
+    { code: 'HUF', flag: '🇭🇺', name: 'Hungarian Forint' },
+    { code: 'PHP', flag: '🇵🇭', name: 'Philippine Peso' },
+    { code: 'IDR', flag: '🇮🇩', name: 'Indonesian Rupiah' },
+    { code: 'MYR', flag: '🇲🇾', name: 'Malaysian Ringgit' },
+    { code: 'CLP', flag: '🇨🇱', name: 'Chilean Peso' },
+    { code: 'COP', flag: '🇨🇴', name: 'Colombian Peso' },
+    { code: 'ILS', flag: '🇮🇱', name: 'Israeli New Shekel' }
+];

@@ -15,6 +15,7 @@ export const state = {
 
     secondaryCurrency: "", 
     currentExchangeRate: 1, 
+    recentCurrencies: [],
     currentSort: 'date-desc',
     isHeaderCollapsed: false,
     
@@ -113,6 +114,7 @@ export function saveState(skipAutoSync = false) {
         tripNotesDelta: state.tripNotesDelta, 
         autoColorNotes: state.autoColorNotes, 
         isHeaderCollapsed: state.isHeaderCollapsed, 
+        recentCurrencies: state.recentCurrencies,
         defaultTags: state.defaultTags,
         historyEnabled: state.historyEnabled,
         lastModified: state.localLastModified
@@ -144,6 +146,7 @@ export function loadState() {
             state.tripNotesDelta = data.tripNotesDelta || null;
             state.autoColorNotes = data.autoColorNotes || false;
             state.isHeaderCollapsed = data.isHeaderCollapsed || false;
+            state.recentCurrencies = data.recentCurrencies || [];
             state.localLastModified = data.lastModified || Date.now();
             state.defaultTags = data.defaultTags || ['car', 'guess', 'flight', 'stay', 'grocery', 'restaurant'];
             state.historyEnabled = data.historyEnabled || false;

@@ -1250,3 +1250,82 @@ details.indiv-details[open] summary::after {
     color: var(--primary);
     font-weight: 700;
 }
+
+/* Currency Picker */
+.currency-picker {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-top: 4px;
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    min-width: 220px;
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 9999;
+    display: none;
+    flex-direction: column;
+}
+
+.currency-picker.show {
+    display: flex;
+}
+
+.currency-picker-section-label {
+    font-size: 0.7rem;
+    color: var(--secondary);
+    font-weight: 700;
+    padding: 6px 12px;
+    background: #f8fafc;
+    border-bottom: 1px solid var(--border);
+    text-transform: uppercase;
+}
+
+.currency-picker-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+    transition: background 0.15s;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.currency-picker-item:last-child {
+    border-bottom: none;
+}
+
+.currency-picker-item:hover {
+    background: #f1f5f9;
+}
+
+.currency-picker-item.recent {
+    background: #fffbeb;
+}
+
+.currency-picker-item.recent:hover {
+    background: #fef3c7;
+}
+
+.currency-picker-flag {
+    font-size: 1.1rem;
+}
+
+.currency-picker-code {
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: var(--text-color);
+}
+
+.currency-picker-name {
+    font-size: 0.8rem;
+    color: var(--secondary);
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
