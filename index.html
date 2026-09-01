@@ -111,7 +111,7 @@
                         <button class="secondary outline small" onclick="document.getElementById('file-import').click()">Load</button>
                         <input type="file" id="file-import" accept=".json, .tsplit" style="display:none;" onclick="this.value=null" onchange="importTrip(event)">
                         
-                        <div id="currency-picker-wrapper" style="display: flex; align-items: center; gap: 4px; border-left: 1px solid var(--border); padding-left: 6px; margin-left: 4px; position: relative;">
+                        <div id="currency-picker-wrapper" style="display: flex; align-items: center; gap: 4px; border-left: 1px solid var(--border); padding-left: 6px; margin-left: 4px; position: relative; z-index: 9999;">
                             <span style="font-size: 0.75rem; font-weight: 700; color: var(--secondary);" title="Leave blank for USD only">Cur:</span>
                             <input type="text" id="global-currency" class="currency-selector" style="width: 45px; text-align: center; padding: 2px; font-size: 0.8rem; height: auto;" placeholder="..." maxlength="3" onfocus="showCurrencyPicker()" oninput="handleCurrencyInput()" onkeydown="handleCurrencyKeyDown(event)" autocomplete="off">
                         </div>
@@ -173,7 +173,7 @@
             <details class="participants-dropdown header-collapsible-item">
                 <summary>
                     <span>👥 Participants and settings</span>
-                    <span style="font-size: 0.7rem; color: var(--secondary); font-weight: 600; background: var(--bg); padding: 2px 6px; border-radius: 10px;">v5.32</span>
+                    <span style="font-size: 0.7rem; color: var(--secondary); font-weight: 600; background: var(--bg); padding: 2px 6px; border-radius: 10px;">v5.33</span>
                 </summary>
                 <div style="margin-top: 12px; border-top: 1px solid var(--border); padding-top: 12px;">
                     <div class="form-row">
