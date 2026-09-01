@@ -167,6 +167,16 @@ export function quickConvertNotes(source) {
 // --- Currency Picker Logic ---
 let pickerEl = null;
 
+export function positionCurrencyPicker() {
+    if (!pickerEl || !pickerEl.classList.contains('show')) return;
+    const inputEl = document.getElementById('global-currency');
+    if (!inputEl) return;
+    
+    const rect = inputEl.getBoundingClientRect();
+    pickerEl.style.top = `${rect.bottom}px`;
+    pickerEl.style.left = `${rect.left + (rect.width / 2)}px`;
+}
+
 export function showCurrencyPicker() {
     const inputEl = document.getElementById('global-currency');
     if (!inputEl) return;
@@ -174,8 +184,7 @@ export function showCurrencyPicker() {
     if (!pickerEl) {
         pickerEl = document.createElement('div');
         pickerEl.className = 'currency-picker';
-        const wrapper = document.getElementById('currency-picker-wrapper');
-        if (wrapper) wrapper.appendChild(pickerEl);
+        document.body.appendChild(pickerEl);
         
         document.addEventListener('mousedown', (e) => {
             const globalInput = document.getElementById('global-currency');
@@ -186,10 +195,14 @@ export function showCurrencyPicker() {
                 }
             }
         });
+        
+        window.addEventListener('resize', positionCurrencyPicker);
+        window.addEventListener('scroll', positionCurrencyPicker, true);
     }
 
     renderCurrencyPicker(inputEl.value);
     pickerEl.classList.add('show');
+    positionCurrencyPicker();
 }
 
 export function hideCurrencyPicker() {

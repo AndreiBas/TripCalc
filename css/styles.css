@@ -1253,19 +1253,17 @@ details.indiv-details[open] summary::after {
 
 /* Currency Picker */
 .currency-picker {
-    position: absolute;
-    top: 100%;
-    left: 50%;
+    position: fixed;
     transform: translateX(-50%);
     margin-top: 4px;
     background: #ffffff;
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    box-shadow: 0 12px 32px rgba(0,0,0,0.25);
     min-width: 220px;
     max-height: 300px;
     overflow-y: auto;
-    z-index: 9999;
+    z-index: 2147483647;
     display: none;
     flex-direction: column;
 }
