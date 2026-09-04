@@ -1,8 +1,17 @@
 import { state, saveState, loadState } from './state.js';
 import { CATEGORIES, COLORS, TAG_COLORS, CURRENCY_SYMBOLS } from './config.js';
-import { formatMoney, getPerDayText, getPerDayTextSmall, fetchExchangeRate, updateCurrencySelectors } from './currency.js';
+import { formatMoney, getPerDayText, getPerDayTextSmall, fetchExchangeRate, fetchRateOnly, updateCurrencySelectors } from './currency.js';
 
 // --- HELPERS ---
+export function escapeHTML(str) {
+    return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 export function getColor(name) {
     const index = state.participants.indexOf(name);
     return index === -1 ? '#64748b' : COLORS[index % COLORS.length];
@@ -106,7 +115,10 @@ export function showToast(message, type = 'success') {
     toast.style.pointerEvents = 'auto';
     toast.style.textAlign = 'center';
     
-    const icon = type === 'create' ? '✨' : '✏️';
+    let icon = '✏️';
+    if (type === 'create') icon = '✨';
+    else if (type === 'undo') icon = '🔄';
+    else if (type === 'delete') icon = '🗑️';
     toast.innerText = `${icon} ${message}`;
 
     container.appendChild(toast);
@@ -173,7 +185,8 @@ export function doesExpenseMatchFilters(e, groupsMap, overrideSearchText) {
     const hasNoExcludedTags = !excludedTags.some(et => expTags.some(t => t.includes(et)));
     
     const involvedNames = e.involved ? e.involved.join(' ') : '';
-    const searchableText = `${e.desc} ${e.payer} ${involvedNames} ${e.notes || ''}`.toLowerCase();
+    const tagWords = (e.tags || []).join(' ');
+    const searchableText = `${e.desc} ${e.payer} ${involvedNames} ${tagWords} ${e.notes || ''}`.toLowerCase();
     
     const hasAllText = requiredText.every(rt => searchableText.includes(rt));
 
@@ -338,8 +351,26 @@ export async function resetTrip() {
         state.tripNotesDelta = null; 
         state.autoColorNotes = false;
         state.isHeaderCollapsed = false; 
-        state.defaultTags = ['car', 'guess', 'flight', 'stay', 'grocery', 'restaurant'];
+        state.defaultTags = ['car', 'gas', 'flight', 'stay', 'grocery', 'restaurant'];
         state.localLastModified = Date.now();
+        state.selectedCalendarDates = new Set();
+        state.insightFilter = null;
+        state.searchText = '';
+        
+        const searchFilterInput = document.getElementById('search-filter');
+        if (searchFilterInput) {
+            searchFilterInput.value = '';
+            searchFilterInput.readOnly = false;
+            searchFilterInput.style.color = 'var(--text)';
+            searchFilterInput.style.fontWeight = '500';
+        }
+        const clearSearchBtn = document.getElementById('clear-search-btn');
+        if (clearSearchBtn) clearSearchBtn.style.display = 'none';
+
+        try {
+            const { renderCalendar } = await import('./calendar.js');
+            renderCalendar();
+        } catch(e) {}
         
         document.getElementById('global-currency').value = ""; 
         document.getElementById('ledger-sort').value = "date-desc";
@@ -595,10 +626,10 @@ export async function refreshFormRate() {
     
     const btn = document.querySelector('#rate-row button');
     if (btn) btn.innerText = "⏳";
-    const success = await fetchExchangeRate(localCurrency, false);
-    if (success && state.currentExchangeRate > 0) {
+    const rate = await fetchRateOnly(localCurrency, false);
+    if (rate && rate > 0) {
         const rateInput = document.getElementById('exp-exchange-rate');
-        if (rateInput) rateInput.value = state.currentExchangeRate.toFixed(2);
+        if (rateInput) rateInput.value = rate.toFixed(2);
     }
     if (btn) btn.innerText = "🔄 Fetch Latest";
 }
@@ -736,8 +767,8 @@ export function handleFormTagInput(e) {
     const query = currentWord.substring(1).toLowerCase();
     
     // Filter out tags already typed in the input field (excluding current query)
-    const typedTags = (value.match(/#(\w+)/g) || [])
-        .map(t => t.substring(1).toLowerCase())
+    const typedTags = (value.match(/[#＃]([\p{L}\p{N}_-]+)/gu) || [])
+        .map(t => t.replace(/^[#＃]/, '').toLowerCase())
         .filter(t => t !== query);
         
     const filteredTags = allTags.filter(t => !typedTags.includes(t.toLowerCase()));
@@ -980,7 +1011,7 @@ export function saveExpense() {
     const desc = document.getElementById('exp-desc').value.trim();
     
     const rawTags = document.getElementById('exp-tags').value;
-    const tags = (rawTags.match(/#(\w+)/g) || []).map(t => t.substring(1).toLowerCase()).sort((a, b) => a.localeCompare(b));
+    const tags = (rawTags.match(/[#＃]([\p{L}\p{N}_-]+)/gu) || []).map(t => t.replace(/^[#＃]/, '').toLowerCase()).sort((a, b) => a.localeCompare(b));
     
     const notes = document.getElementById('exp-notes').value.trim();
     const date = document.getElementById('exp-date').value;
@@ -1332,7 +1363,7 @@ export function renderCategoryFilters() {
         const bg = isActive ? info.bg : '#ffffff';
         const border = isActive ? info.color : '#cbd5e1'; 
         const textCol = isActive ? info.color : '#64748b';
-        html += `<button class="cat-filter-btn" style="opacity: ${opacity}; background: ${bg}; border: 1px solid ${border}; color: ${textCol};" onclick="toggleCategoryFilter('${cat}')" title="Toggle ${cat}">${info.icon} ${cat}</button>`;
+        html += `<button class="cat-filter-btn" style="opacity: ${opacity}; background: ${bg}; border: 1px solid ${border}; color: ${textCol};" onclick="toggleCategoryFilter(decodeURIComponent('${encodeURIComponent(cat)}'))" title="Toggle ${escapeHTML(cat)}">${info.icon} ${escapeHTML(cat)}</button>`;
     });
     container.innerHTML = html;
 }
@@ -1342,13 +1373,13 @@ export function renderParticipantInputs() {
     if (!pListInputs) return;
     pListInputs.innerHTML = state.participants.map(p => `
         <div class="participant-row">
-            <label class="checkbox-item" style="color: ${getColor(p)}" title="${p}">
-                <input type="checkbox" value="${p}" class="part-checkbox" checked onchange="checkMasterCheckboxState()"> 
-                <span>${shortName(p)}</span>
+            <label class="checkbox-item" style="color: ${getColor(p)}" title="${escapeHTML(p)}">
+                <input type="checkbox" value="${escapeHTML(p)}" class="part-checkbox" checked onchange="checkMasterCheckboxState()"> 
+                <span>${escapeHTML(shortName(p))}</span>
             </label>
             <div class="inputs-group">
-                <input type="number" class="part-personal tabular-nums" data-name="${p}" placeholder="+ Extra $" step="0.01" min="0" oninput="calculateRemainingPercentage()">
-                <input type="number" class="part-fixed tabular-nums" data-name="${p}" placeholder="= Exact $" step="0.01" min="0">
+                <input type="number" class="part-personal tabular-nums" data-name="${escapeHTML(p)}" placeholder="+ Extra $" step="0.01" min="0" oninput="calculateRemainingPercentage()">
+                <input type="number" class="part-fixed tabular-nums" data-name="${escapeHTML(p)}" placeholder="= Exact $" step="0.01" min="0">
             </div>
         </div>
     `).join('');
@@ -1419,11 +1450,12 @@ export function updateUI() {
             const hasGroup = gName && gName !== p;
             const groupText = hasGroup ? `👥 ${gName}` : '👤 Edit Group';
             const groupColor = hasGroup ? getGroupColor(gName) : '#64748b';
+            const safeP = encodeURIComponent(p);
             return `
-            <div class="tag" style="color: ${c}; border-color: ${c}40;" title="${p}">
-                <span class="tag-name" onclick="renameParticipant('${p}')">${p}</span>
-                <span class="tag-group-btn" style="color: ${groupColor}; font-weight: ${hasGroup ? '700' : '500'};" onclick="changeGroup('${p}')" title="Assign to a group">${groupText}</span>
-                <span class="tag-del" onclick="deleteParticipant('${p}')">&times;</span>
+            <div class="tag" style="color: ${c}; border-color: ${c}40;" title="${escapeHTML(p)}">
+                <span class="tag-name" onclick="renameParticipant(decodeURIComponent('${safeP}'))">${escapeHTML(p)}</span>
+                <span class="tag-group-btn" style="color: ${groupColor}; font-weight: ${hasGroup ? '700' : '500'};" onclick="changeGroup(decodeURIComponent('${safeP}'))" title="Assign to a group">${escapeHTML(groupText)}</span>
+                <span class="tag-del" onclick="deleteParticipant(decodeURIComponent('${safeP}'))">&times;</span>
             </div>`
         }).join('') : '<em style="color:var(--secondary); font-size:0.9rem;">No participants added yet.</em>';
     }
@@ -1432,10 +1464,11 @@ export function updateUI() {
     if (tList) {
         const allTags = getAllUniqueTags();
         tList.innerHTML = allTags.length ? allTags.map(t => {
+            const safeT = encodeURIComponent(t);
             return `
-            <div class="tag" style="${getTagStyle(t)}; margin-top: 4px;" title="${t}">
-                <span class="tag-name" onclick="renameDefaultTag('${t}')">#${t}</span>
-                <span class="tag-del" onclick="deleteDefaultTag('${t}')">&times;</span>
+            <div class="tag" style="${getTagStyle(t)}; margin-top: 4px;" title="${escapeHTML(t)}">
+                <span class="tag-name" onclick="renameDefaultTag(decodeURIComponent('${safeT}'))">#${escapeHTML(t)}</span>
+                <span class="tag-del" onclick="deleteDefaultTag(decodeURIComponent('${safeT}'))">&times;</span>
             </div>`
         }).join('') : '<em style="color:var(--secondary); font-size:0.9rem;">No tags added yet.</em>';
     }
@@ -1443,7 +1476,7 @@ export function updateUI() {
     const pSelect = document.getElementById('exp-payer');
     if (pSelect) {
         const currentPayer = pSelect.value;
-        pSelect.innerHTML = '<option value="" style="color: var(--text); font-weight: 500;">Who paid?</option>' + state.participants.map(p => `<option value="${p}" style="color: ${getColor(p)}; font-weight: 800;" title="${p}">${shortName(p)}</option>`).join('');
+        pSelect.innerHTML = '<option value="" style="color: var(--text); font-weight: 500;">Who paid?</option>' + state.participants.map(p => `<option value="${escapeHTML(p)}" style="color: ${getColor(p)}; font-weight: 800;" title="${escapeHTML(p)}">${escapeHTML(shortName(p))}</option>`).join('');
         if(!state.editingExpenseId) pSelect.value = currentPayer; 
         updatePayerColor();
     }
@@ -1490,6 +1523,7 @@ export function updateUI() {
     let totalSpent = 0;
     let biggestSplurge = { desc: 'None', amount: 0, category: 'Other' };
     let validActiveCount = 0;
+    const activeInvolvedParticipants = new Set();
     
     let dateTotals = {};
     let payerCounts = {};
@@ -1507,11 +1541,30 @@ export function updateUI() {
                 biggestSplurge = { desc: e.desc, amount: e.amount, category: e.category };
             }
             dateTotals[e.date] = (dateTotals[e.date] || 0) + e.amount;
+            (e.involved || []).forEach(p => activeInvolvedParticipants.add(p));
         }
         
         categoryTotals[cat] += e.amount;
         categoryParticipations[cat] += e.involved.length;
         categoryActivityCounts[cat] += 1;
+
+        if (!groupStats[payerGroup]) {
+            groupStats[payerGroup] = { paid: 0, owed: 0, members: [e.payer], catShares: {}, catPaid: {}, catActivitySets: {}, memberStats: {} };
+            groupStats[payerGroup].memberStats[e.payer] = { paid: 0, owed: 0, catShares: {}, catPaid: {} };
+            Object.keys(CATEGORIES).forEach(c => { 
+                groupStats[payerGroup].catShares[c] = 0; 
+                groupStats[payerGroup].catPaid[c] = 0; 
+                groupStats[payerGroup].catActivitySets[c] = new Set();
+                groupStats[payerGroup].memberStats[e.payer].catShares[c] = 0;
+                groupStats[payerGroup].memberStats[e.payer].catPaid[c] = 0;
+            });
+        } else if (!groupStats[payerGroup].memberStats[e.payer]) {
+            groupStats[payerGroup].memberStats[e.payer] = { paid: 0, owed: 0, catShares: {}, catPaid: {} };
+            Object.keys(CATEGORIES).forEach(c => { 
+                groupStats[payerGroup].memberStats[e.payer].catShares[c] = 0; 
+                groupStats[payerGroup].memberStats[e.payer].catPaid[c] = 0; 
+            });
+        }
 
         groupStats[payerGroup].paid += e.amount;
         groupStats[payerGroup].memberStats[e.payer].paid += e.amount;
@@ -1531,6 +1584,23 @@ export function updateUI() {
             
             e.involved.forEach(p => {
                 const involvedGroup = state.participantGroups[p] || p;
+                if (!groupStats[involvedGroup]) {
+                    groupStats[involvedGroup] = { paid: 0, owed: 0, members: [p], catShares: {}, catPaid: {}, catActivitySets: {}, memberStats: {} };
+                    groupStats[involvedGroup].memberStats[p] = { paid: 0, owed: 0, catShares: {}, catPaid: {} };
+                    Object.keys(CATEGORIES).forEach(c => { 
+                        groupStats[involvedGroup].catShares[c] = 0; 
+                        groupStats[involvedGroup].catPaid[c] = 0; 
+                        groupStats[involvedGroup].catActivitySets[c] = new Set();
+                        groupStats[involvedGroup].memberStats[p].catShares[c] = 0;
+                        groupStats[involvedGroup].memberStats[p].catPaid[c] = 0;
+                    });
+                } else if (!groupStats[involvedGroup].memberStats[p]) {
+                    groupStats[involvedGroup].memberStats[p] = { paid: 0, owed: 0, catShares: {}, catPaid: {} };
+                    Object.keys(CATEGORIES).forEach(c => { 
+                        groupStats[involvedGroup].memberStats[p].catShares[c] = 0; 
+                        groupStats[involvedGroup].memberStats[p].catPaid[c] = 0; 
+                    });
+                }
                 const pPerc = (e.percentageShares && e.percentageShares[p] !== undefined) ? e.percentageShares[p] : defaultPerc;
                 const finalShare = e.amount * (pPerc / 100);
                 
@@ -1568,6 +1638,23 @@ export function updateUI() {
 
             e.involved.forEach(p => {
                 const involvedGroup = state.participantGroups[p] || p;
+                if (!groupStats[involvedGroup]) {
+                    groupStats[involvedGroup] = { paid: 0, owed: 0, members: [p], catShares: {}, catPaid: {}, catActivitySets: {}, memberStats: {} };
+                    groupStats[involvedGroup].memberStats[p] = { paid: 0, owed: 0, catShares: {}, catPaid: {} };
+                    Object.keys(CATEGORIES).forEach(c => { 
+                        groupStats[involvedGroup].catShares[c] = 0; 
+                        groupStats[involvedGroup].catPaid[c] = 0; 
+                        groupStats[involvedGroup].catActivitySets[c] = new Set();
+                        groupStats[involvedGroup].memberStats[p].catShares[c] = 0;
+                        groupStats[involvedGroup].memberStats[p].catPaid[c] = 0;
+                    });
+                } else if (!groupStats[involvedGroup].memberStats[p]) {
+                    groupStats[involvedGroup].memberStats[p] = { paid: 0, owed: 0, catShares: {}, catPaid: {} };
+                    Object.keys(CATEGORIES).forEach(c => { 
+                        groupStats[involvedGroup].memberStats[p].catShares[c] = 0; 
+                        groupStats[involvedGroup].memberStats[p].catPaid[c] = 0; 
+                    });
+                }
                 let finalShare = 0;
                 
                 if (e.fixedShares && e.fixedShares[p] !== undefined) {
@@ -1661,7 +1748,7 @@ export function updateUI() {
         if (state.insightFilter) {
             badgesHtml += `
             <div class="tag" style="background: rgba(199, 210, 254, 0.4); color: #4f46e5; border: 1px solid rgba(199, 210, 254, 0.8); font-size: 0.8rem; font-weight: 700; padding: 2px 6px; display: inline-flex; align-items: center; gap: 4px; border-radius: var(--radius-sm);">
-                <span>👤 Filter: ${state.insightFilter.name} (${state.insightFilter.cat})</span>
+                <span>👤 Filter: ${escapeHTML(state.insightFilter.name)} (${escapeHTML(state.insightFilter.cat)})</span>
                 <span style="cursor: pointer; font-weight: 800; font-size: 0.95rem; margin-left: 2px;" onclick="clearInsightFilter()">&times;</span>
             </div>`;
         }
@@ -1710,7 +1797,7 @@ export function updateUI() {
                 breakdownHtml = e.involved.map(p => {
                     const pPerc = (e.percentageShares && e.percentageShares[p] !== undefined) ? e.percentageShares[p] : defaultPerc;
                     const finalShare = e.amount * (pPerc / 100);
-                    return `<span style="white-space: nowrap;" title="${p}"><span style="color: ${getColor(p)}; font-weight: 700;">${shortName(p)}</span> <span class="tabular-nums" style="font-size: 0.85rem; color: var(--secondary);">(${formatMoney(finalShare)} / ${pPerc.toFixed(1)}%)</span></span>`;
+                    return `<span style="white-space: nowrap;" title="${escapeHTML(p)}"><span style="color: ${getColor(p)}; font-weight: 700;">${escapeHTML(shortName(p))}</span> <span class="tabular-nums" style="font-size: 0.85rem; color: var(--secondary);">(${formatMoney(finalShare)} / ${pPerc.toFixed(1)}%)</span></span>`;
                 }).join(', ');
             } else {
                 let totalPersonalForExp = 0;
@@ -1734,22 +1821,22 @@ export function updateUI() {
                 breakdownHtml = e.involved.map(p => {
                     if (e.fixedShares && e.fixedShares[p] !== undefined) {
                         const fixedShare = e.fixedShares[p];
-                        return `<span style="white-space: nowrap;" title="${p}"><span style="color: ${getColor(p)}; font-weight: 700;">${shortName(p)}</span> <span class="tabular-nums" style="font-size: 0.85rem; color: var(--secondary);">(${formatMoney(fixedShare)} <span style="color:#d97706;">exact</span>)</span></span>`;
+                        return `<span style="white-space: nowrap;" title="${escapeHTML(p)}"><span style="color: ${getColor(p)}; font-weight: 700;">${escapeHTML(shortName(p))}</span> <span class="tabular-nums" style="font-size: 0.85rem; color: var(--secondary);">(${formatMoney(fixedShare)} <span style="color:#d97706;">exact</span>)</span></span>`;
                     } else {
                         const personal = (e.personalExpenses && e.personalExpenses[p]) ? e.personalExpenses[p] : 0;
                         const finalShare = baseShare + personal;
                         let personalNote = personal > 0 ? ` <span style="font-size:0.75rem; color: var(--primary);">(+ ${formatMoney(personal)} extra)</span>` : '';
-                        return `<span style="white-space: nowrap;" title="${p}"><span style="color: ${getColor(p)}; font-weight: 700;">${shortName(p)}</span> <span class="tabular-nums" style="font-size: 0.85rem; color: var(--secondary);">(${formatMoney(finalShare)}${personalNote})</span></span>`;
+                        return `<span style="white-space: nowrap;" title="${escapeHTML(p)}"><span style="color: ${getColor(p)}; font-weight: 700;">${escapeHTML(shortName(p))}</span> <span class="tabular-nums" style="font-size: 0.85rem; color: var(--secondary);">(${formatMoney(finalShare)}${personalNote})</span></span>`;
                     }
                 }).join(', ');
             }
 
-            const tagsHtml = (e.tags || []).length > 0 ? `<div style="margin-top: 6px;">` + [...e.tags].sort((a, b) => a.localeCompare(b)).map(t => `<span class="tag-pill" style="${getTagStyle(t)}" onclick="selectTagForSearch('${t}')" title="Filter by #${t}">#${t}</span>`).join('') + `</div>` : '';
+            const tagsHtml = (e.tags || []).length > 0 ? `<div style="margin-top: 6px;">` + [...e.tags].sort((a, b) => a.localeCompare(b)).map(t => `<span class="tag-pill" style="${getTagStyle(t)}" onclick="selectTagForSearch(decodeURIComponent('${encodeURIComponent(t)}'))" title="Filter by #${escapeHTML(t)}">#${escapeHTML(t)}</span>`).join('') + `</div>` : '';
 
             let notesHtml = '';
             if (e.notes && e.notes.trim() !== '') {
                 const isUrl = e.notes.startsWith('http://') || e.notes.startsWith('https://');
-                const noteContent = isUrl ? `<a href="${e.notes}" target="_blank" style="color: var(--primary); text-decoration: underline; word-break: break-all;">${e.notes}</a>` : `<span style="word-break: break-word;">${e.notes}</span>`;
+                const noteContent = isUrl ? `<a href="${escapeHTML(e.notes)}" target="_blank" rel="noopener noreferrer" style="color: var(--primary); text-decoration: underline; word-break: break-all;">${escapeHTML(e.notes)}</a>` : `<span style="word-break: break-word;">${escapeHTML(e.notes)}</span>`;
                 notesHtml = `<div style="margin-top: 10px; padding: 8px 12px; background: rgba(255, 255, 255, 0.5); border-radius: var(--radius-sm); font-size: 0.85rem; color: var(--secondary); border: 1px solid rgba(226, 232, 240, 0.6); border-left: 4px solid ${catInfo.color};">${noteContent}</div>`;
             }
 
@@ -1762,10 +1849,10 @@ export function updateUI() {
             <div id="exp-row-${e.id}" class="expense-item ${ignoredClass} ${editingClass}" style="${cardStyle}">
                 <div class="expense-details">
                     <span style="color:${catInfo.color}; font-weight: 800; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;">${catInfo.icon} ${e.category}</span><br>
-                    <strong style="font-size: 1.15rem; color: #0f172a; letter-spacing: -0.01em;">${e.desc}</strong>
+                    <strong style="font-size: 1.15rem; color: #0f172a; letter-spacing: -0.01em;">${escapeHTML(e.desc)}</strong>
                     ${e.ignored ? '<span style="color: var(--danger); font-size: 0.75rem; font-weight: 800; margin-left: 6px; background: #fee2e2; padding: 2px 4px; border-radius: 4px;">IGNORED</span>' : ''}<br>
                     <span style="font-size:0.9rem; color:var(--secondary); font-weight: 500;">
-                        ${formattedDate} • Paid by <span style="color:${payerColor}; font-weight:800;" title="${e.payer}">${shortName(e.payer)}</span> • 👥 <strong>${e.involved.length}</strong> involved<br>
+                        ${formattedDate} • Paid by <span style="color:${payerColor}; font-weight:800;" title="${escapeHTML(e.payer)}">${escapeHTML(shortName(e.payer))}</span> • 👥 <strong>${e.involved.length}</strong> involved<br>
                         <div style="margin-top: 6px; padding-left: 8px; border-left: 2px solid rgba(226,232,240,0.8); font-size: 0.85rem; line-height: 1.4;">
                             <strong style="color: var(--text);">For:</strong> ${breakdownHtml}
                         </div>
@@ -1799,8 +1886,8 @@ export function updateUI() {
                     topDebtor = gName; 
                 }
             });
-            if (topDebtor) {
-                badgeContainer.innerHTML = `<div class="next-payer-badge">🚨 Pay Next? <strong style="color: ${getColor(groupStats[topDebtor].members[0])};" title="${topDebtor}">${shortName(topDebtor)}</strong> <span class="tabular-nums">(Owes ${formatMoney(maxDebt)})</span></div>`;
+            if (topDebtor && groupStats[topDebtor] && groupStats[topDebtor].members.length > 0) {
+                badgeContainer.innerHTML = `<div class="next-payer-badge">🚨 Pay Next? <strong style="color: ${getColor(groupStats[topDebtor].members[0])};" title="${escapeHTML(topDebtor)}">${escapeHTML(shortName(topDebtor))}</strong> <span class="tabular-nums">(Owes ${formatMoney(maxDebt)})</span></div>`;
             } else {
                 badgeContainer.innerHTML = `<div class="next-payer-badge" style="color: var(--green); border-color: #bbf7d0; background: #f0fdf4;">🎉 Everyone perfectly settled!</div>`;
             }
@@ -1813,8 +1900,9 @@ export function updateUI() {
     if (statsDiv) {
         if (validActiveCount > 0 && state.participants.length > 0) {
             let burnRateHtml = '';
-            if (state.showPerDay && state.tripDays > 0 && state.participants.length > 0) {
-                const burnRate = totalSpent / state.tripDays / state.participants.length;
+            const activeParticipantCount = activeInvolvedParticipants.size > 0 ? activeInvolvedParticipants.size : state.participants.length;
+            if (state.showPerDay && state.tripDays > 0 && activeParticipantCount > 0) {
+                const burnRate = totalSpent / state.tripDays / activeParticipantCount;
                 burnRateHtml = `<div style="font-size: 0.85rem; color: var(--secondary); margin-top: 6px;">🔥 Burn Rate: <strong class="tabular-nums" style="color: var(--danger);">${formatMoney(burnRate)}</strong> / pers / day</div>`;
             }
 
@@ -1831,7 +1919,7 @@ export function updateUI() {
                 <div class="global-stat-box" style="background: #fff1f2; border-color: #fecdd3;">
                     <span class="global-stat-label" style="color: #be123c;">Biggest Splurge</span>
                     <span class="global-stat-value" style="font-size: 1.1rem; color: #be123c;">
-                        ${CATEGORIES[biggestSplurge.category]?.icon || '📝'} ${biggestSplurge.desc} <strong class="tabular-nums" style="font-size: 1.15rem;">(${formatMoney(biggestSplurge.amount)})</strong>
+                        ${CATEGORIES[biggestSplurge.category]?.icon || '📝'} ${escapeHTML(biggestSplurge.desc)} <strong class="tabular-nums" style="font-size: 1.15rem;">(${formatMoney(biggestSplurge.amount)})</strong>
                     </span>
                 </div>
                 <div class="global-stat-box">
@@ -1972,7 +2060,7 @@ export function updateUI() {
                             individualBreakdownHtml += `
                                 <div style="background: #f8fafc; padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--border);">
                                     <div style="display:flex; justify-content:space-between; align-items: center; font-size: 0.85rem; margin-bottom: 6px;">
-                                        <span style="color: ${getColor(m)}; font-weight: 800; font-size: 0.95rem;" title="${m}">${shortName(m)}</span>
+                                        <span style="color: ${getColor(m)}; font-weight: 800; font-size: 0.95rem;" title="${escapeHTML(m)}">${escapeHTML(shortName(m))}</span>
                                         <div style="text-align: right; line-height: 1.4; display: flex; flex-direction: column; align-items: flex-end;">
                                             <div style="display:flex; align-items: center; flex-wrap: wrap; justify-content: flex-end;"><span style="color: var(--secondary); font-size: 0.75rem; margin-right: 4px;">Share:</span><strong class="tabular-nums" style="color: var(--text);">${formatMoney(mStats.owed)}</strong>${getPerDayTextSmall(mStats.owed)}</div>
                                             <div style="display:flex; align-items: center; flex-wrap: wrap; justify-content: flex-end;"><span style="color: var(--secondary); font-size: 0.75rem; margin-right: 4px;">Paid:</span><strong class="tabular-nums" style="color: var(--text);">${formatMoney(mStats.paid)}</strong>${getPerDayTextSmall(mStats.paid)}</div>
@@ -1993,11 +2081,11 @@ export function updateUI() {
                 });
                 const avgPerActivity = totalGroupActs.size > 0 ? formatMoney(stats.owed / totalGroupActs.size) : '0.00';
                 const topCatDisplay = topCat ? `<span style="color: ${CATEGORIES[topCat].color}; font-weight: 800;">${CATEGORIES[topCat].icon} ${topCat}</span>` : '<span style="color: var(--secondary);">None</span>';
-                const memberSubtext = stats.members.length > 1 ? `<div class="stat-members" title="${stats.members.join(', ')}">Includes: ${stats.members.map(m => `<span style="color: ${getColor(m)}; font-weight: 800;">${shortName(m)}</span>`).join(', ')}</div>` : '';
+                const memberSubtext = stats.members.length > 1 ? `<div class="stat-members" title="${escapeHTML(stats.members.join(', '))}">Includes: ${stats.members.map(m => `<span style="color: ${getColor(m)}; font-weight: 800;">${escapeHTML(shortName(m))}</span>`).join(', ')}</div>` : '';
 
                 statsHtml += `
                     <div class="stat-card" style="border-top: 5px solid ${repColor};">
-                        <div class="stat-name" style="color: ${repColor};" title="${gName}">${shortName(gName)}</div>
+                        <div class="stat-name" style="color: ${repColor};" title="${escapeHTML(gName)}">${escapeHTML(shortName(gName))}</div>
                         ${memberSubtext}
                         <div style="background: #f8fafc; padding: 10px 14px; border-radius: var(--radius-sm); margin-bottom: 12px; font-size: 0.85rem; border: 1px solid var(--border);">
                             <div style="display:flex; justify-content:space-between; margin-bottom: 6px; align-items: center;">
@@ -2064,10 +2152,10 @@ export function renderGroupBalances(groupStats, activeCount) {
         groupBalances.push({ name: gName, net: diff, color: gColor }); 
         let txt = diff > 0.01 ? `is owed ${formatMoney(diff)}` : (diff < -0.01 ? `owes ${formatMoney(Math.abs(diff))}` : 'is settled');
         let cls = diff > 0.01 ? 'owed' : (diff < -0.01 ? 'owes' : '');
-        const memberText = groupStats[gName].members.length > 1 ? `<div style="font-size: 0.8rem; color: var(--secondary); margin-top: 4px; font-weight: 500;">Members: ${groupStats[gName].members.join(', ')}</div>` : '';
+        const memberText = groupStats[gName].members.length > 1 ? `<div style="font-size: 0.8rem; color: var(--secondary); margin-top: 4px; font-weight: 500;">Members: ${groupStats[gName].members.map(escapeHTML).join(', ')}</div>` : '';
         html += `<div class="balance-item" style="flex-direction: column; align-items: flex-start; padding: 12px 0;">
                     <div style="display: flex; justify-content: space-between; width: 100%;">
-                        <span style="color: ${groupBalances[groupBalances.length-1].color}; font-weight: 900; font-size: 1.1rem;">${gName}</span>
+                        <span style="color: ${groupBalances[groupBalances.length-1].color}; font-weight: 900; font-size: 1.1rem;">${escapeHTML(gName)}</span>
                         <span class="${cls} tabular-nums" style="font-size: 1.1rem;">${txt}</span>
                     </div>
                     ${memberText}
@@ -2101,7 +2189,7 @@ export function renderGroupBalances(groupStats, activeCount) {
         html += '<div class="settlement-box">';
         state.currentSettlements.forEach(s => {
             html += `<div class="settlement-item">
-                        <span><strong style="color:${s.from.color}; font-size: 1.05rem;">${s.from.name}</strong> pays <strong style="color:${s.to.color}; font-size: 1.05rem;">${s.to.name}</strong></span>
+                        <span><strong style="color:${s.from.color}; font-size: 1.05rem;">${escapeHTML(s.from.name)}</strong> pays <strong style="color:${s.to.color}; font-size: 1.05rem;">${escapeHTML(s.to.name)}</strong></span>
                         <span class="tabular-nums" style="font-weight: 900; color: var(--text); font-size: 1.1rem;">Out: ${formatMoney(s.amount)}</span>
                      </div>`;
         });

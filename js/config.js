@@ -32,7 +32,12 @@ export const TAG_COLORS = [
     { bg: '#ffe4e6', color: '#be123c', border: '#fecdd3' }  // Rose
 ];
 
-export const CURRENCY_SYMBOLS = { USD: '$', EUR: '€', GBP: '£', CAD: 'C$', AUD: 'A$', JPY: '¥', MXN: 'M$' };
+export const CURRENCY_SYMBOLS = { 
+    USD: '$', EUR: '€', GBP: '£', CAD: 'C$', AUD: 'A$', JPY: '¥', CHF: 'Fr', MXN: 'M$', 
+    INR: '₹', BRL: 'R$', KRW: '₩', CNY: '¥', HKD: 'HK$', SGD: 'S$', NOK: 'kr', SEK: 'kr', 
+    DKK: 'kr', NZD: 'NZ$', ZAR: 'R', AED: 'د.إ', THB: '฿', TRY: '₺', PLN: 'zł', CZK: 'Kč', 
+    HUF: 'Ft', PHP: '₱', IDR: 'Rp', MYR: 'RM', CLP: 'CLP$', COP: 'COL$', ILS: '₪' 
+};
 
 export const COMMON_CURRENCIES = [
     { code: 'EUR', flag: '🇪🇺', name: 'Euro' },

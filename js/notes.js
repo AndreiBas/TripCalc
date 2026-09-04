@@ -297,10 +297,23 @@ export function initNotesEditor() {
                     state.tripNotesDelta = state.quill.getContents(); 
                     saveState(); 
                 }
-            }, 15000);
+            }, 2000);
         }
     });
     
+    // Force-save notes if they are dirty when the tab/app goes into background (screen off / lock)
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden' && state.isNotesDirty && state.quill) {
+            clearTimeout(state.notesDebounceTimer);
+            clearSearchHighlights();
+            applyAutoColor();
+            state.tripNotes = sanitizeHTML(state.quill.root.innerHTML);
+            state.tripNotesDelta = state.quill.getContents();
+            saveState();
+            state.isNotesDirty = false;
+        }
+    });
+
     // Bind document level click listeners for suggestions popups clear
     document.addEventListener('click', function(e) {
         const popup = document.getElementById('notes-toc-popup');
@@ -313,18 +326,6 @@ export function initNotesEditor() {
         }
     });
 }
-
-// Force-save notes if they are dirty when the tab/app goes into background (screen off / lock)
-document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden' && state.isNotesDirty && state.quill) {
-        clearTimeout(state.notesDebounceTimer);
-        applyAutoColor();
-        state.tripNotes = sanitizeHTML(state.quill.root.innerHTML);
-        state.tripNotesDelta = state.quill.getContents();
-        saveState();
-        state.isNotesDirty = false;
-    }
-});
 
 // Bind to window for HTML event handlers compatibility
 window.openNotesModal = openNotesModal;

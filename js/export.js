@@ -30,7 +30,7 @@ export async function exportHTMLReport() {
                     const avgPerPerson = total / state.currentStats.categoryParticipations[cat];
                     categoryBreakdownRows += `
                     <tr>
-                        <td><span class="cat-icon">${CATEGORIES[cat]?.icon || '📝'}</span> ${cat}</td>
+                        <td><span class="cat-icon">${CATEGORIES[cat]?.icon || '📝'}</span> ${UI.escapeHTML(cat)}</td>
                         <td style="text-align: center;">${acts}</td>
                         <td style="text-align: right; font-weight: 700;">${formatMoney(total)}</td>
                         <td style="text-align: right;">${formatMoney(avgPerPerson)}</td>
@@ -56,7 +56,7 @@ export async function exportHTMLReport() {
                 groupStandingRows += `
                 <tr class="group-row">
                     <td>
-                        <strong style="color: ${gColor};">${UI.shortName(gName)}</strong>
+                        <strong style="color: ${gColor};">${UI.escapeHTML(UI.shortName(gName))}</strong>
                         ${badgeHtml}
                     </td>
                     <td style="text-align: right; font-weight: bold;">${formatMoney(stats.paid)}</td>
@@ -76,7 +76,7 @@ export async function exportHTMLReport() {
                         groupStandingRows += `
                         <tr class="member-sub-row">
                             <td style="padding-left: 24px; color: #64748b;">
-                                <span style="color: #cbd5e1; margin-right: 4px;">└─</span> <strong style="color: ${mColor}; font-weight: 600;">${UI.shortName(m)}</strong>
+                                <span style="color: #cbd5e1; margin-right: 4px;">└─</span> <strong style="color: ${mColor}; font-weight: 600;">${UI.escapeHTML(UI.shortName(m))}</strong>
                             </td>
                             <td style="text-align: right; color: #64748b;">${formatMoney(mStats.paid)}</td>
                             <td style="text-align: right; color: #64748b;">${formatMoney(mStats.owed)}</td>
@@ -95,9 +95,9 @@ export async function exportHTMLReport() {
                 state.currentSettlements.forEach(s => { 
                     settlementItems += `
                     <div class="settlement-item">
-                        <span class="payer" style="color: ${s.from.color};">${s.from.name}</span> 
+                        <span class="payer" style="color: ${s.from.color};">${UI.escapeHTML(s.from.name)}</span> 
                         <span class="arrow">➔</span> 
-                        <span class="payee" style="color: ${s.to.color};">${s.to.name}</span>: 
+                        <span class="payee" style="color: ${s.to.color};">${UI.escapeHTML(s.to.name)}</span>: 
                         <strong class="amount">${formatMoney(s.amount)}</strong>
                     </div>`; 
                 });
@@ -310,7 +310,7 @@ export async function exportHTMLReport() {
             }
             .stat-card {
                 background: #f8fafc !important;
-                border: 1px solid #cbd5e1 !important;
+            border: 1px solid #cbd5e1 !important;
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
             }
@@ -331,9 +331,9 @@ export async function exportHTMLReport() {
 <body>
     <div class="container">
         <header>
-            <h1>${state.tripName}</h1>
-            ${state.tripComment ? `<p>${state.tripComment}</p>` : ''}
-            <div class="meta-info">Generated on: ${new Date().toLocaleDateString()}</div>
+            <h1>${UI.escapeHTML(state.tripName || 'Trip Report')}</h1>
+            ${state.tripComment ? `<p>${UI.escapeHTML(state.tripComment)}</p>` : ''}
+            <div class="meta-info">Generated on: ${new Date().toLocaleDateString()} • All amounts in ${UI.escapeHTML(document.getElementById('view-currency')?.value || 'USD')}</div>
         </header>
 
         ${state.currentStats && state.currentStats.validActiveCount > 0 ? `
@@ -347,7 +347,7 @@ export async function exportHTMLReport() {
                 </div>
                 <div class="stat-card" style="background: #fff1f2; border-color: #fecdd3;">
                     <span class="stat-label" style="color: #be123c;">Biggest Splurge</span>
-                    <span class="stat-value" style="color: #be123c; font-size: 1.15rem; word-break: break-word;">${state.currentStats.biggestSplurge.desc}</span>
+                    <span class="stat-value" style="color: #be123c; font-size: 1.15rem; word-break: break-word;">${UI.escapeHTML(state.currentStats.biggestSplurge.desc)}</span>
                     <span class="stat-sub" style="color: #be123c; font-size: 0.95rem; font-weight: 700;">${formatMoney(state.currentStats.biggestSplurge.amount)}</span>
                 </div>
                 <div class="stat-card">
@@ -357,7 +357,7 @@ export async function exportHTMLReport() {
                 </div>
                 <div class="stat-card">
                     <span class="stat-label">Trip Banker</span>
-                    <span class="stat-value">${UI.shortName(state.currentStats.tripBanker.name)}</span>
+                    <span class="stat-value">${UI.escapeHTML(UI.shortName(state.currentStats.tripBanker.name))}</span>
                     <span class="stat-sub">Fronted ${formatMoney(state.currentStats.tripBanker.paid)}</span>
                 </div>
             </div>
@@ -423,9 +423,8 @@ export async function exportHTMLReport() {
         // Create Blob and trigger native browser file download
         const blob = new Blob([reportHtml], { type: 'text/html;charset=utf-8' });
         const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${state.tripName.replace(/\s+/g, '_')}_Report.html`;
+        const safeTripName = (state.tripName || 'Trip').replace(/[/\\?%*:|"<>]/g, '').trim().replace(/\s+/g, '_') || 'Trip';
+        a.download = `${safeTripName}_Report.html`;
         document.body.appendChild(a);
         a.click();
         

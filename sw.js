@@ -1,12 +1,14 @@
 // Bump this version number every time you update your HTML/CSS/JS!
-const CACHE_NAME = 'trip-calc-cache-v47'; 
-const REPO_NAME = '/TripCalc';
+const CACHE_NAME = 'trip-calc-cache-v48'; 
+const REPO_NAME = new URL(self.registration.scope).pathname.replace(/\/$/, '') || '';
 
 // ONLY put guaranteed local files here. Do NOT put external CDNs here.
 const localUrlsToCache = [
   `${REPO_NAME}/`,
   `${REPO_NAME}/index.html`,
   `${REPO_NAME}/manifest.json`,
+  `${REPO_NAME}/icon-192.png`,
+  `${REPO_NAME}/icon-512.png`,
   `${REPO_NAME}/css/styles.css`,
   `${REPO_NAME}/js/config.js`,
   `${REPO_NAME}/js/state.js`,
@@ -14,8 +16,9 @@ const localUrlsToCache = [
   `${REPO_NAME}/js/db.js`,
   `${REPO_NAME}/js/currency.js`,
   `${REPO_NAME}/js/calculator.js`,
+  `${REPO_NAME}/js/calendar.js`,
+  `${REPO_NAME}/js/export.js`,
   `${REPO_NAME}/js/notes.js`,
-  `${REPO_NAME}/js/pdf.js`,
   `${REPO_NAME}/js/ui.js`,
   `${REPO_NAME}/js/app.js`
 ];

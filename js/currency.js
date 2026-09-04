@@ -1,24 +1,33 @@
 import { state, saveState } from './state.js';
 import { CURRENCY_SYMBOLS, COMMON_CURRENCIES } from './config.js';
 
-export async function fetchExchangeRate(targetCurrency, isSilent = false) {
-    if (!targetCurrency || targetCurrency === 'USD') return false;
+export async function fetchRateOnly(targetCurrency, isSilent = false) {
+    if (!targetCurrency || targetCurrency === 'USD') return 1;
     try {
         const res = await fetch('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json');
         const data = await res.json();
         const rate = data.usd[targetCurrency.toLowerCase()];
         if (rate) {
-            state.currentExchangeRate = rate;
-            return true;
+            return rate;
         } else {
             if (!isSilent) alert(`Currency code "${targetCurrency}" not found on the exchange server.`);
-            return false;
+            return null;
         }
     } catch (e) {
         console.error(e);
         if (!isSilent) alert("Failed to connect to currency API. Using offline rate if available.");
-        return false; 
+        return null; 
     }
+}
+
+export async function fetchExchangeRate(targetCurrency, isSilent = false) {
+    if (!targetCurrency || targetCurrency === 'USD') return false;
+    const rate = await fetchRateOnly(targetCurrency, isSilent);
+    if (rate) {
+        state.currentExchangeRate = rate;
+        return true;
+    }
+    return false;
 }
 
 export async function handleCurrencyChange() {
@@ -110,13 +119,13 @@ export function updateCurrencySelectors() {
     });
 }
 
-export function formatMoney(amountInUsd) {
-    const displayCurEl = document.getElementById('view-currency');
-    const displayCur = displayCurEl ? displayCurEl.value : 'USD';
+export function formatMoney(amountInUsd, displayCurOverride = null, rateOverride = null) {
+    const displayCur = displayCurOverride || (document.getElementById('view-currency')?.value || 'USD');
     if (displayCur === 'USD') { 
         return `$${amountInUsd.toFixed(2)}`; 
     } else {
-        const converted = amountInUsd * state.currentExchangeRate;
+        const rate = (rateOverride !== null && rateOverride !== undefined) ? rateOverride : state.currentExchangeRate;
+        const converted = amountInUsd * rate;
         const sym = CURRENCY_SYMBOLS[displayCur] ? CURRENCY_SYMBOLS[displayCur] : displayCur + ' ';
         return `${sym}${converted.toFixed(2)}`;
     }

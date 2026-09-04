@@ -583,6 +583,9 @@ export async function saveToSupabase(targetId) {
         tripNotesDelta: state.tripNotesDelta, 
         autoColorNotes: state.autoColorNotes, 
         isHeaderCollapsed: state.isHeaderCollapsed, 
+        recentCurrencies: state.recentCurrencies,
+        defaultTags: state.defaultTags,
+        historyEnabled: state.historyEnabled,
         lastModified: state.localLastModified 
     });
     
@@ -637,6 +640,9 @@ export async function silentCloudSave() {
         tripNotesDelta: state.tripNotesDelta, 
         autoColorNotes: state.autoColorNotes, 
         isHeaderCollapsed: state.isHeaderCollapsed, 
+        recentCurrencies: state.recentCurrencies,
+        defaultTags: state.defaultTags,
+        historyEnabled: state.historyEnabled,
         lastModified: state.localLastModified 
     });
     const statusEl = document.getElementById('cloud-status');
@@ -718,7 +724,14 @@ export async function loadFromSupabase(targetId) {
             state.tripNotesDelta = parsedData.tripNotesDelta || null; 
             state.autoColorNotes = parsedData.autoColorNotes || false;
             state.isHeaderCollapsed = parsedData.isHeaderCollapsed || false;
+            state.recentCurrencies = parsedData.recentCurrencies || [];
+            state.defaultTags = parsedData.defaultTags || ['car', 'gas', 'flight', 'stay', 'grocery', 'restaurant'];
+            state.historyEnabled = parsedData.historyEnabled || false;
             state.localLastModified = parsedData.lastModified || Date.now();
+            state.insightFilter = null;
+            state.searchText = '';
+
+            repairLegacyData();
             
             const UI = await getUI();
             UI.applyHeaderState();
@@ -879,6 +892,9 @@ export function exportTrip() {
         tripNotesDelta: state.tripNotesDelta, 
         autoColorNotes: state.autoColorNotes, 
         isHeaderCollapsed: state.isHeaderCollapsed, 
+        recentCurrencies: state.recentCurrencies,
+        defaultTags: state.defaultTags,
+        historyEnabled: state.historyEnabled,
         lastModified: state.localLastModified 
     });
     const fileName = state.tripName.replace(/\s+/g, '_') + ".json";
@@ -918,6 +934,9 @@ export async function exportSecureTrip() {
         tripNotesDelta: state.tripNotesDelta, 
         autoColorNotes: state.autoColorNotes, 
         isHeaderCollapsed: state.isHeaderCollapsed, 
+        recentCurrencies: state.recentCurrencies,
+        defaultTags: state.defaultTags,
+        historyEnabled: state.historyEnabled,
         lastModified: state.localLastModified 
     });
     
@@ -962,6 +981,11 @@ export async function importTrip(e) {
             state.tripNotesDelta = parsedData.tripNotesDelta || null; 
             state.autoColorNotes = parsedData.autoColorNotes || false;
             state.isHeaderCollapsed = parsedData.isHeaderCollapsed || false;
+            state.recentCurrencies = parsedData.recentCurrencies || [];
+            state.defaultTags = parsedData.defaultTags || ['car', 'gas', 'flight', 'stay', 'grocery', 'restaurant'];
+            state.historyEnabled = parsedData.historyEnabled || false;
+            state.insightFilter = null;
+            state.searchText = '';
             state.localLastModified = parsedData.lastModified || Date.now();
             
             const UI = await getUI();

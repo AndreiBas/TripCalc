@@ -54,7 +54,7 @@ export function pushHistorySnapshot() {
     if (isApplyingSnapshot) return;  // Guard: don't snapshot during a restore
     const savedAt = Date.now();
     
-    const currentPayload = buildPayload();
+    const currentPayload = structuredClone(buildPayload());
     if (state.historyStack.length > 0) {
         const lastPayload = state.historyStack[state.historyStack.length - 1].payload;
         if (JSON.stringify(lastPayload) === JSON.stringify(currentPayload)) return;
@@ -88,12 +88,12 @@ export async function restoreHistoryState(index) {
     state.tripNotesDelta = payload.tripNotesDelta || null;
     state.autoColorNotes = payload.autoColorNotes || false;
     state.isHeaderCollapsed = payload.isHeaderCollapsed || false;
-    state.defaultTags = payload.defaultTags || ['car', 'guess', 'flight', 'stay', 'grocery', 'restaurant'];
+    state.defaultTags = payload.defaultTags || ['car', 'gas', 'flight', 'stay', 'grocery', 'restaurant'];
 
     repairLegacyData();
     
     isApplyingSnapshot = true;  // Prevent recursive snapshot
-    saveState(true); 
+    saveState(true, true); 
     isApplyingSnapshot = false;
     
     const UI = await import('./ui.js');

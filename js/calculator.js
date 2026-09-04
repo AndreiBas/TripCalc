@@ -52,6 +52,7 @@ export function calcSolve() {
         safeExpr = safeExpr.replace(/(\d+(?:\.\d+)?)[\s]*([+-])[\s]*(\d+(?:\.\d+)?)%/g, '$1$2($1*$3/100)');
         safeExpr = safeExpr.replace(/(\d+(?:\.\d+)?)%/g, '($1/100)');
         let result = Function('"use strict";return (' + safeExpr + ')')();
+        if (!isFinite(result)) throw new Error('Division by zero');
         result = Math.round((result + Number.EPSILON) * 100) / 100;
         calcExpr = result.toString();
         const display = document.getElementById('calc-display');

@@ -52,7 +52,7 @@ export const state = {
 
     activeCategoryFilters: new Set(Object.keys(CATEGORIES)),
     selectedCalendarDates: new Set(),
-    defaultTags: ['car', 'guess', 'flight', 'stay', 'grocery', 'restaurant'],
+    defaultTags: ['car', 'gas', 'flight', 'stay', 'grocery', 'restaurant'],
     
     // Trip History
     historyEnabled: false,
@@ -60,6 +60,9 @@ export const state = {
 };
 
 export function repairLegacyData() {
+    if (!Array.isArray(state.participants)) {
+        state.participants = [];
+    }
     if (typeof state.participantGroups === 'undefined' || state.participantGroups === null) {
         state.participantGroups = {};
     }
@@ -87,15 +90,41 @@ export function repairLegacyData() {
         if (!e.exchangeRate && e.localCurrency !== 'USD') {
             e.exchangeRate = e.amount !== 0 ? (e.localAmount / e.amount) : 1;
         }
+        if (!isFinite(e.exchangeRate) || e.exchangeRate <= 0) {
+            e.exchangeRate = 1;
+        }
+
+        // Recover unknown/ghost payer to prevent undefined groupStats crashes
+        if (e.payer && !state.participants.includes(e.payer)) {
+            state.participants.push(e.payer);
+            if (!state.participantGroups[e.payer]) {
+                state.participantGroups[e.payer] = e.payer;
+            }
+        }
+        // Recover unknown/ghost involved participants
+        if (Array.isArray(e.involved)) {
+            e.involved.forEach(inv => {
+                if (inv && !state.participants.includes(inv)) {
+                    state.participants.push(inv);
+                    if (!state.participantGroups[inv]) {
+                        state.participantGroups[inv] = inv;
+                    }
+                }
+            });
+        }
     });
 
     if (!state.defaultTags || !Array.isArray(state.defaultTags)) {
-        state.defaultTags = ['car', 'guess', 'flight', 'stay', 'grocery', 'restaurant'];
+        state.defaultTags = ['car', 'gas', 'flight', 'stay', 'grocery', 'restaurant'];
+    } else {
+        state.defaultTags = state.defaultTags.map(t => t === 'guess' ? 'gas' : t);
     }
 }
 
-export function saveState(skipAutoSync = false) {
-    import('./history.js').then(H => H.pushHistorySnapshot());
+export function saveState(skipAutoSync = false, skipHistorySnapshot = false) {
+    if (!skipHistorySnapshot) {
+        import('./history.js').then(H => H.pushHistorySnapshot());
+    }
     const now = Date.now();
     state.localLastModified = now <= state.localLastModified ? state.localLastModified + 1 : now;
     
@@ -148,7 +177,7 @@ export function loadState() {
             state.isHeaderCollapsed = data.isHeaderCollapsed || false;
             state.recentCurrencies = data.recentCurrencies || [];
             state.localLastModified = data.lastModified || Date.now();
-            state.defaultTags = data.defaultTags || ['car', 'guess', 'flight', 'stay', 'grocery', 'restaurant'];
+            state.defaultTags = data.defaultTags || ['car', 'gas', 'flight', 'stay', 'grocery', 'restaurant'];
             state.historyEnabled = data.historyEnabled || false;
             
             repairLegacyData();

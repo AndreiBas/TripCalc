@@ -281,50 +281,6 @@ export function selectCalendarDate(year, month, day) {
 
     // Instantly filter the ledger when date selection changes
     import('./ui.js').then(({ updateUI }) => updateUI()).catch(e => console.error(e));
-
-    // Paste into last active input (as a convenience)
-    if (lastActiveInput && !document.body.contains(lastActiveInput)) {
-        lastActiveInput = null;
-    }
-
-    if (lastActiveInput && lastActiveInput.id === 'search-filter') {
-        lastActiveInput = null;
-    }
-
-    if (lastActiveInput) {
-        try {
-            if (lastActiveInput.classList.contains('ql-editor')) {
-                if (state.quill) {
-                    const insertIndex = state.lastQuillRange ? state.lastQuillRange.index : state.quill.getLength() - 1;
-                    state.quill.insertText(insertIndex, formattedHuman, 'user');
-                    state.quill.setSelection(insertIndex + formattedHuman.length);
-                }
-            } else if (lastActiveInput.id === 'exp-date') {
-                lastActiveInput.value = formattedISO;
-            } else if (lastActiveInput.type === 'date' || lastActiveInput.type === 'number') {
-                lastActiveInput.value = lastActiveInput.type === 'date' ? formattedISO : formattedHuman;
-            } else {
-                const start = lastActiveInput.selectionStart;
-                const end = lastActiveInput.selectionEnd;
-                const text = lastActiveInput.value;
-                const insertText = lastActiveInput.type === 'date' ? formattedISO : formattedHuman;
-                if (start !== null && end !== null) {
-                    lastActiveInput.value = text.slice(0, start) + insertText + text.slice(end);
-                } else {
-                    lastActiveInput.value += insertText;
-                }
-            }
-            lastActiveInput.dispatchEvent(new Event('input', { bubbles: true }));
-            lastActiveInput.dispatchEvent(new Event('change', { bubbles: true }));
-        } catch(e) {
-            console.error("Could not paste date into input", e);
-        }
-    }
-}
-
-export function calendarCopyToday() {
-    const today = new Date();
-    selectCalendarDate(today.getFullYear(), today.getMonth(), today.getDate());
 }
 
 export function calendarGoToToday() {
@@ -432,7 +388,6 @@ export function initCalendarDraggable() {
 window.toggleCalendar = toggleCalendar;
 window.prevMonth = prevMonth;
 window.nextMonth = nextMonth;
-window.calendarCopyToday = calendarCopyToday;
 window.calendarGoToToday = calendarGoToToday;
 window.calendarFilterLedger = calendarFilterLedger;
 window.calendarClearFilter = calendarClearFilter;
