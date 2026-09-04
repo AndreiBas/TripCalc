@@ -135,10 +135,10 @@ export function showToast(message, type = 'success') {
         toast.style.opacity = '0';
         toast.style.transform = 'translateY(-15px)';
         setTimeout(() => {
-            if (toast.parentNode === container) {
+            if (toast.parentNode === container && typeof container.removeChild === 'function') {
                 container.removeChild(toast);
             }
-            if (container.children.length === 0 && container.parentNode === document.body) {
+            if (container.children && container.children.length === 0 && container.parentNode === document.body && typeof document.body.removeChild === 'function') {
                 document.body.removeChild(container);
             }
         }, 300);

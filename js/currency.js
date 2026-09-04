@@ -1,8 +1,11 @@
 import { state, saveState } from './state.js';
-import { CURRENCY_SYMBOLS, COMMON_CURRENCIES } from './config.js';
+import { CURRENCY_SYMBOLS, COMMON_CURRENCIES, ALL_CURRENCIES } from './config.js';
 
 export async function fetchRateOnly(targetCurrency, isSilent = false) {
     if (!targetCurrency || targetCurrency === 'USD') return 1;
+    if (state.isOfflineMode) {
+        return null;
+    }
     try {
         const res = await fetch('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json');
         const data = await res.json();
@@ -47,18 +50,40 @@ export async function handleCurrencyChange() {
         UI.updateUI(); 
         return;
     }
-    if (inputVal.length !== 3) { 
-        document.getElementById('global-currency').value = state.secondaryCurrency || ""; 
-        return; 
-    }
-    const success = await fetchExchangeRate(inputVal, false);
-    if (success) {
-        state.secondaryCurrency = inputVal; 
-        if (inputVal !== 'USD') {
-            state.recentCurrencies = (state.recentCurrencies || []).filter(c => c !== inputVal);
-            state.recentCurrencies.unshift(inputVal);
-            if (state.recentCurrencies.length > 5) state.recentCurrencies.pop();
+
+    let targetCode = inputVal;
+    if (targetCode.length !== 3) {
+        const normTarget = targetCode.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        const match = ALL_CURRENCIES.find(c => c.code === targetCode) ||
+                      ALL_CURRENCIES.find(c => c.name.toUpperCase() === targetCode || c.name.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") === normTarget) ||
+                      ALL_CURRENCIES.find(c => c.name.toUpperCase().startsWith(targetCode) || c.name.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").startsWith(normTarget)) ||
+                      ALL_CURRENCIES.find(c => c.name.toUpperCase().includes(targetCode) || c.name.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(normTarget));
+        if (match) {
+            targetCode = match.code;
+        } else {
+            document.getElementById('global-currency').value = state.secondaryCurrency || ""; 
+            return; 
         }
+    }
+
+    if (targetCode === "USD") {
+        state.secondaryCurrency = ""; 
+        state.currentExchangeRate = 1;
+        document.getElementById('global-currency').value = "";
+        saveState(); 
+        updateCurrencySelectors(); 
+        const UI = await import('./ui.js');
+        UI.updateUI(); 
+        return;
+    }
+
+    document.getElementById('global-currency').value = targetCode;
+    const success = await fetchExchangeRate(targetCode, false);
+    if (success) {
+        state.secondaryCurrency = targetCode; 
+        state.recentCurrencies = (state.recentCurrencies || []).filter(c => c !== targetCode);
+        state.recentCurrencies.unshift(targetCode);
+        if (state.recentCurrencies.length > 5) state.recentCurrencies.pop();
         saveState(); 
         updateCurrencySelectors(); 
         const UI = await import('./ui.js');
@@ -87,8 +112,10 @@ export function updateCurrencySelectors() {
     
     if (state.secondaryCurrency) {
         const sym = CURRENCY_SYMBOLS[state.secondaryCurrency] || state.secondaryCurrency;
+        const currInfo = ALL_CURRENCIES.find(c => c.code === state.secondaryCurrency);
+        const flag = currInfo ? currInfo.flag : '🌍';
         expHtml += `<option value="${state.secondaryCurrency}">${state.secondaryCurrency}</option>`;
-        viewHtml += `<option value="${state.secondaryCurrency}">🌎 ${state.secondaryCurrency} (${sym})</option>`;
+        viewHtml += `<option value="${state.secondaryCurrency}">${flag} ${state.secondaryCurrency} (${sym})</option>`;
         viewContainer.style.display = 'flex';
         
         if (qcContainer) {
@@ -209,7 +236,8 @@ export function showCurrencyPicker() {
         window.addEventListener('scroll', positionCurrencyPicker, true);
     }
 
-    renderCurrencyPicker(inputEl.value);
+    inputEl.select();
+    renderCurrencyPicker(inputEl.value === state.secondaryCurrency ? '' : inputEl.value);
     pickerEl.classList.add('show');
     positionCurrencyPicker();
 }
@@ -225,33 +253,67 @@ export function renderCurrencyPicker(filterText = '') {
     let html = '';
     const recents = state.recentCurrencies || [];
 
-    if (recents.length > 0 && !filter) {
-        html += `<div class="currency-picker-section-label">Recent</div>`;
-        recents.forEach(code => {
-            const currencyInfo = COMMON_CURRENCIES.find(c => c.code === code) || { code, flag: '🌍', name: 'Custom' };
-            html += `<div class="currency-picker-item recent" onmousedown="applyCurrencyFromPicker('${code}'); event.preventDefault();">
-                        <span class="currency-picker-flag">${currencyInfo.flag}</span>
-                        <span class="currency-picker-code">${code}</span>
-                        <span class="currency-picker-name">${currencyInfo.name}</span>
-                     </div>`;
-        });
-    }
+    if (!filter) {
+        if (recents.length > 0) {
+            html += `<div class="currency-picker-section-label">Recent</div>`;
+            recents.forEach(code => {
+                const currencyInfo = ALL_CURRENCIES.find(c => c.code === code) || { code, flag: '🌍', name: 'Custom' };
+                html += `<div class="currency-picker-item recent" onmousedown="applyCurrencyFromPicker('${code}'); event.preventDefault();">
+                            <span class="currency-picker-flag">${currencyInfo.flag}</span>
+                            <span class="currency-picker-code">${code}</span>
+                            <span class="currency-picker-name">${currencyInfo.name}</span>
+                         </div>`;
+            });
+        }
 
-    let filteredCommon = COMMON_CURRENCIES;
-    if (filter) {
-        filteredCommon = COMMON_CURRENCIES.filter(c => c.code.toLowerCase().includes(filter) || c.name.toLowerCase().includes(filter));
-    }
-
-    if (filteredCommon.length > 0) {
-        html += `<div class="currency-picker-section-label">${filter ? 'Results' : 'Common'}</div>`;
-        filteredCommon.forEach(c => {
-            if (!filter && recents.includes(c.code)) return;
+        html += `<div class="currency-picker-section-label">Common</div>`;
+        COMMON_CURRENCIES.forEach(c => {
+            if (recents.includes(c.code)) return;
             html += `<div class="currency-picker-item" onmousedown="applyCurrencyFromPicker('${c.code}'); event.preventDefault();">
                         <span class="currency-picker-flag">${c.flag}</span>
                         <span class="currency-picker-code">${c.code}</span>
                         <span class="currency-picker-name">${c.name}</span>
                      </div>`;
         });
+    } else {
+        const upper = filter.toUpperCase();
+        const normFilter = filter.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        const matches = ALL_CURRENCIES.filter(c => {
+            const codeMatch = c.code.toLowerCase().includes(filter);
+            const nameLower = c.name.toLowerCase();
+            const nameNorm = nameLower.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            return codeMatch || nameLower.includes(filter) || nameNorm.includes(normFilter);
+        });
+
+        matches.sort((a, b) => {
+            if (a.code === upper) return -1;
+            if (b.code === upper) return 1;
+            if (a.code.startsWith(upper) && !b.code.startsWith(upper)) return -1;
+            if (!a.code.startsWith(upper) && b.code.startsWith(upper)) return 1;
+            return 0;
+        });
+
+        const is3Letter = /^[A-Z0-9]{3}$/i.test(filter);
+        const hasExactMatch = matches.some(c => c.code === upper);
+
+        if (matches.length > 0 || is3Letter) {
+            html += `<div class="currency-picker-section-label">Matches</div>`;
+            matches.slice(0, 40).forEach(c => {
+                html += `<div class="currency-picker-item" onmousedown="applyCurrencyFromPicker('${c.code}'); event.preventDefault();">
+                            <span class="currency-picker-flag">${c.flag}</span>
+                            <span class="currency-picker-code">${c.code}</span>
+                            <span class="currency-picker-name">${c.name}</span>
+                         </div>`;
+            });
+
+            if (is3Letter && !hasExactMatch) {
+                html += `<div class="currency-picker-item" onmousedown="applyCurrencyFromPicker('${upper}'); event.preventDefault();">
+                            <span class="currency-picker-flag">🌍</span>
+                            <span class="currency-picker-code">${upper}</span>
+                            <span class="currency-picker-name">Use "${upper}"</span>
+                         </div>`;
+            }
+        }
     }
 
     if (html === '') {

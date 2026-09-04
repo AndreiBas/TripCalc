@@ -56,7 +56,11 @@ export const state = {
     
     // Trip History
     historyEnabled: false,
-    historyStack: []
+    historyStack: [],
+
+    // Offline Mode & Pending Sync
+    isOfflineMode: typeof localStorage !== 'undefined' && localStorage.getItem('tripSplitter_isOfflineMode') === 'true',
+    hasPendingCloudSync: typeof localStorage !== 'undefined' && localStorage.getItem('tripSplitter_hasPendingCloudSync') === 'true'
 };
 
 export function repairLegacyData() {
@@ -151,7 +155,16 @@ export function saveState(skipAutoSync = false, skipHistorySnapshot = false) {
 
     localStorage.setItem('tripSplitterLatest', JSON.stringify(payload));
 
-    if (typeof state.triggerCloudSync === 'function') {
+    if (state.isOfflineMode) {
+        state.hasPendingCloudSync = true;
+        if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('tripSplitter_hasPendingCloudSync', 'true');
+        }
+        const statusEl = document.getElementById('cloud-status');
+        if (statusEl) {
+            statusEl.innerHTML = `<span style="color: var(--secondary); font-weight: 700;">📴 Offline (Saved locally)</span>`;
+        }
+    } else if (typeof state.triggerCloudSync === 'function') {
         state.triggerCloudSync(skipAutoSync);
     }
 }
@@ -180,6 +193,11 @@ export function loadState() {
             state.defaultTags = data.defaultTags || ['car', 'gas', 'flight', 'stay', 'grocery', 'restaurant'];
             state.historyEnabled = data.historyEnabled || false;
             
+            if (typeof localStorage !== 'undefined') {
+                state.isOfflineMode = localStorage.getItem('tripSplitter_isOfflineMode') === 'true';
+                state.hasPendingCloudSync = localStorage.getItem('tripSplitter_hasPendingCloudSync') === 'true';
+            }
+
             repairLegacyData();
             return true;
         } catch(err) {

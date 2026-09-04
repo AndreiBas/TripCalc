@@ -1,5 +1,5 @@
 // Bump this version number every time you update your HTML/CSS/JS!
-const CACHE_NAME = 'trip-calc-cache-v48'; 
+const CACHE_NAME = 'trip-calc-cache-v50'; 
 const REPO_NAME = new URL(self.registration.scope).pathname.replace(/\/$/, '') || '';
 
 // ONLY put guaranteed local files here. Do NOT put external CDNs here.

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TripCalc v5.34</title>
+    <title>TripCalc v5.35</title>
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icon-192.png">
     <meta name="theme-color" content="#4f46e5">
@@ -106,6 +106,7 @@
                     <div class="glass-toolbar" style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: center; padding: 4px 8px;">
                         <button class="outline small" onclick="openNotesModal()" style="background: #f0fdf4; border-color: #bbf7d0; color: var(--green);">📝 Notes</button>
                         <button id="master-sync-btn" class="outline small" onclick="manageCloudSync()" style="font-weight: 700;">☁️ Sync</button>
+                        <button id="offline-mode-btn" class="outline small" onclick="toggleOfflineMode()" style="font-weight: 700;" title="Toggle Offline / Airplane Mode">📶 Online</button>
                         <button class="danger outline small" onclick="resetTrip()">New</button>
                         <button class="secondary outline small" onclick="exportTrip()">Save</button>
                         <button class="secondary outline small" onclick="document.getElementById('file-import').click()">Load</button>
@@ -113,7 +114,7 @@
                         
                         <div id="currency-picker-wrapper" style="display: flex; align-items: center; gap: 4px; border-left: 1px solid var(--border); padding-left: 6px; margin-left: 4px; position: relative; z-index: 9999;">
                             <span style="font-size: 0.75rem; font-weight: 700; color: var(--secondary);" title="Leave blank for USD only">Cur:</span>
-                            <input type="text" id="global-currency" class="currency-selector" style="width: 45px; text-align: center; padding: 2px; font-size: 0.8rem; height: auto;" placeholder="..." maxlength="3" onfocus="showCurrencyPicker()" oninput="handleCurrencyInput()" onkeydown="handleCurrencyKeyDown(event)" autocomplete="off">
+                            <input type="text" id="global-currency" class="currency-selector" style="width: 48px; text-align: center; padding: 2px; font-size: 0.8rem; height: auto;" placeholder="..." maxlength="20" onfocus="showCurrencyPicker()" oninput="handleCurrencyInput()" onkeydown="handleCurrencyKeyDown(event)" autocomplete="off">
                         </div>
 
                         <div id="quick-convert-container" style="display: none; align-items: center; gap: 4px; border-left: 1px solid var(--border); padding-left: 6px; margin-left: 4px;">
@@ -173,7 +174,7 @@
             <details class="participants-dropdown header-collapsible-item">
                 <summary>
                     <span>👥 Participants and settings</span>
-                    <span style="font-size: 0.7rem; color: var(--secondary); font-weight: 600; background: var(--bg); padding: 2px 6px; border-radius: 10px;">v5.34</span>
+                    <span style="font-size: 0.7rem; color: var(--secondary); font-weight: 600; background: var(--bg); padding: 2px 6px; border-radius: 10px;">v5.35</span>
                 </summary>
                 <div style="margin-top: 12px; border-top: 1px solid var(--border); padding-top: 12px;">
                     <div class="form-row">
@@ -577,6 +578,15 @@
                 <h2 style="margin:0; color: var(--text);">⚙️ Cloud Settings</h2>
             </div>
             <div style="padding: 20px; display: flex; flex-direction: column; gap: 12px;">
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius-sm);">
+                    <div>
+                        <div style="font-weight: 700; font-size: 0.88rem; color: var(--text);">✈️ Offline Mode</div>
+                        <div style="font-size: 0.75rem; color: var(--secondary);">Work locally; auto-sync to cloud when you reconnect</div>
+                    </div>
+                    <label style="cursor: pointer; display: flex; align-items: center; margin: 0;">
+                        <input type="checkbox" id="modal-offline-toggle" onchange="toggleOfflineMode(this.checked)" style="width: 20px; height: 20px; accent-color: #d97706; cursor: pointer;">
+                    </label>
+                </div>
                 <button class="outline" onclick="openChangePinModal()">🔑 Change Session PIN</button>
                 <button class="warning outline" onclick="disconnectLocalSync()">🔌 Disconnect Device Only</button>
                 <button class="danger outline" onclick="openNuclearResetModal()">☢️ Nuclear Reset (Wipe Cloud Database)</button>

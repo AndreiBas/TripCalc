@@ -12,7 +12,7 @@ async function getUI() {
 }
 
 state.triggerCloudSync = (skipAutoSync = false) => {
-    if (skipAutoSync) return;
+    if (skipAutoSync || state.isOfflineMode) return;
     if (state.supabaseClient) {
         const el = document.getElementById('cloud-status');
         if (el) el.innerText = "⏳ Syncing...";
@@ -120,6 +120,139 @@ export function updateSyncBtnState() {
         btn.innerHTML = "✅ Secured"; 
         btn.style.borderColor = "var(--green)"; 
         btn.style.color = "var(--green)";
+    }
+
+    updateOfflineUI();
+}
+
+export function updateOfflineUI() {
+    const offlineBtn = document.getElementById('offline-mode-btn');
+    const modalToggle = document.getElementById('modal-offline-toggle');
+    const statusEl = document.getElementById('cloud-status');
+
+    if (modalToggle) {
+        modalToggle.checked = !!state.isOfflineMode;
+    }
+
+    if (offlineBtn) {
+        if (state.isOfflineMode) {
+            offlineBtn.innerHTML = '✈️ Offline';
+            offlineBtn.title = 'Offline Mode Active: Click to switch Online and sync changes to cloud';
+            offlineBtn.classList.add('btn-offline-active');
+        } else {
+            offlineBtn.innerHTML = '📶 Online';
+            offlineBtn.title = 'Online Mode: Click to force Offline Mode (save locally only)';
+            offlineBtn.classList.remove('btn-offline-active');
+        }
+    }
+
+    if (state.isOfflineMode && statusEl) {
+        if (state.hasPendingCloudSync) {
+            statusEl.innerHTML = `<span style="color: #d97706; font-weight: 700;">📴 Offline (Pending sync)</span>`;
+        } else {
+            statusEl.innerHTML = `<span style="color: var(--secondary); font-weight: 600;">📴 Offline (Local)</span>`;
+        }
+    }
+}
+
+export async function toggleOfflineMode(forceVal = null) {
+    const newMode = (forceVal !== null) ? !!forceVal : !state.isOfflineMode;
+    state.isOfflineMode = newMode;
+    if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('tripSplitter_isOfflineMode', newMode ? 'true' : 'false');
+    }
+
+    updateOfflineUI();
+    const UI = await getUI();
+
+    if (state.isOfflineMode) {
+        clearTimeout(state.cloudSyncTimeout);
+        if (UI && typeof UI.showToast === 'function') {
+            UI.showToast('✈️ Offline Mode enabled. All changes saved locally.', 'save');
+        }
+    } else {
+        // Switched to Online!
+        if (state.hasPendingCloudSync) {
+            if (UI && typeof UI.showToast === 'function') {
+                UI.showToast('📶 Reconnected! Syncing offline changes to cloud...', 'save');
+            }
+            await syncPendingOfflineChanges();
+        } else {
+            if (UI && typeof UI.showToast === 'function') {
+                UI.showToast('📶 Online mode active. Real-time auto-sync resumed.', 'save');
+            }
+            fetchCloudTripNames();
+        }
+    }
+}
+
+export async function syncPendingOfflineChanges() {
+    if (state.isOfflineMode) return;
+    const key = await getValidCloudKey(true);
+    if (!key) {
+        const statusEl = document.getElementById('cloud-status');
+        if (statusEl) statusEl.innerHTML = `<span style="color: var(--danger); font-weight: 700;">🔒 Unlock cloud to sync offline changes</span>`;
+        return;
+    }
+    const client = getSupabaseClient();
+    if (!client) return;
+
+    const statusEl = document.getElementById('cloud-status');
+    if (statusEl) statusEl.innerText = "⏳ Syncing offline changes...";
+
+    const payloadStr = JSON.stringify({ 
+        tripName: state.tripName, 
+        tripComment: state.tripComment, 
+        participants: state.participants, 
+        participantGroups: state.participantGroups, 
+        expenses: state.expenses, 
+        secondaryCurrency: state.secondaryCurrency, 
+        currentExchangeRate: state.currentExchangeRate, 
+        currentSort: state.currentSort, 
+        tripDays: state.tripDays, 
+        showPerDay: state.showPerDay, 
+        tripNotes: state.tripNotes, 
+        tripNotesDelta: state.tripNotesDelta, 
+        autoColorNotes: state.autoColorNotes, 
+        isHeaderCollapsed: state.isHeaderCollapsed, 
+        recentCurrencies: state.recentCurrencies,
+        defaultTags: state.defaultTags,
+        historyEnabled: state.historyEnabled,
+        lastModified: state.localLastModified 
+    });
+
+    try {
+        const encryptedData = await encryptData(key, payloadStr);
+        const accessHash = await generateAccessHash(key);
+        
+        const { error } = await client.rpc('save_secure_trip', {
+            p_id: 'auto_trip',
+            p_hash: accessHash,
+            p_data: encryptedData
+        });
+
+        if (error) {
+            if (statusEl) statusEl.innerText = "❌ Auto-Sync Failed (Will retry)";
+        } else {
+            state.hasPendingCloudSync = false;
+            if (typeof localStorage !== 'undefined') {
+                localStorage.setItem('tripSplitter_hasPendingCloudSync', 'false');
+            }
+            if (statusEl) {
+                const now = new Date();
+                statusEl.innerHTML = `✅ Secured <span class="tabular-nums">${now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>`;
+                statusEl.style.color = "var(--green)";
+                setTimeout(() => { statusEl.style.color = "var(--secondary)"; }, 5000);
+            }
+            const UI = await getUI();
+            if (UI && typeof UI.showToast === 'function') {
+                UI.showToast('✅ All offline changes synced to Auto-Sync cloud slot!', 'save');
+            }
+            fetchCloudTripNames();
+            saveHistoryToCloud('auto_trip');
+        }
+    } catch (err) {
+        console.error("Sync pending offline changes failed:", err);
     }
 }
 
@@ -474,6 +607,13 @@ export function compareVersions() {
 }
 
 export async function fetchCloudTripNames() {
+    if (state.isOfflineMode) {
+        updateOfflineUI();
+        return;
+    }
+    if (state.hasPendingCloudSync) {
+        syncPendingOfflineChanges();
+    }
     const client = getSupabaseClient(); 
     if (!client) return; 
     
@@ -559,6 +699,14 @@ export async function fetchCloudTripNames() {
 }
 
 export async function saveToSupabase(targetId) {
+    if (state.isOfflineMode) {
+        if (confirm("Offline Mode is currently active. Switch to Online Mode to save to the cloud?")) {
+            await toggleOfflineMode(false);
+        } else {
+            return;
+        }
+    }
+
     if (state.cloudTripNames[targetId] && !state.cloudTripNames[targetId].includes("Locked") && state.cloudTripNames[targetId] !== "Empty" && state.cloudTripNames[targetId] !== state.tripName) {
         if (!confirm(`⚠️ Warning: Cloud slot currently holds a different trip ("${state.cloudTripNames[targetId]}").\n\nAre you sure you want to overwrite it with "${state.tripName}"?`)) return;
     }
@@ -620,6 +768,7 @@ export async function saveToSupabase(targetId) {
 }
 
 export async function silentCloudSave() {
+    if (state.isOfflineMode) return;
     const key = await getValidCloudKey(true); 
     if (!key) return;
     const client = getSupabaseClient(); 
@@ -674,6 +823,14 @@ export async function silentCloudSave() {
 }
 
 export async function loadFromSupabase(targetId) {
+    if (state.isOfflineMode) {
+        if (confirm("Offline Mode is currently active. Switch to Online Mode to load from the cloud?")) {
+            await toggleOfflineMode(false);
+        } else {
+            return;
+        }
+    }
+
     const key = await getValidCloudKey(); 
     if (!key) return;
     const client = getSupabaseClient(); 
@@ -1025,3 +1182,5 @@ window.submitPinUnlock = submitPinUnlock;
 window.exportTrip = exportTrip;
 window.exportSecureTrip = exportSecureTrip;
 window.importTrip = importTrip;
+window.toggleOfflineMode = toggleOfflineMode;
+window.updateOfflineUI = updateOfflineUI;

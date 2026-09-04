@@ -1327,3 +1327,18 @@ details.indiv-details[open] summary::after {
     text-overflow: ellipsis;
 }
 
+.btn-offline-active {
+    background: #fffbeb !important;
+    border-color: #f59e0b !important;
+    color: #b45309 !important;
+    font-weight: 800 !important;
+    box-shadow: 0 0 0 1px #fde68a;
+}
+
+.btn-offline-active:hover {
+    background: #fef3c7 !important;
+    border-color: #d97706 !important;
+    color: #92400e !important;
+}
+
+
