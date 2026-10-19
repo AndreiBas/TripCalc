@@ -2378,17 +2378,16 @@ export function settleUpDebt(fromGroupName, toGroupName, amountInUsd) {
         return;
     }
 
-    pushHistorySnapshot(`Settled: ${fromGroupName} -> ${toGroupName}`);
-
     const useSecondary = Boolean(state.secondaryCurrency && state.currentExchangeRate > 0);
     const localCurrency = useSecondary ? state.secondaryCurrency : 'USD';
     const exchangeRate = useSecondary ? state.currentExchangeRate : 1;
     const localAmount = useSecondary ? Number((numAmt * exchangeRate).toFixed(2)) : Number(numAmt.toFixed(2));
+    const todayStr = new Date().toISOString().split('T')[0];
 
     const newTransfer = {
         id: Date.now().toString(36) + Math.random().toString(36).substr(2),
         timestamp: Date.now(),
-        date: new Date().toISOString().split('T')[0],
+        date: todayStr,
         category: 'Transfer',
         desc: `Settlement: ${fromGroupName} → ${toGroupName}`,
         amount: Number(numAmt.toFixed(4)),
@@ -2406,11 +2405,18 @@ export function settleUpDebt(fromGroupName, toGroupName, amountInUsd) {
         tags: []
     };
 
+    if (state.activeCategoryFilters && !state.activeCategoryFilters.has('Transfer')) {
+        state.activeCategoryFilters.add('Transfer');
+    }
+    if (state.selectedCalendarDates && state.selectedCalendarDates.size > 0) {
+        state.selectedCalendarDates.add(todayStr);
+    }
+
     state.expenses.push(newTransfer);
     saveState();
     updateAutocomplete();
     updateUI();
-    showToast(`Settlement transfer recorded (${fromGroupName} → ${toGroupName})!`, 'save');
+    showToast(`Settlement transfer recorded (${fromGroupName} → ${toGroupName})!`, 'create');
 }
 
 // Close suggestions popups when clicking outside
