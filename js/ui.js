@@ -545,6 +545,31 @@ export function checkMasterCheckboxState() {
     calculateRemainingPercentage();
 }
 
+export function formatRateInput(rate) {
+    const num = Number(rate);
+    if (!isFinite(num) || num <= 0) return '1';
+    if (num < 1) return String(Number(num.toFixed(6)));
+    if (num < 100) return String(Number(num.toFixed(4)));
+    return String(Number(num.toFixed(2)));
+}
+
+export function handleEqualSplitInput(inputEl, mode) {
+    const splitTypeEl = document.getElementById('exp-split-type');
+    if (splitTypeEl && splitTypeEl.value === 'equal' && inputEl && inputEl.value.trim() !== '') {
+        const row = inputEl.closest('.participant-row');
+        if (row) {
+            if (mode === 'extra') {
+                const fixedInput = row.querySelector('.part-fixed');
+                if (fixedInput && fixedInput.value !== '') fixedInput.value = '';
+            } else if (mode === 'fixed') {
+                const extraInput = row.querySelector('.part-personal');
+                if (extraInput && extraInput.value !== '') extraInput.value = '';
+            }
+        }
+    }
+    calculateRemainingPercentage();
+}
+
 export function updateSplitTypeUI() {
     const type = document.getElementById('exp-split-type').value;
     const helper = document.getElementById('split-helper-text');
@@ -565,7 +590,7 @@ export function updateSplitTypeUI() {
     } else {
         const cur = document.getElementById('exp-currency').value;
         const sym = CURRENCY_SYMBOLS[cur] ? CURRENCY_SYMBOLS[cur] : cur;
-        helper.innerHTML = `<em>Use <strong>+ Extra</strong> to add to their base share, or <strong>= Exact</strong> to override it completely.</em>`;
+        helper.innerHTML = `<em>Use <strong>+ Extra</strong> to add to their base share, or <strong>= Exact</strong> to override it completely.</em> <strong id="equal-split-remaining" style="display: none; margin-left: 5px; padding: 2px 8px; border-radius: 6px; font-style: normal;"></strong>`;
         extraInputs.forEach(input => { 
             input.placeholder = `+ Extra ${sym}`; 
             input.removeAttribute('max'); 
@@ -576,27 +601,128 @@ export function updateSplitTypeUI() {
             if(!state.editingExpenseId) input.value = ''; 
             input.style.display = 'block'; 
         });
+        calculateRemainingPercentage();
     }
 }
 
 export function calculateRemainingPercentage() {
     const splitTypeEl = document.getElementById('exp-split-type');
-    if (!splitTypeEl || splitTypeEl.value !== 'percentage') return;
-    let totalEntered = 0;
+    if (!splitTypeEl) return;
+
+    if (splitTypeEl.value === 'percentage') {
+        let totalEntered = 0;
+        let unenteredCount = 0;
+        document.querySelectorAll('.participant-row').forEach(row => {
+            const cb = row.querySelector('.part-checkbox');
+            if (cb && cb.checked) {
+                const rawVal = row.querySelector('.part-personal').value.trim();
+                const val = parseFloat(rawVal);
+                if (rawVal !== '' && !isNaN(val) && val >= 0) {
+                    totalEntered += val;
+                } else {
+                    unenteredCount++;
+                }
+            }
+        });
+        const remaining = 100 - totalEntered;
+        const remEl = document.getElementById('perc-remaining');
+        if (remEl) {
+            const displayRem = Math.abs(remaining) < 0.01 ? 0 : remaining; 
+            if (remaining < -0.01) {
+                remEl.innerText = `⚠️ ${displayRem.toFixed(1)}% left`;
+                remEl.style.color = 'var(--danger)';
+                remEl.style.background = '#fee2e2';
+            } else if (unenteredCount === 0 && remaining > 0.01) {
+                remEl.innerText = `⚠️ ${displayRem.toFixed(1)}% unallocated`;
+                remEl.style.color = 'var(--danger)';
+                remEl.style.background = '#fee2e2';
+            } else if (Math.abs(remaining) <= 0.01) {
+                remEl.innerText = `✅ 100% allocated`;
+                remEl.style.color = '#15803d';
+                remEl.style.background = '#dcfce7';
+            } else {
+                remEl.innerText = `${displayRem.toFixed(1)}% left`;
+                remEl.style.color = 'var(--text)';
+                remEl.style.background = '#e2e8f0';
+            }
+        }
+        return;
+    }
+
+    // Equal / Shared split live helper banner
+    const eqRemEl = document.getElementById('equal-split-remaining');
+    if (!eqRemEl) return;
+
+    const cur = document.getElementById('exp-currency')?.value || 'USD';
+    const sym = CURRENCY_SYMBOLS[cur] ? CURRENCY_SYMBOLS[cur] : (cur + ' ');
+    const totalBill = parseFloat(document.getElementById('exp-amount')?.value);
+
+    let totalPersonal = 0;
+    let totalFixed = 0;
+    let checkedCount = 0;
+    let unfixedCount = 0;
+    let hasOverrides = false;
+
     document.querySelectorAll('.participant-row').forEach(row => {
         const cb = row.querySelector('.part-checkbox');
-        if(cb && cb.checked) {
-            const val = parseFloat(row.querySelector('.part-personal').value);
-            if (!isNaN(val)) totalEntered += val;
+        if (cb && cb.checked) {
+            checkedCount++;
+            const fixedRaw = row.querySelector('.part-fixed')?.value.trim() || '';
+            const extraRaw = row.querySelector('.part-personal')?.value.trim() || '';
+            const fixedVal = parseFloat(fixedRaw);
+            const extraVal = parseFloat(extraRaw);
+
+            if (fixedRaw !== '' && !isNaN(fixedVal) && fixedVal >= 0) {
+                totalFixed += fixedVal;
+                hasOverrides = true;
+            } else {
+                unfixedCount++;
+                if (extraRaw !== '' && !isNaN(extraVal) && extraVal > 0) {
+                    totalPersonal += extraVal;
+                    hasOverrides = true;
+                }
+            }
         }
     });
-    const remaining = 100 - totalEntered;
-    const remEl = document.getElementById('perc-remaining');
-    if (remEl) {
-        const displayRem = Math.abs(remaining) < 0.01 ? 0 : remaining; 
-        remEl.innerText = `${displayRem.toFixed(1)}% left`;
-        remEl.style.color = remaining < -0.01 ? 'var(--danger)' : 'var(--text)';
-        remEl.style.background = remaining < -0.01 ? '#fee2e2' : '#e2e8f0';
+
+    if (checkedCount === 0 || (isNaN(totalBill) || totalBill <= 0) && !hasOverrides) {
+        eqRemEl.style.display = 'none';
+        return;
+    }
+
+    eqRemEl.style.display = 'inline-block';
+
+    if (isNaN(totalBill) || totalBill <= 0) {
+        eqRemEl.innerText = `Allocated so far: ${sym}${(totalPersonal + totalFixed).toFixed(2)}`;
+        eqRemEl.style.color = 'var(--text)';
+        eqRemEl.style.background = '#e2e8f0';
+        return;
+    }
+
+    const rem = totalBill - totalPersonal - totalFixed;
+    if (rem < -0.01) {
+        eqRemEl.innerText = `⚠️ Exceeds bill by ${sym}${Math.abs(rem).toFixed(2)}`;
+        eqRemEl.style.color = 'var(--danger)';
+        eqRemEl.style.background = '#fee2e2';
+    } else if (unfixedCount === 0 && rem > 0.05) {
+        eqRemEl.innerText = `⚠️ ${sym}${rem.toFixed(2)} unallocated`;
+        eqRemEl.style.color = 'var(--danger)';
+        eqRemEl.style.background = '#fee2e2';
+    } else if (unfixedCount === 0 && Math.abs(rem) <= 0.05) {
+        eqRemEl.innerText = `✅ 100% allocated`;
+        eqRemEl.style.color = '#15803d';
+        eqRemEl.style.background = '#dcfce7';
+    } else if (hasOverrides) {
+        const cleanRem = Math.max(0, rem);
+        const perPerson = cleanRem / unfixedCount;
+        eqRemEl.innerText = `Remaining: ${sym}${cleanRem.toFixed(2)} (${sym}${perPerson.toFixed(2)}/pers)`;
+        eqRemEl.style.color = 'var(--primary)';
+        eqRemEl.style.background = '#e0e7ff';
+    } else {
+        const perPerson = totalBill / checkedCount;
+        eqRemEl.innerText = `${sym}${perPerson.toFixed(2)} / person`;
+        eqRemEl.style.color = 'var(--secondary)';
+        eqRemEl.style.background = '#f1f5f9';
     }
 }
 
@@ -612,7 +738,7 @@ export function updateFormCurrencyUI() {
         rateRow.style.display = 'flex';
         rateLabel.innerText = localCurrency;
         if (!rateInput.value && state.currentExchangeRate > 0) {
-            rateInput.value = state.currentExchangeRate.toFixed(2);
+            rateInput.value = formatRateInput(state.currentExchangeRate);
         }
     } else {
         rateRow.style.display = 'none';
@@ -629,7 +755,7 @@ export async function refreshFormRate() {
     const rate = await fetchRateOnly(localCurrency, false);
     if (rate && rate > 0) {
         const rateInput = document.getElementById('exp-exchange-rate');
-        if (rateInput) rateInput.value = rate.toFixed(2);
+        if (rateInput) rateInput.value = formatRateInput(rate);
     }
     if (btn) btn.innerText = "🔄 Fetch Latest";
 }
@@ -660,8 +786,8 @@ export function addDefaultTag() {
     const input = document.getElementById('new-default-tag');
     if (!input) return;
     let val = input.value.trim().toLowerCase();
-    if (val.startsWith('#')) val = val.substring(1).trim();
-    val = val.replace(/[^a-z0-9]/g, ''); // tags should be alphanumeric
+    if (val.startsWith('#') || val.startsWith('＃')) val = val.substring(1).trim();
+    val = val.replace(/[^\p{L}\p{N}_-]/gu, '');
     if (!val) return;
     
     if (!state.defaultTags) state.defaultTags = [];
@@ -683,11 +809,11 @@ export function handleDefaultTagKeyPress(event) {
 }
 
 export function renameDefaultTag(oldTag) {
-    const newTagInput = prompt(`Rename tag #${oldTag} to (alphanumeric only):`, oldTag);
+    const newTagInput = prompt(`Rename tag #${oldTag} to:`, oldTag);
     if (!newTagInput) return;
     let newTag = newTagInput.trim().toLowerCase();
-    if (newTag.startsWith('#')) newTag = newTag.substring(1).trim();
-    newTag = newTag.replace(/[^a-z0-9]/g, '');
+    if (newTag.startsWith('#') || newTag.startsWith('＃')) newTag = newTag.substring(1).trim();
+    newTag = newTag.replace(/[^\p{L}\p{N}_-]/gu, '');
     if (newTag === oldTag || newTag === "") return;
     
     const isDefault = state.defaultTags && state.defaultTags.includes(oldTag);
@@ -797,8 +923,9 @@ export function handleFormTagInput(e) {
         
         popup.innerHTML = finalMatches.map(t => {
             const isRecent = recentTags.includes(t.toLowerCase());
-            const label = isRecent ? `🕒 #${t}` : `#${t}`;
-            return `<div class="suggestion-item" onclick="selectTagForForm('${t}')"><span class="tag-pill" style="${getTagStyle(t)}">${label}</span></div>`;
+            const label = isRecent ? `🕒 #${escapeHTML(t)}` : `#${escapeHTML(t)}`;
+            const safeT = encodeURIComponent(t);
+            return `<div class="suggestion-item" onclick="selectTagForForm(decodeURIComponent('${safeT}'))"><span class="tag-pill" style="${getTagStyle(t)}">${label}</span></div>`;
         }).join('');
         popup.style.display = 'block';
         popup.style.top = (input.offsetTop + input.offsetHeight) + 'px';
@@ -842,7 +969,10 @@ export function handleSearchInput(e) {
     if (value.trim() === '') {
         const allTags = getTagsFromShownExpenses('');
         if (allTags.length > 0) {
-            popup.innerHTML = allTags.map(t => `<div class="suggestion-item" onclick="selectTagForSearch('${t}', false)"><span class="tag-pill" style="${getTagStyle(t)}">#${t}</span></div>`).join('');
+            popup.innerHTML = allTags.map(t => {
+                const safeT = encodeURIComponent(t);
+                return `<div class="suggestion-item" onclick="selectTagForSearch(decodeURIComponent('${safeT}'), false)"><span class="tag-pill" style="${getTagStyle(t)}">#${escapeHTML(t)}</span></div>`;
+            }).join('');
             popup.style.display = 'block';
         } else {
             popup.style.display = 'none';
@@ -869,7 +999,10 @@ export function handleSearchInput(e) {
         const matches = allTags.filter(t => t.toLowerCase().includes(query));
 
         if (matches.length > 0) {
-            popup.innerHTML = matches.map(t => `<div class="suggestion-item" onclick="selectTagForSearch('${t}', ${isNegative})"><span class="tag-pill" style="${getTagStyle(t)}">${prefix}${t}</span></div>`).join('');
+            popup.innerHTML = matches.map(t => {
+                const safeT = encodeURIComponent(t);
+                return `<div class="suggestion-item" onclick="selectTagForSearch(decodeURIComponent('${safeT}'), ${isNegative})"><span class="tag-pill" style="${getTagStyle(t)}">${prefix}${escapeHTML(t)}</span></div>`;
+            }).join('');
             popup.style.display = 'block';
         } else {
             popup.style.display = 'none';
@@ -1035,22 +1168,22 @@ export function saveExpense() {
             const name = cb.value;
             selected.push(name);
             
-            const extraInput = row.querySelector('.part-personal').value;
+            const extraInput = row.querySelector('.part-personal').value.trim();
             const extraAmt = parseFloat(extraInput);
             
-            const fixedInput = row.querySelector('.part-fixed').value;
+            const fixedInput = row.querySelector('.part-fixed').value.trim();
             const fixedAmt = parseFloat(fixedInput);
             
             if (splitType === 'equal') {
-                if (!isNaN(fixedAmt) && fixedAmt >= 0) {
+                if (fixedInput !== '' && !isNaN(fixedAmt) && fixedAmt >= 0) {
                     fixedSharesLocal[name] = fixedAmt;
                     totalFixedAmtLocal += fixedAmt;
-                } else if (!isNaN(extraAmt) && extraAmt > 0) {
+                } else if (extraInput !== '' && !isNaN(extraAmt) && extraAmt > 0) {
                     personalExpensesLocal[name] = extraAmt; 
                     totalPersonalAmtLocal += extraAmt;
                 }
             } else {
-                if (!isNaN(extraAmt) && extraAmt > 0) {
+                if (extraInput !== '' && !isNaN(extraAmt) && extraAmt >= 0) {
                     percentageShares[name] = extraAmt; 
                     totalPercentageEntered += extraAmt;
                 }
@@ -1062,9 +1195,16 @@ export function saveExpense() {
         alert("Please fill all fields, enter a valid amount, and select at least one participant."); 
         return;
     }
-    if (splitType === 'equal' && (totalPersonalAmtLocal + totalFixedAmtLocal) > localAmount) {
-        alert(`The total of Extras and Exact shares (${totalPersonalAmtLocal + totalFixedAmtLocal}) cannot exceed the total check amount (${localAmount}).`); 
-        return;
+    if (splitType === 'equal') {
+        if ((totalPersonalAmtLocal + totalFixedAmtLocal) > localAmount + 0.01) {
+            alert(`The total of Extras and Exact shares (${(totalPersonalAmtLocal + totalFixedAmtLocal).toFixed(2)}) cannot exceed the total check amount (${localAmount.toFixed(2)}).`); 
+            return;
+        }
+        const unfixedCount = selected.length - Object.keys(fixedSharesLocal).length;
+        if (unfixedCount === 0 && Math.abs((totalPersonalAmtLocal + totalFixedAmtLocal) - localAmount) > 0.05) {
+            alert(`When all selected participants have an '= Exact' share (${(totalPersonalAmtLocal + totalFixedAmtLocal).toFixed(2)}), the sum must equal the total bill amount (${localAmount.toFixed(2)}), or leave at least one participant without '= Exact' to absorb the remaining balance.`);
+            return;
+        }
     }
     if (splitType === 'percentage' && totalPercentageEntered > 100.01) {
         alert(`Total percentages entered (${totalPercentageEntered}%) cannot exceed 100%.`); 
@@ -1149,7 +1289,7 @@ export function editExpense(id) {
     document.getElementById('exp-currency').value = exp.localCurrency || 'USD';
     updateFormCurrencyUI();
     if (exp.localCurrency !== 'USD') {
-        document.getElementById('exp-exchange-rate').value = (exp.exchangeRate || state.currentExchangeRate).toFixed(2);
+        document.getElementById('exp-exchange-rate').value = formatRateInput(exp.exchangeRate || state.currentExchangeRate);
     }
     
     document.getElementById('exp-split-type').value = exp.splitType || 'equal';
@@ -1165,7 +1305,7 @@ export function editExpense(id) {
         
         if (exp.involved.includes(name)) {
             cb.checked = true;
-            if (exp.splitType === 'percentage' && exp.percentageShares && exp.percentageShares[name]) {
+            if (exp.splitType === 'percentage' && exp.percentageShares && exp.percentageShares[name] !== undefined) {
                 extraInput.value = exp.percentageShares[name];
             } else if (!exp.splitType || exp.splitType === 'equal') {
                 const safeRate = exp.exchangeRate || state.currentExchangeRate || 1;
@@ -1206,6 +1346,7 @@ export function editExpense(id) {
     }
     
     document.getElementById('exp-amount').value = exp.localAmount || (exp.amount * (exp.exchangeRate||1));
+    calculateRemainingPercentage();
     
     updateUI(); 
     document.getElementById('exp-payer').value = exp.payer; 
@@ -1317,7 +1458,7 @@ export function cancelEdit() {
     document.getElementById('exp-currency').value = defaultCur;
     updateFormCurrencyUI();
     if (defaultCur !== 'USD') {
-        document.getElementById('exp-exchange-rate').value = state.currentExchangeRate.toFixed(2);
+        document.getElementById('exp-exchange-rate').value = formatRateInput(state.currentExchangeRate);
     }
     
     document.querySelectorAll('.part-personal').forEach(input => input.value = ''); 
@@ -1378,8 +1519,8 @@ export function renderParticipantInputs() {
                 <span>${escapeHTML(shortName(p))}</span>
             </label>
             <div class="inputs-group">
-                <input type="number" class="part-personal tabular-nums" data-name="${escapeHTML(p)}" placeholder="+ Extra $" step="0.01" min="0" oninput="calculateRemainingPercentage()">
-                <input type="number" class="part-fixed tabular-nums" data-name="${escapeHTML(p)}" placeholder="= Exact $" step="0.01" min="0">
+                <input type="number" class="part-personal tabular-nums" data-name="${escapeHTML(p)}" placeholder="+ Extra $" step="0.01" min="0" oninput="handleEqualSplitInput(this, 'extra')">
+                <input type="number" class="part-fixed tabular-nums" data-name="${escapeHTML(p)}" placeholder="= Exact $" step="0.01" min="0" oninput="handleEqualSplitInput(this, 'fixed')">
             </div>
         </div>
     `).join('');
@@ -1390,10 +1531,13 @@ export function updateAutocomplete() {
     const dataList = document.getElementById('desc-suggestions');
     if (!dataList) return;
     const uniqueDescs = [...new Set(state.expenses.map(e => e.desc.replace(/ #\d+$/, '')))].filter(d => d);
-    dataList.innerHTML = uniqueDescs.map(d => `<option value="${d}">`).join('');
+    dataList.innerHTML = uniqueDescs.map(d => `<option value="${escapeHTML(d)}">`).join('');
 }
 
 export function syncStateToDOM() {
+    clearTimeout(state.notesDebounceTimer);
+    state.isNotesDirty = false;
+
     const nameInput = document.getElementById('trip-name');
     if (nameInput) nameInput.value = state.tripName || 'My Trip';
     
@@ -1501,7 +1645,7 @@ export function updateUI() {
     Object.keys(groupsMap).forEach(g => {
         groupStats[g] = { paid: 0, owed: 0, members: groupsMap[g], catShares: {}, catPaid: {}, catActivitySets: {}, memberStats: {} };
         groupsMap[g].forEach(m => {
-            groupStats[g].memberStats[m] = { paid: 0, owed: 0, catShares: {}, catPaid: {} };
+            groupStats[g].memberStats[m] = { paid: 0, frontedPaid: 0, owed: 0, catShares: {}, catPaid: {} };
             Object.keys(CATEGORIES).forEach(c => { 
                 groupStats[g].memberStats[m].catShares[c] = 0; 
                 groupStats[g].memberStats[m].catPaid[c] = 0; 
@@ -1545,12 +1689,11 @@ export function updateUI() {
         }
         
         categoryTotals[cat] += e.amount;
-        categoryParticipations[cat] += e.involved.length;
         categoryActivityCounts[cat] += 1;
 
         if (!groupStats[payerGroup]) {
             groupStats[payerGroup] = { paid: 0, owed: 0, members: [e.payer], catShares: {}, catPaid: {}, catActivitySets: {}, memberStats: {} };
-            groupStats[payerGroup].memberStats[e.payer] = { paid: 0, owed: 0, catShares: {}, catPaid: {} };
+            groupStats[payerGroup].memberStats[e.payer] = { paid: 0, frontedPaid: 0, owed: 0, catShares: {}, catPaid: {} };
             Object.keys(CATEGORIES).forEach(c => { 
                 groupStats[payerGroup].catShares[c] = 0; 
                 groupStats[payerGroup].catPaid[c] = 0; 
@@ -1559,7 +1702,7 @@ export function updateUI() {
                 groupStats[payerGroup].memberStats[e.payer].catPaid[c] = 0;
             });
         } else if (!groupStats[payerGroup].memberStats[e.payer]) {
-            groupStats[payerGroup].memberStats[e.payer] = { paid: 0, owed: 0, catShares: {}, catPaid: {} };
+            groupStats[payerGroup].memberStats[e.payer] = { paid: 0, frontedPaid: 0, owed: 0, catShares: {}, catPaid: {} };
             Object.keys(CATEGORIES).forEach(c => { 
                 groupStats[payerGroup].memberStats[e.payer].catShares[c] = 0; 
                 groupStats[payerGroup].memberStats[e.payer].catPaid[c] = 0; 
@@ -1571,8 +1714,13 @@ export function updateUI() {
         
         groupStats[payerGroup].catPaid[cat] += e.amount;
         groupStats[payerGroup].memberStats[e.payer].catPaid[cat] += e.amount;
-        payerCounts[e.payer] = (payerCounts[e.payer] || 0) + 1;
+        if (cat !== 'Transfer') {
+            groupStats[payerGroup].memberStats[e.payer].frontedPaid += e.amount;
+            payerCounts[e.payer] = (payerCounts[e.payer] || 0) + 1;
+        }
         
+        let activeShareCountForExp = 0;
+
         if (e.splitType === 'percentage') {
             let totalEnteredPerc = 0; 
             let unenteredCount = 0;
@@ -1586,7 +1734,7 @@ export function updateUI() {
                 const involvedGroup = state.participantGroups[p] || p;
                 if (!groupStats[involvedGroup]) {
                     groupStats[involvedGroup] = { paid: 0, owed: 0, members: [p], catShares: {}, catPaid: {}, catActivitySets: {}, memberStats: {} };
-                    groupStats[involvedGroup].memberStats[p] = { paid: 0, owed: 0, catShares: {}, catPaid: {} };
+                    groupStats[involvedGroup].memberStats[p] = { paid: 0, frontedPaid: 0, owed: 0, catShares: {}, catPaid: {} };
                     Object.keys(CATEGORIES).forEach(c => { 
                         groupStats[involvedGroup].catShares[c] = 0; 
                         groupStats[involvedGroup].catPaid[c] = 0; 
@@ -1595,7 +1743,7 @@ export function updateUI() {
                         groupStats[involvedGroup].memberStats[p].catPaid[c] = 0;
                     });
                 } else if (!groupStats[involvedGroup].memberStats[p]) {
-                    groupStats[involvedGroup].memberStats[p] = { paid: 0, owed: 0, catShares: {}, catPaid: {} };
+                    groupStats[involvedGroup].memberStats[p] = { paid: 0, frontedPaid: 0, owed: 0, catShares: {}, catPaid: {} };
                     Object.keys(CATEGORIES).forEach(c => { 
                         groupStats[involvedGroup].memberStats[p].catShares[c] = 0; 
                         groupStats[involvedGroup].memberStats[p].catPaid[c] = 0; 
@@ -1604,6 +1752,10 @@ export function updateUI() {
                 const pPerc = (e.percentageShares && e.percentageShares[p] !== undefined) ? e.percentageShares[p] : defaultPerc;
                 const finalShare = e.amount * (pPerc / 100);
                 
+                if (finalShare > 0.0001) {
+                    activeShareCountForExp++;
+                }
+
                 if (finalShare > 0) {
                     if (cat === 'Transfer') {
                         groupStats[involvedGroup].paid -= finalShare;
@@ -1635,12 +1787,15 @@ export function updateUI() {
 
             const sharedAmount = Math.max(0, e.amount - totalFixedForExp - totalPersonalForExp);
             const baseShare = unfixedCount > 0 ? sharedAmount / unfixedCount : 0;
+            const fixedRoundingDiff = (unfixedCount === 0 && e.involved.length > 0)
+                ? (e.amount - totalFixedForExp - totalPersonalForExp)
+                : 0;
 
-            e.involved.forEach(p => {
+            e.involved.forEach((p, idx) => {
                 const involvedGroup = state.participantGroups[p] || p;
                 if (!groupStats[involvedGroup]) {
                     groupStats[involvedGroup] = { paid: 0, owed: 0, members: [p], catShares: {}, catPaid: {}, catActivitySets: {}, memberStats: {} };
-                    groupStats[involvedGroup].memberStats[p] = { paid: 0, owed: 0, catShares: {}, catPaid: {} };
+                    groupStats[involvedGroup].memberStats[p] = { paid: 0, frontedPaid: 0, owed: 0, catShares: {}, catPaid: {} };
                     Object.keys(CATEGORIES).forEach(c => { 
                         groupStats[involvedGroup].catShares[c] = 0; 
                         groupStats[involvedGroup].catPaid[c] = 0; 
@@ -1649,7 +1804,7 @@ export function updateUI() {
                         groupStats[involvedGroup].memberStats[p].catPaid[c] = 0;
                     });
                 } else if (!groupStats[involvedGroup].memberStats[p]) {
-                    groupStats[involvedGroup].memberStats[p] = { paid: 0, owed: 0, catShares: {}, catPaid: {} };
+                    groupStats[involvedGroup].memberStats[p] = { paid: 0, frontedPaid: 0, owed: 0, catShares: {}, catPaid: {} };
                     Object.keys(CATEGORIES).forEach(c => { 
                         groupStats[involvedGroup].memberStats[p].catShares[c] = 0; 
                         groupStats[involvedGroup].memberStats[p].catPaid[c] = 0; 
@@ -1659,11 +1814,18 @@ export function updateUI() {
                 
                 if (e.fixedShares && e.fixedShares[p] !== undefined) {
                     finalShare = e.fixedShares[p];
+                    if (idx === 0 && Math.abs(fixedRoundingDiff) > 0 && Math.abs(fixedRoundingDiff) <= 0.05) {
+                        finalShare = Math.max(0, finalShare + fixedRoundingDiff);
+                    }
                 } else {
                     const personal = (e.personalExpenses && e.personalExpenses[p]) ? e.personalExpenses[p] : 0;
                     finalShare = baseShare + personal;
                 }
                 
+                if (finalShare > 0.0001) {
+                    activeShareCountForExp++;
+                }
+
                 if (finalShare > 0) {
                     if (cat === 'Transfer') {
                         groupStats[involvedGroup].paid -= finalShare;
@@ -1678,6 +1840,8 @@ export function updateUI() {
                 }
             });
         }
+
+        categoryParticipations[cat] += (e.amount === 0 ? e.involved.length : activeShareCountForExp);
     });
     
     let mostExpensiveDay = { date: '', amount: 0 };
@@ -1688,10 +1852,11 @@ export function updateUI() {
     let tripBanker = { name: 'None', paid: 0, count: 0 };
     Object.keys(groupStats).forEach(gName => {
         groupStats[gName].members.forEach(m => {
-            if (groupStats[gName].memberStats[m].paid > tripBanker.paid) {
+            const fronted = groupStats[gName].memberStats[m].frontedPaid || 0;
+            if (fronted > tripBanker.paid) {
                 tripBanker = { 
                     name: m, 
-                    paid: groupStats[gName].memberStats[m].paid,
+                    paid: fronted,
                     count: payerCounts[m] || 0
                 };
             }
@@ -1930,8 +2095,8 @@ export function updateUI() {
                 </div>
                 <div class="global-stat-box">
                     <span class="global-stat-label">🏆 Trip Banker</span>
-                    <span class="global-stat-value" style="font-size: 1.1rem; color: ${getColor(tripBanker.name)}" title="${tripBanker.name}">
-                        ${shortName(tripBanker.name)} <strong class="tabular-nums" style="color: var(--text);">(${formatMoney(tripBanker.paid)})</strong>
+                    <span class="global-stat-value" style="font-size: 1.1rem; color: ${getColor(tripBanker.name)}" title="${escapeHTML(tripBanker.name)}">
+                        ${escapeHTML(shortName(tripBanker.name))} <strong class="tabular-nums" style="color: var(--text);">(${formatMoney(tripBanker.paid)})</strong>
                     </span>
                     <div style="font-size: 0.8rem; color: var(--secondary); margin-top: 2px;">Fronted money for ${tripBanker.count} acts</div>
                 </div>
@@ -1942,7 +2107,7 @@ export function updateUI() {
             Object.keys(categoryTotals).forEach(cat => {
                 if (cat !== 'Transfer' && categoryTotals[cat] > 0) {
                     const info = CATEGORIES[cat]; 
-                    const avgPerPerson = categoryTotals[cat] / categoryParticipations[cat];
+                    const avgPerPerson = categoryTotals[cat] / (categoryParticipations[cat] || 1);
                     const catPerc = totalSpent > 0 ? ((categoryTotals[cat] / totalSpent) * 100).toFixed(1) : 0;
                     
                     statsHtml += `
@@ -1990,7 +2155,7 @@ export function updateUI() {
                             const catAvg = catActCount > 0 ? formatMoney(amt / catActCount) : '0.00';
                             
                             catBreakdownHtml += `
-                                <div onclick="filterByInsight('${gName}', '${cat}')" title="📊 ${cat} Insights:&#10;• Total Activities: ${catActCount}&#10;• Total Spent: ${formatMoney(amt)}&#10;• Avg / Activity: ${catAvg}" style="cursor: pointer; display:flex; justify-content:space-between; align-items: center; background: ${catBg}; border: 1px solid ${catColor}40; padding: 8px 10px; border-radius: var(--radius-sm); transition: transform 0.2s;">
+                                <div onclick="filterByInsight(decodeURIComponent('${encodeURIComponent(gName)}'), decodeURIComponent('${encodeURIComponent(cat)}'))" title="📊 ${cat} Insights:&#10;• Total Activities: ${catActCount}&#10;• Total Spent: ${formatMoney(amt)}&#10;• Avg / Activity: ${catAvg}" style="cursor: pointer; display:flex; justify-content:space-between; align-items: center; background: ${catBg}; border: 1px solid ${catColor}40; padding: 8px 10px; border-radius: var(--radius-sm); transition: transform 0.2s;">
                                     <span style="color: ${catColor}; font-weight: 800; font-size: 0.85rem;">${icon} ${cat}</span> 
                                     <div style="text-align: right; line-height: 1.3; display: flex; flex-direction: column; align-items: flex-end;">
                                         <div style="display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap;">
@@ -2004,7 +2169,7 @@ export function updateUI() {
                     } else {
                         if (paidAmt > 0) {
                             catBreakdownHtml += `
-                                <div onclick="filterByInsight('${gName}', '${cat}')" style="cursor: pointer; display:flex; justify-content:space-between; align-items: center; background: ${catBg}; border: 1px solid ${catColor}40; padding: 8px 10px; border-radius: var(--radius-sm);">
+                                <div onclick="filterByInsight(decodeURIComponent('${encodeURIComponent(gName)}'), decodeURIComponent('${encodeURIComponent(cat)}'))" style="cursor: pointer; display:flex; justify-content:space-between; align-items: center; background: ${catBg}; border: 1px solid ${catColor}40; padding: 8px 10px; border-radius: var(--radius-sm);">
                                     <span style="color: ${catColor}; font-weight: 800; font-size: 0.85rem;">${icon} ${cat} (Paid)</span> 
                                     <div style="text-align: right; line-height: 1.3;">
                                         <div style="display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap;">
@@ -2016,7 +2181,7 @@ export function updateUI() {
                         }
                         if (amt > 0) {
                             catBreakdownHtml += `
-                                <div onclick="filterByInsight('${gName}', '${cat}')" style="cursor: pointer; display:flex; justify-content:space-between; align-items: center; background: #fef2f2; border: 1px solid #fecdd3; padding: 8px 10px; border-radius: var(--radius-sm);">
+                                <div onclick="filterByInsight(decodeURIComponent('${encodeURIComponent(gName)}'), decodeURIComponent('${encodeURIComponent(cat)}'))" style="cursor: pointer; display:flex; justify-content:space-between; align-items: center; background: #fef2f2; border: 1px solid #fecdd3; padding: 8px 10px; border-radius: var(--radius-sm);">
                                     <span style="color: var(--danger); font-weight: 800; font-size: 0.85rem;">${icon} ${cat} (Received)</span> 
                                     <div style="text-align: right; line-height: 1.3;">
                                         <div style="display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap;">
@@ -2046,14 +2211,14 @@ export function updateUI() {
                                 
                                 if (cat !== 'Transfer') {
                                     if (amt > 0) {
-                                        mCatHtml += `<span onclick="filterByInsight('${m}', '${cat}')" style="cursor: pointer; display: inline-flex; align-items: center; background: ${catBg}; padding: 4px 8px; border-radius: 6px; border: 1px solid ${catColor}40; font-size: 0.75rem; color: ${catColor}; font-weight: 700;">${icon} <span class="tabular-nums" style="margin-left: 4px;">${formatMoney(amt)}</span>${getPerDayTextSmall(amt)}</span>`;
+                                        mCatHtml += `<span onclick="filterByInsight(decodeURIComponent('${encodeURIComponent(m)}'), decodeURIComponent('${encodeURIComponent(cat)}'))" style="cursor: pointer; display: inline-flex; align-items: center; background: ${catBg}; padding: 4px 8px; border-radius: 6px; border: 1px solid ${catColor}40; font-size: 0.75rem; color: ${catColor}; font-weight: 700;">${icon} <span class="tabular-nums" style="margin-left: 4px;">${formatMoney(amt)}</span>${getPerDayTextSmall(amt)}</span>`;
                                     }
                                 } else {
                                     if (paidAmt > 0) {
-                                        mCatHtml += `<span onclick="filterByInsight('${m}', '${cat}')" style="cursor: pointer; display: inline-flex; align-items: center; background: ${catBg}; padding: 4px 8px; border-radius: 6px; border: 1px solid ${catColor}40; font-size: 0.75rem; color: ${catColor}; font-weight: 700;">${icon} <span class="tabular-nums" style="margin-left: 4px;">${formatMoney(paidAmt)}</span>${getPerDayTextSmall(paidAmt)}</span>`;
+                                        mCatHtml += `<span onclick="filterByInsight(decodeURIComponent('${encodeURIComponent(m)}'), decodeURIComponent('${encodeURIComponent(cat)}'))" style="cursor: pointer; display: inline-flex; align-items: center; background: ${catBg}; padding: 4px 8px; border-radius: 6px; border: 1px solid ${catColor}40; font-size: 0.75rem; color: ${catColor}; font-weight: 700;">${icon} <span class="tabular-nums" style="margin-left: 4px;">${formatMoney(paidAmt)}</span>${getPerDayTextSmall(paidAmt)}</span>`;
                                     }
                                     if (amt > 0) {
-                                        mCatHtml += `<span onclick="filterByInsight('${m}', '${cat}')" style="cursor: pointer; display: inline-flex; align-items: center; background: #fef2f2; padding: 4px 8px; border-radius: 6px; border: 1px solid #fecdd3; font-size: 0.75rem; color: var(--danger); font-weight: 700;">${icon} <span class="tabular-nums" style="margin-left: 4px;">+${formatMoney(amt)}</span>${getPerDayTextSmall(amt)}</span>`;
+                                        mCatHtml += `<span onclick="filterByInsight(decodeURIComponent('${encodeURIComponent(m)}'), decodeURIComponent('${encodeURIComponent(cat)}'))" style="cursor: pointer; display: inline-flex; align-items: center; background: #fef2f2; padding: 4px 8px; border-radius: 6px; border: 1px solid #fecdd3; font-size: 0.75rem; color: var(--danger); font-weight: 700;">${icon} <span class="tabular-nums" style="margin-left: 4px;">+${formatMoney(amt)}</span>${getPerDayTextSmall(amt)}</span>`;
                                     }
                                 }
                             });
@@ -2188,14 +2353,64 @@ export function renderGroupBalances(groupStats, activeCount) {
     } else {
         html += '<div class="settlement-box">';
         state.currentSettlements.forEach(s => {
-            html += `<div class="settlement-item">
+            html += `<div class="settlement-item" style="align-items: center; gap: 8px;">
                         <span><strong style="color:${s.from.color}; font-size: 1.05rem;">${escapeHTML(s.from.name)}</strong> pays <strong style="color:${s.to.color}; font-size: 1.05rem;">${escapeHTML(s.to.name)}</strong></span>
-                        <span class="tabular-nums" style="font-weight: 900; color: var(--text); font-size: 1.1rem;">Out: ${formatMoney(s.amount)}</span>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span class="tabular-nums" style="font-weight: 900; color: var(--text); font-size: 1.1rem;">Out: ${formatMoney(s.amount)}</span>
+                            <button class="outline small settle-up-btn" onclick="settleUpDebt(decodeURIComponent('${encodeURIComponent(s.from.name)}'), decodeURIComponent('${encodeURIComponent(s.to.name)}'), ${s.amount})" title="Record this settlement as a Transfer activity">✓ Settle</button>
+                        </div>
                      </div>`;
         });
         html += '</div>';
     }
     bList.innerHTML = html;
+}
+
+export function settleUpDebt(fromGroupName, toGroupName, amountInUsd) {
+    const numAmt = Number(amountInUsd);
+    if (!fromGroupName || !toGroupName || isNaN(numAmt) || numAmt <= 0) return;
+
+    const groupStats = state.currentStats?.groupStats || {};
+    const fromMember = groupStats[fromGroupName]?.members?.[0] || fromGroupName;
+    const toMember = groupStats[toGroupName]?.members?.[0] || toGroupName;
+
+    if (!confirm(`Record a settlement transfer of ${formatMoney(numAmt)} from ${fromGroupName} to ${toGroupName}?`)) {
+        return;
+    }
+
+    pushHistorySnapshot(`Settled: ${fromGroupName} -> ${toGroupName}`);
+
+    const useSecondary = Boolean(state.secondaryCurrency && state.currentExchangeRate > 0);
+    const localCurrency = useSecondary ? state.secondaryCurrency : 'USD';
+    const exchangeRate = useSecondary ? state.currentExchangeRate : 1;
+    const localAmount = useSecondary ? Number((numAmt * exchangeRate).toFixed(2)) : Number(numAmt.toFixed(2));
+
+    const newTransfer = {
+        id: Date.now().toString(36) + Math.random().toString(36).substr(2),
+        timestamp: Date.now(),
+        date: new Date().toISOString().split('T')[0],
+        category: 'Transfer',
+        desc: `Settlement: ${fromGroupName} → ${toGroupName}`,
+        amount: Number(numAmt.toFixed(4)),
+        localAmount,
+        localCurrency,
+        exchangeRate,
+        payer: fromMember,
+        involved: [toMember],
+        splitType: 'equal',
+        personalExpenses: {},
+        fixedShares: {},
+        percentageShares: {},
+        ignored: false,
+        notes: '',
+        tags: []
+    };
+
+    state.expenses.push(newTransfer);
+    saveState();
+    updateAutocomplete();
+    updateUI();
+    showToast(`Settlement transfer recorded (${fromGroupName} → ${toGroupName})!`, 'save');
 }
 
 // Close suggestions popups when clicking outside
@@ -2237,6 +2452,7 @@ window.updatePayerColor = updatePayerColor;
 window.toggleAllCheckboxes = toggleAllCheckboxes;
 window.checkMasterCheckboxState = checkMasterCheckboxState;
 window.updateSplitTypeUI = updateSplitTypeUI;
+window.handleEqualSplitInput = handleEqualSplitInput;
 window.calculateRemainingPercentage = calculateRemainingPercentage;
 window.updateFormCurrencyUI = updateFormCurrencyUI;
 window.refreshFormRate = refreshFormRate;
@@ -2257,6 +2473,7 @@ window.toggleIgnore = toggleIgnore;
 window.toggleAllExpenses = toggleAllExpenses;
 window.cancelEdit = cancelEdit;
 window.updateUI = updateUI;
+window.settleUpDebt = settleUpDebt;
 window.handleParticipantKeyPress = handleParticipantKeyPress;
 window.syncStateToDOM = syncStateToDOM;
 
@@ -2341,9 +2558,9 @@ export function renderBulkEditTagsList() {
         const visibleCommon = state.bulkCommonTags.filter(t => !state.bulkRemovedTags.has(t));
         commonContainer.innerHTML = visibleCommon.length ? visibleCommon.map(t => {
             return `
-            <div class="tag" style="${getTagStyle(t)}" title="${t}">
-                <span class="tag-name">#${t}</span>
-                <span class="tag-del" onclick="removeCommonTagFromBulk('${t}')">&times;</span>
+            <div class="tag" style="${getTagStyle(t)}" title="${escapeHTML(t)}">
+                <span class="tag-name">#${escapeHTML(t)}</span>
+                <span class="tag-del" onclick="removeCommonTagFromBulk(decodeURIComponent('${encodeURIComponent(t)}'))">&times;</span>
             </div>`;
         }).join('') : '<span style="font-size:0.8rem; color:var(--secondary); font-style:italic;">No common tags found.</span>';
     }
@@ -2352,9 +2569,9 @@ export function renderBulkEditTagsList() {
     if (addedContainer) {
         addedContainer.innerHTML = state.bulkAddedTags.map(t => {
             return `
-            <div class="tag" style="${getTagStyle(t)}" title="${t}">
-                <span class="tag-name">#${t}</span>
-                <span class="tag-del" onclick="removeAddedTagFromBulk('${t}')">&times;</span>
+            <div class="tag" style="${getTagStyle(t)}" title="${escapeHTML(t)}">
+                <span class="tag-name">#${escapeHTML(t)}</span>
+                <span class="tag-del" onclick="removeAddedTagFromBulk(decodeURIComponent('${encodeURIComponent(t)}'))">&times;</span>
             </div>`;
         }).join('');
     }
@@ -2370,7 +2587,7 @@ export function addTagToBulkList() {
     if (!input) return;
     let val = input.value.trim().toLowerCase();
     if (val.startsWith('#')) val = val.substring(1).trim();
-    val = val.replace(/[^a-z0-9]/g, '');
+    val = val.replace(/[^\p{L}\p{N}_-]/gu, '');
     if (!val) return;
     
     if (state.bulkRemovedTags.has(val)) {
@@ -2439,7 +2656,7 @@ export function handleBulkTagAutocomplete(e) {
     });
     
     if (matches.length > 0) {
-        popup.innerHTML = matches.map(t => `<div class="suggestion-item" onclick="selectTagForBulk('${t}')"><span class="tag-pill" style="${getTagStyle(t)}">#${t}</span></div>`).join('');
+        popup.innerHTML = matches.map(t => `<div class="suggestion-item" onclick="selectTagForBulk(decodeURIComponent('${encodeURIComponent(t)}'))"><span class="tag-pill" style="${getTagStyle(t)}">#${escapeHTML(t)}</span></div>`).join('');
         popup.style.display = 'block';
         popup.style.top = (input.offsetTop + input.offsetHeight) + 'px';
     } else {

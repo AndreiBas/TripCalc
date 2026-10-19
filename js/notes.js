@@ -240,6 +240,10 @@ export function clearNotesSearchField() {
 }
 
 export function initNotesEditor() {
+    if (typeof Quill === 'undefined') {
+        console.warn('Quill library not available; skipping notes editor init.');
+        return;
+    }
     state.quill = new Quill('#quill-editor', {
         theme: 'snow',
         bounds: '.notes-body',

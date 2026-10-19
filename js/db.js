@@ -238,6 +238,11 @@ export async function syncPendingOfflineChanges() {
             if (typeof localStorage !== 'undefined') {
                 localStorage.setItem('tripSplitter_hasPendingCloudSync', 'false');
             }
+            state.cloudTripNames['auto_trip'] = state.tripName;
+            state.cloudTimestamps['auto_trip'] = state.localLastModified;
+            const autoEl = document.getElementById('auto-cloud-name');
+            if (autoEl) autoEl.innerText = state.tripName;
+            compareVersions();
             if (statusEl) {
                 const now = new Date();
                 statusEl.innerHTML = `✅ Secured <span class="tabular-nums">${now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>`;
@@ -248,7 +253,9 @@ export async function syncPendingOfflineChanges() {
             if (UI && typeof UI.showToast === 'function') {
                 UI.showToast('✅ All offline changes synced to Auto-Sync cloud slot!', 'save');
             }
-            fetchCloudTripNames();
+            if (!state.cloudTripNames['manual_trip']) {
+                fetchCloudTripNames();
+            }
             saveHistoryToCloud('auto_trip');
         }
     } catch (err) {
@@ -294,10 +301,13 @@ export async function submitChangePin() {
     btn.disabled = true;
 
     try {
-        const { data } = await client.from('trip_sync').select('id, trip_data').in('id', [
+        const { data, error: fetchErr } = await client.from('trip_sync').select('id, trip_data').in('id', [
             'manual_trip', 'manual_trip_2', 'manual_trip_3', 'auto_trip',
             'manual_trip_history', 'manual_trip_2_history', 'manual_trip_3_history', 'auto_trip_history'
         ]);
+        if (fetchErr) throw fetchErr;
+
+        const newAccessHash = await generateAccessHash(newFullKey);
 
         if (data && data.length > 0) {
             for (const row of data) {
@@ -307,7 +317,12 @@ export async function submitChangePin() {
                    const decrypted = await decryptData(oldFullKey, parsed);
                    if (decrypted) {
                        const reEncrypted = await encryptData(newFullKey, decrypted);
-                       await client.from('trip_sync').update({ trip_data: reEncrypted }).eq('id', row.id);
+                       const { error: saveErr } = await client.rpc('save_secure_trip', {
+                           p_id: row.id,
+                           p_hash: newAccessHash,
+                           p_data: reEncrypted
+                       });
+                       if (saveErr) throw saveErr;
                    }
                 }
             }
@@ -809,12 +824,16 @@ export async function silentCloudSave() {
         if (error) { 
             if(statusEl) statusEl.innerText = "❌ Auto-Sync Failed"; 
         } else { 
+            state.cloudTripNames['auto_trip'] = state.tripName;
+            state.cloudTimestamps['auto_trip'] = state.localLastModified;
+            const autoEl = document.getElementById('auto-cloud-name');
+            if (autoEl) autoEl.innerText = state.tripName;
+            compareVersions();
             if(statusEl) {
                 const now = new Date();
                 statusEl.innerHTML = `✅ Secured <span class="tabular-nums">${now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>`;
                 statusEl.style.color = "var(--green)";
                 setTimeout(() => { statusEl.style.color = "var(--secondary)"; }, 5000);
-                fetchCloudTripNames(); 
             }
         }
     } catch (err) { 

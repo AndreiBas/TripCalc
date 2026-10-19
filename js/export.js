@@ -109,7 +109,7 @@ export async function exportHTMLReport() {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${state.tripName} - Trip Report</title>
+    <title>${UI.escapeHTML(state.tripName || 'Trip Report')} - Trip Report</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -393,11 +393,11 @@ export async function exportHTMLReport() {
             <div class="stats-grid">
                 <div class="stat-card">
                     <span class="stat-label">Total Activities</span>
-                    <span class="stat-value">${state.currentFilteredExpenses.length}</span>
+                    <span class="stat-value">${state.currentStats?.validActiveCount || 0}</span>
                 </div>
                 <div class="stat-card">
                     <span class="stat-label">Average per Activity</span>
-                    <span class="stat-value">${state.currentFilteredExpenses.length > 0 ? formatMoney(state.currentStats.totalSpent / state.currentFilteredExpenses.length) : '$0.00'}</span>
+                    <span class="stat-value">${(state.currentStats?.validActiveCount || 0) > 0 ? formatMoney(state.currentStats.totalSpent / state.currentStats.validActiveCount) : '$0.00'}</span>
                 </div>
             </div>
             
@@ -424,13 +424,18 @@ export async function exportHTMLReport() {
         const blob = new Blob([reportHtml], { type: 'text/html;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         const safeTripName = (state.tripName || 'Trip').replace(/[/\\?%*:|"<>]/g, '').trim().replace(/\s+/g, '_') || 'Trip';
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
         a.download = `${safeTripName}_Report.html`;
         document.body.appendChild(a);
         a.click();
         
         // Cleanup
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        setTimeout(() => {
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }, 150);
 
     } catch (err) {
         console.error(err);

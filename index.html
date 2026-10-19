@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TripCalc v5.35</title>
+    <title>TripCalc v5.36</title>
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icon-192.png">
     <meta name="theme-color" content="#4f46e5">
@@ -174,7 +174,7 @@
             <details class="participants-dropdown header-collapsible-item">
                 <summary>
                     <span>👥 Participants and settings</span>
-                    <span style="font-size: 0.7rem; color: var(--secondary); font-weight: 600; background: var(--bg); padding: 2px 6px; border-radius: 10px;">v5.35</span>
+                    <span style="font-size: 0.7rem; color: var(--secondary); font-weight: 600; background: var(--bg); padding: 2px 6px; border-radius: 10px;">v5.36</span>
                 </summary>
                 <div style="margin-top: 12px; border-top: 1px solid var(--border); padding-top: 12px;">
                     <div class="form-row">
@@ -259,7 +259,7 @@
                         
                         <div class="form-row">
                             <div class="amount-currency-group" style="flex: 1.2;">
-                                <input type="number" id="exp-amount" class="tabular-nums" placeholder="Amount" step="0.01">
+                                <input type="number" id="exp-amount" class="tabular-nums" placeholder="Amount" step="0.01" oninput="calculateRemainingPercentage()">
                                 <select id="exp-currency" onchange="updateFormCurrencyUI(); updateSplitTypeUI();">
                                     <option value="USD">USD</option>
                                 </select>
