@@ -6,8 +6,13 @@ export async function fetchRateOnly(targetCurrency, isSilent = false) {
     if (state.isOfflineMode) {
         return null;
     }
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
     try {
-        const res = await fetch('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json');
+        const res = await fetch('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json', {
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
         const data = await res.json();
         const rate = data.usd[targetCurrency.toLowerCase()];
         if (rate) {
@@ -17,8 +22,9 @@ export async function fetchRateOnly(targetCurrency, isSilent = false) {
             return null;
         }
     } catch (e) {
+        clearTimeout(timeoutId);
         console.error(e);
-        if (!isSilent) alert("Failed to connect to currency API. Using offline rate if available.");
+        if (!isSilent) alert("Failed to connect to currency API. Using manual/offline rate.");
         return null; 
     }
 }
@@ -78,8 +84,12 @@ export async function handleCurrencyChange() {
     }
 
     document.getElementById('global-currency').value = targetCode;
+    const isKnownCode = ALL_CURRENCIES.some(c => c.code === targetCode);
     const success = await fetchExchangeRate(targetCode, false);
-    if (success) {
+    if (success || isKnownCode) {
+        if (!success && state.secondaryCurrency !== targetCode) {
+            state.currentExchangeRate = state.currentExchangeRate || 1;
+        }
         state.secondaryCurrency = targetCode; 
         state.recentCurrencies = (state.recentCurrencies || []).filter(c => c !== targetCode);
         state.recentCurrencies.unshift(targetCode);

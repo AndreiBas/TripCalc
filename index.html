@@ -412,7 +412,7 @@
                                 <li>John ordered an extra drink for $10. In <strong>+ Extra $</strong> next to John's name, type <code>10</code>. The app splits the rest equally.</li>
                             </ul>
                         </li>
-                        <li><strong>Check Standings</strong>: Look at the standings and settlement block. It instantly displays who owes whom.</li>
+                        <li><strong>Check Standings & Settle Up</strong>: Look at the Final Settlement card to see who owes whom, and click <strong>✓ Settle</strong> to instantly log a repayment transfer in the currently selected dashboard currency.</li>
                         <li><strong>Export Report</strong>: Click <strong>📄 Export HTML</strong> to save a beautiful, print-ready summary report.</li>
                     </ol>
                 </section>
@@ -422,13 +422,13 @@
                     <h3 style="color: var(--primary); border-bottom: 1px dashed var(--border); padding-bottom: 4px; display: flex; align-items: center; gap: 6px;">➕ Expenses & Advanced Splits</h3>
                     <p>Enter the date, choose a category, type a description, and input the amount. You can add searchable <strong>#tags</strong> (e.g. <code>#taxi</code> or <code>#lunch</code>) in the tag field.</p>
                     <ul style="padding-left: 20px;">
-                        <li><strong>Equal Split:</strong> Cost is shared evenly.
+                        <li><strong>Equal Split:</strong> Cost is shared evenly, with a live status pill showing remaining unallocated or per-person shared amounts.
                             <ul>
-                                <li><strong>+ Extra $ (Addon)</strong>: Individual extras (e.g., John ordered steak, others had soup). It adds this amount to John's debt *before* splitting the remainder.</li>
-                                <li><strong>Exact Share $ (Override)</strong>: Fixes the exact cost for this person, bypassing the equal share division entirely.</li>
+                                <li><strong>+ Extra $ (Addon)</strong>: Individual extras (e.g., John ordered steak, others had soup). It adds this amount to John's share <em>before</em> splitting the remainder equally.</li>
+                                <li><strong>= Exact $ (Override)</strong>: Fixes the exact cost for this person, bypassing the equal share division entirely.</li>
                             </ul>
                         </li>
-                        <li><strong>Percentage Split:</strong> Define custom splitting ratios (e.g., 60% / 40%). The sum of all selected percentages must equal 100%.</li>
+                        <li><strong>Percentage Split:</strong> Define custom splitting ratios (e.g., 60% / 40%). Any remaining percentage is divided equally among checked participants without a manual percentage, or must total 100% if all participants have manual percentages.</li>
                     </ul>
                 </section>
 
@@ -448,16 +448,15 @@
                     <h3 style="color: var(--primary); border-bottom: 1px dashed var(--border); padding-bottom: 4px; display: flex; align-items: center; gap: 6px;">📜 Activity Ledger & Smart Filters</h3>
                     <p>Navigate and isolate transactions in the ledger card:</p>
                     <ul style="padding-left: 20px;">
-                        <li><strong>Collapsible View</strong>: Click the arrow triangle `▼` to collapse the ledger list out of sight.</li>
-                        <li><strong>Sorting</strong>: Sort by Date, Amount, Description, or Category in ascending/descending order.</li>
+                        <li><strong>Collapsible View</strong>: Click the arrow triangle <code>▼</code> to collapse the ledger list out of sight.</li>
+                        <li><strong>Sorting</strong>: Sort by Date, Amount, or Payer in ascending/descending order.</li>
                         <li><strong>All-in-One Toggle</strong>: Tap the dynamic <strong>🚫 All</strong> or <strong>✅ All</strong> button next to the title to ignore or include all activities in calculations instantly.</li>
-                        <li><strong>Search & Exclude Tags</strong>: Type <code>#tag</code> to filter by that tag, or type <code>-#tag</code> to **exclude** activities containing that tag. Autocomplete suggestions dynamically list tags present in shown activities.</li>
+                        <li><strong>Search & Exclude Tags</strong>: Type <code>#tag</code> to filter by that tag, or type <code>-#tag</code> to <strong>exclude</strong> activities containing that tag. Autocomplete suggestions dynamically list tags present in shown activities.</li>
                         <li><strong>Bulk Edit Tags</strong>: Click the 🏷️ <strong>Multiple Edit</strong> button on any activity card to open a bulk tag editor modal. You can add or remove tags globally across all currently filtered, active activities at once.</li>
                         <li><strong>Click-to-Filter Insights</strong>:
                             <ul>
-                                <li>Click on a <strong>Category Icon</strong> (e.g. 🍔 Food) in the Category Breakdown table to view only Food activities.</li>
-                                <li>Click on a <strong>Name</strong> in the Standings table to show only activities paid by or involving that person.</li>
-                                <li>Click the **"All"** category filter item or refresh the page to clear filters.</li>
+                                <li>Click on a <strong>Category Row</strong> inside any Group/Personal Insight card to filter the ledger to that person/group and category.</li>
+                                <li>Use the category filter pills above the ledger to isolate specific categories.</li>
                             </ul>
                         </li>
                     </ul>
@@ -468,9 +467,9 @@
                     <h3 style="color: var(--primary); border-bottom: 1px dashed var(--border); padding-bottom: 4px; display: flex; align-items: center; gap: 6px;">💱 Multi-Currency Handling</h3>
                     <p>Add expenses in foreign currencies seamlessly:</p>
                     <ul style="padding-left: 20px;">
-                        <li><strong>Secondary Currency</strong>: Type a code (e.g. <code>EUR</code>, <code>CAD</code>, <code>JPY</code>) in the <strong>Cur:</strong> header field.</li>
-                        <li><strong>Live Exchange Rates</strong>: Click the update button to query live rates from a currency exchange API. You can manually adjust this rate at any time.</li>
-                        <li><strong>Input Conversion</strong>: Expenses entered under the secondary currency display converted amounts in the ledger, calculated against your base currency.</li>
+                        <li><strong>Secondary Currency</strong>: Click or type a code or country/currency name (e.g. <code>EUR</code>, <code>CAD</code>, <code>JPY</code>) in the <strong>Cur:</strong> header field to pick from over 150 currencies.</li>
+                        <li><strong>Live Exchange Rates</strong>: Fetches live rates automatically, or click <strong>🔄 Fetch Latest Rate</strong> in the form. You can also manually override the rate for any individual activity.</li>
+                        <li><strong>View Dashboard In</strong>: Toggle the dashboard and Final Settlement display between <code>USD</code> and your active secondary currency.</li>
                     </ul>
                 </section>
 
@@ -481,21 +480,20 @@
                     <ul style="padding-left: 20px;">
                         <li><strong>🔍 Live Search</strong>: Search text inside notes. Matching terms are highlighted.</li>
                         <li><strong>📖 Table of Contents</strong>: Format sections using <strong>Heading 2 (H2)</strong>. A clickable Table of Contents dynamically displays in the search bar to jump to sections instantly.</li>
-                        <li><strong>🎨 Auto-Color Highlight</strong>: When enabled, the editor auto-colors date strings, currency symbols, and numbers in the editor for quick scanning.</li>
-                        <li><strong>Reliable Auto-Save & Sync</strong>: Edits auto-save to browser storage every 15 seconds during typing, and trigger **instant local save and cloud sync** when closing the modal, locking your phone, or turning off the screen.</li>
+                        <li><strong>🎨 Auto-Color Highlight</strong>: When enabled, the editor auto-colors date strings, times, currency symbols, and numbers for quick scanning.</li>
+                        <li><strong>Reliable Auto-Save & Sync</strong>: Edits auto-save 2 seconds after typing stops, and trigger <strong>instant local save and cloud sync</strong> when closing the modal, locking your phone, or turning off the screen.</li>
                     </ul>
                 </section>
 
                 <!-- CLOUD SYNC & BACKUPS -->
                 <section style="margin-bottom: 24px;">
-                    <h3 style="color: var(--primary); border-bottom: 1px dashed var(--border); padding-bottom: 4px; display: flex; align-items: center; gap: 6px;">☁️ Cloud Sync & Backups</h3>
+                    <h3 style="color: var(--primary); border-bottom: 1px dashed var(--border); padding-bottom: 4px; display: flex; align-items: center; gap: 6px;">☁️ Cloud Sync, Offline Mode & Backups</h3>
                     <p>Ensure real-time sync across your PC, mobile, and web app:</p>
                     <ul style="padding-left: 20px;">
-                        <li><strong>Zero-Knowledge Encryption</strong>: All cloud backups are encrypted client-side using AES-256. The cloud database only stores ciphertext; it is impossible to read without your **Session PIN**.</li>
+                        <li><strong>Zero-Knowledge Encryption</strong>: All cloud backups are encrypted client-side using AES-256-GCM (PBKDF2 400k iterations). The cloud database only stores ciphertext; it is impossible to read without your Device Key and <strong>Session PIN</strong>.</li>
+                        <li><strong>📶 Online / 📴 Offline Switch</strong>: Toggle Offline Mode in the header toolbar (or Cloud Settings) when on choppy WiFi/cellular connections. All changes save locally and automatically sync to the <strong>Auto-Sync</strong> cloud slot as soon as you switch back to Online mode.</li>
                         <li><strong>Trip History (Restore Points)</strong>: Enable this in Settings to automatically keep up to 3 encrypted restore points per trip slot, allowing you to easily undo mistakes.</li>
-                        <li><strong>Sync Slots</strong>: Save or load manual backups across 3 slots (S1/L1, S2/L2, S3/L3).</li>
-                        <li><strong>Auto-Sync</strong>: Real-time synchronization is triggered after any transaction edit or notes change.</li>
-                        <li><strong>Offline Reconciliation</strong>: If you edit offline, changes save locally. When your connection returns (e.g. WiFi turns on), the app detects the local edits and pushes them to the cloud automatically.</li>
+                        <li><strong>Sync Slots</strong>: Save or load manual backups across 3 slots (S1/L1, S2/L2, S3/L3) plus automatic cloud backup in <strong>Auto-Sync</strong>.</li>
                         <li><strong>📄 Export HTML</strong>: Downloads a print-ready standalone HTML report containing standings, category distributions, settlements, and nested group details.</li>
                     </ul>
                 </section>
@@ -504,9 +502,8 @@
                     <h3 style="color: var(--primary); border-bottom: 1px dashed var(--border); padding-bottom: 4px; display: flex; align-items: center; gap: 6px;">📅 Floating Calendar</h3>
                     <p>Open the draggable calendar by clicking 📅 next to the Activity Ledger header or inside the Trip Notes modal:</p>
                     <ul style="padding-left: 20px;">
-                        <li><strong>Month Navigation</strong>: Use the ◀ and ▶ buttons to change months.</li>
-                        <li><strong>Click to Paste</strong>: Clicking any day button instantly writes that date (e.g. <code>2026-07-08</code> or <code>July 8, 2026</code>) into the active form input or notes cursor location automatically.</li>
-                        <li><strong>Paste Today</strong>: Click the bottom button to quickly copy/paste today's current date.</li>
+                        <li><strong>Activity Dots</strong>: Days with logged activities display a indicator dot.</li>
+                        <li><strong>Multi-Date Filter</strong>: Click one or more dates on the calendar to filter the Activity Ledger, Analytics, and Standings to those specific days. Click <strong>Clear</strong> to reset.</li>
                     </ul>
                 </section>
 

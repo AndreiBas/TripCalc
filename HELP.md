@@ -80,58 +80,57 @@ Navigate, sorting, and isolating your transactions:
 Jot down travel details, checklists, and itineraries inside the Notes overlay editor:
 * **🔍 Live Search**: Search text inside notes with instant highlighting of matching terms.
 * **📖 Table of Contents**: Format sections using **Heading 2 (H2)**. A Table of Contents dynamically displays in the search bar to jump to sections instantly.
-* **🎨 Auto-Color Highlight**: If enabled, the editor auto-colors date strings, currency symbols, and numbers in the editor for quick scanning.
-* **Reliable Auto-Save & Sync**: Edits auto-save to browser storage every 15 seconds during typing, and trigger **instant local save and cloud sync** when closing the modal, locking your phone, or turning off the screen.
+* **🎨 Auto-Color Highlight**: If enabled, the editor auto-colors date strings, times, currency symbols, and numbers in the editor for quick scanning.
+* **Reliable Auto-Save & Sync**: Edits auto-save to browser storage 2 seconds after typing stops, and trigger **instant local save and cloud sync** when closing the modal, locking your phone, or turning off the screen.
 
 ---
 
 ## 💱 Multi-Currency & Quick Converter
 If you travel internationally, you can track expenses in local currencies:
-1. **Set Local Currency:** In the header toolbar, enter a 3-letter currency code (e.g. `EUR`, `JPY`, `CAD`) in the **Cur:** field.
+1. **Set Local Currency:** In the header toolbar, click or type a currency code or name (e.g. `EUR`, `JPY`, `CAD`) in the **Cur:** field.
 2. **Fetch Exchange Rate:** The app will fetch the latest live conversion rate against USD. You can manually adjust the rate or refresh it with **Fetch Latest Rate**.
 3. **Log in FX:** In the Activity card, change the currency dropdown from `USD` to your local currency. You can type the amount in local currency; the app automatically calculates and displays the converted USD equivalent in all ledgers and standings.
 4. **Quick Converter:** Use the `USD ⇌ FX` input fields inside the header toolbar to perform instant calculations without changing your form data.
 
 ---
 
-## ☁️ Supabase Cloud Sync & Security
-TripCalc features high-level **client-side encryption** (AES-256) to synchronize your data securely to the cloud:
+## ☁️ Supabase Cloud Sync, Offline Mode & Security
+TripCalc features high-level **client-side encryption** (AES-256-GCM with 400k PBKDF2 iterations) to synchronize your data securely to the cloud:
 1. Click **Sync** in the header.
-2. Enter your Supabase URL, Anon Key, and a custom **Session PIN/Password**.
-3. **Security Model:** Your trip data is encrypted *locally inside your browser* using your PIN before upload. The Supabase database stores only ciphertext. No one (not even the database administrators) can read your data without your PIN.
-4. **Auto-Sync:** Toggle this option ON to automatically push local updates to the cloud slots in real-time.
-5. **Slots:** Use **S** (Save) and **L** (Load) on Slots 1, 2, or 3 to manage different trips or manual states.
-6. **Offline Reconciliation**: If you edit offline, changes save locally. When your connection returns (e.g. WiFi turns on or you regain cell reception), the app detects the local edits and pushes them to the cloud automatically.
+2. Enter your Supabase Access Code, Device Key, and optional **Session PIN**.
+3. **Security Model:** Your trip data is encrypted *locally inside your browser* before upload. The Supabase database stores only ciphertext.
+4. **📶 Online / 📴 Offline Switch:** Toggle Offline Mode in the header toolbar (or Cloud Settings) when on choppy connections. All edits save locally and automatically sync to the **Auto-Sync** cloud slot when you switch back to Online mode.
+5. **Slots & Trip History:** Use **S** (Save) and **L** (Load) on Manual Slots 1–3, **Load Last** on **Auto-Sync**, and optionally enable **Trip History** to keep up to 3 restore points per slot.
 
 ---
 
 ## 📂 File Export & Import (Offline Backups)
 To save copies of your trips directly to your device:
 * **Save:** Exports a standard `.json` file containing the readable database of your trip.
-* **🔐 Secure Save:** Exports an encrypted `.json` file. You will be prompted to enter a password PIN. The exported file cannot be imported or read without typing that correct password.
-* **Load:** Select any standard or secure JSON file to restore the entire trip state.
+* **🔐 Secure Save:** Exports an encrypted `.tsplit` file protected by a password.
+* **Load:** Select any standard `.json` or encrypted `.tsplit` file to restore the entire trip state.
 * **📄 Export HTML**: Downloads a print-ready standalone HTML report containing standings, category distributions, settlements, and nested group details.
 
 ---
 
-## 💸 Final Settlement Optimization
+## 💸 Final Settlement Optimization & One-Click Settle
 The settlement list uses an optimization algorithm to simplify payments:
 * It calculates the net balance (Paid minus Owed) for each participant or group.
-* It matches the largest debtors (who owe money) with the largest creditors (who are owed money).
-* By routing transactions directly, it settles all debts with the **minimum number of total transactions**, eliminating unnecessary intermediary transfers.
+* It matches the largest debtors (who owe money) with the largest creditors (who are owed money) to settle all debts with the **minimum number of total transactions**.
+* **✓ Settle Button:** Click **✓ Settle** next to any settlement row to automatically record the exact `💸 Transfer` repayment activity in the currently selected **View Dashboard In:** currency.
 
 ---
 
 ## 📊 Trip Analytics
-* **Overview stats:** Total spent, average per activity, splurge of the trip, and trip banker.
-* **Individual/Group Cards:** Displays the total paid, owed, and net balance for each member.
-* **Per Day Calculation:** Toggle **Per Day** and enter the number of days of your trip to see your daily averages!
+* **Overview stats:** Filtered trip cost, biggest splurge, most expensive day, and trip banker (based on actual fronted trip expenses, excluding debt transfers).
+* **Individual/Group Cards:** Displays the net paid, total share, and category breakdown for each member or group.
+* **Per Day Calculation:** Toggle **Per Day** and enter the number of days of your trip to see your daily averages and burn rate!
 
 ## 📅 Floating Calendar
 Open the draggable calendar overlay by clicking the 📅 button next to the Activity Ledger header or within the Trip Notes modal:
-* **Month Navigation**: Use the ◀ and ▶ buttons to navigate months.
-* **Click-to-Paste**: Click any day to insert that date (formatted as `YYYY-MM-DD` for form fields, or `Month Day, Year` for notes) into your active cursor/input location.
-* **Paste Today**: Click the bottom button to quickly copy/paste today's date.
+* **Month Navigation**: Use the ◀, ▶, and **Today** buttons to navigate months.
+* **Activity Dots**: Dates with active expenses display an indicator dot.
+* **Multi-Date Filter**: Click any day(s) to filter the Activity Ledger, Analytics, and Standings to those dates. Click **Clear** to reset.
 
 ---
 

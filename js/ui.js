@@ -2378,8 +2378,9 @@ export function settleUpDebt(fromGroupName, toGroupName, amountInUsd) {
         return;
     }
 
-    const useSecondary = Boolean(state.secondaryCurrency && state.currentExchangeRate > 0);
-    const localCurrency = useSecondary ? state.secondaryCurrency : 'USD';
+    const viewCur = document.getElementById('view-currency')?.value || 'USD';
+    const useSecondary = Boolean(viewCur !== 'USD' && state.currentExchangeRate > 0);
+    const localCurrency = useSecondary ? viewCur : 'USD';
     const exchangeRate = useSecondary ? state.currentExchangeRate : 1;
     const localAmount = useSecondary ? Number((numAmt * exchangeRate).toFixed(2)) : Number(numAmt.toFixed(2));
     const todayStr = new Date().toISOString().split('T')[0];

@@ -651,16 +651,14 @@ export async function fetchCloudTripNames() {
         client.from('trip_sync').select('id, trip_data').in('id', ['manual_trip', 'manual_trip_2', 'manual_trip_3', 'auto_trip']),
         timeoutPromise
     ]).catch(err => {
-        Object.values(elements).forEach(el => {
-            if (el) el.innerText = "Offline";
-        });
-        return { data: null, error: err };
+        return { data: null, error: err, timedOut: true };
     });
     
     if (error) {
         console.error("Fetch names error:", error);
+        const errLabel = error.message === 'Cloud check timed out' ? "Offline" : "Sync Error";
         Object.values(elements).forEach(el => {
-            if (el) el.innerText = "Sync Error";
+            if (el) el.innerText = errLabel;
         });
         return;
     }
@@ -815,14 +813,25 @@ export async function silentCloudSave() {
         const encryptedData = await encryptData(key, payloadStr);
         const accessHash = await generateAccessHash(key);
         
-        const { error } = await client.rpc('save_secure_trip', {
-            p_id: 'auto_trip',
-            p_hash: accessHash,
-            p_data: encryptedData
-        });
+        const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Auto-sync timed out')), 8000)
+        );
+        const { error } = await Promise.race([
+            client.rpc('save_secure_trip', {
+                p_id: 'auto_trip',
+                p_hash: accessHash,
+                p_data: encryptedData
+            }),
+            timeoutPromise
+        ]).catch(err => ({ error: err }));
         
         if (error) { 
-            if(statusEl) statusEl.innerText = "❌ Auto-Sync Failed"; 
+            state.hasPendingCloudSync = true;
+            localStorage.setItem('tripSplitter_pendingSync', 'true');
+            if(statusEl) {
+                statusEl.innerText = "⚠️ Offline (Saved Locally)";
+                statusEl.style.color = "var(--warning)";
+            }
         } else { 
             state.cloudTripNames['auto_trip'] = state.tripName;
             state.cloudTimestamps['auto_trip'] = state.localLastModified;

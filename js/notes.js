@@ -301,6 +301,7 @@ export function initNotesEditor() {
                     state.tripNotesDelta = state.quill.getContents(); 
                     saveState(); 
                 }
+                state.isNotesDirty = false;
             }, 2000);
         }
     });
