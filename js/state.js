@@ -1,6 +1,7 @@
 import { CATEGORIES } from './config.js';
 
 export const state = {
+    tripId: "",
     tripName: "My Trip",
     tripComment: "", 
     participants: [],
@@ -24,12 +25,16 @@ export const state = {
     supabaseClient: null,
     cloudSyncTimeout: null,
     cloudTripNames: { manual_trip: "", manual_trip_2: "", manual_trip_3: "", auto_trip: "" },
+    cloudTripIds: { manual_trip: "", manual_trip_2: "", manual_trip_3: "", auto_trip: "" },
     sessionPin: "", 
-    pinFailedAttempts: 0, 
+    pinFailedAttempts: typeof localStorage !== 'undefined' ? (parseInt(localStorage.getItem('tripSplitter_pinFailedAttempts') || '0', 10) || 0) : 0, 
     cloudAuthPromiseResolve: null,
 
     localLastModified: 0,
+    dataRevision: 0,
     cloudTimestamps: { manual_trip: 0, manual_trip_2: 0, manual_trip_3: 0, auto_trip: 0 },
+    cloudRevisions: { manual_trip: 0, manual_trip_2: 0, manual_trip_3: 0, auto_trip: 0 },
+    cloudHashes: { manual_trip: "", manual_trip_2: "", manual_trip_3: "", auto_trip: "" },
 
     // Globals explicitly for PDF Export parsing
     currentSettlements: [],
@@ -61,8 +66,75 @@ export const state = {
 
     // Offline Mode & Pending Sync
     isOfflineMode: typeof localStorage !== 'undefined' && localStorage.getItem('tripSplitter_isOfflineMode') === 'true',
-    hasPendingCloudSync: typeof localStorage !== 'undefined' && localStorage.getItem('tripSplitter_hasPendingCloudSync') === 'true'
+    hasPendingCloudSync: typeof localStorage !== 'undefined' && localStorage.getItem('tripSplitter_hasPendingCloudSync') === 'true',
+    hasUnsyncedLocalData: typeof localStorage !== 'undefined' && localStorage.getItem('tripSplitter_hasUnsyncedLocalData') === 'true',
+    lastSyncedHash: typeof localStorage !== 'undefined' ? (localStorage.getItem('tripSplitter_lastSyncedHash') || "") : ""
 };
+
+export function generateTripId() {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        return crypto.randomUUID();
+    }
+    return 'trip_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
+}
+
+export function getLocalDateString(date = new Date()) {
+    const d = (date instanceof Date && !isNaN(date.getTime())) ? date : new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function canonicalizeForHash(val) {
+    if (Array.isArray(val)) return val.map(canonicalizeForHash);
+    if (val && typeof val === 'object') {
+        const out = {};
+        Object.keys(val).sort().forEach(k => {
+            if (val[k] !== undefined) out[k] = canonicalizeForHash(val[k]);
+        });
+        return out;
+    }
+    return val;
+}
+
+export function computeTripContentHash(payload) {
+    const canonicalObj = canonicalizeForHash({
+        tripName: payload?.tripName || "",
+        tripComment: payload?.tripComment || "",
+        participants: Array.isArray(payload?.participants) ? payload.participants : [],
+        participantGroups: payload?.participantGroups || {},
+        expenses: Array.isArray(payload?.expenses) ? payload.expenses : [],
+        secondaryCurrency: payload?.secondaryCurrency || "",
+        tripDays: payload?.tripDays || 1,
+        tripNotes: payload?.tripNotes || "",
+        tripNotesDelta: payload?.tripNotesDelta || null,
+        defaultTags: Array.isArray(payload?.defaultTags) ? payload.defaultTags : []
+    });
+    const str = JSON.stringify(canonicalObj);
+    let hash = 0x811c9dc5;
+    for (let i = 0; i < str.length; i++) {
+        hash ^= str.charCodeAt(i);
+        hash = Math.imul(hash, 0x01000193);
+    }
+    return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+export function setUnsyncedLocalData(isUnsynced) {
+    state.hasUnsyncedLocalData = Boolean(isUnsynced);
+    if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('tripSplitter_hasUnsyncedLocalData', state.hasUnsyncedLocalData ? 'true' : 'false');
+    }
+}
+
+export function setLastSyncedHash(hash) {
+    state.lastSyncedHash = hash || "";
+    if (typeof localStorage !== 'undefined') {
+        if (state.lastSyncedHash) {
+            localStorage.setItem('tripSplitter_lastSyncedHash', state.lastSyncedHash);
+        } else {
+            localStorage.removeItem('tripSplitter_lastSyncedHash');
+        }
+    }
+}
 
 export function setPendingCloudSync(isPending) {
     state.hasPendingCloudSync = Boolean(isPending);
@@ -74,6 +146,8 @@ export function setPendingCloudSync(isPending) {
 
 export function buildTripPayload(includeLastModified = true) {
     const payload = {
+        tripId: state.tripId || "",
+        dataRevision: state.dataRevision || 0,
         tripName: state.tripName,
         tripComment: state.tripComment,
         participants: state.participants,
@@ -120,7 +194,7 @@ export function repairLegacyData() {
         if (!e.involved) e.involved = [...state.participants];
         if (!e.id) e.id = Math.random().toString(36).substr(2, 9); 
         if (typeof e.ignored === 'undefined') e.ignored = false;
-        if (!e.category) e.category = 'Other';
+        if (!e.category || !CATEGORIES[e.category]) e.category = 'Other';
         if (!e.personalExpenses) e.personalExpenses = {}; 
         if (!e.fixedShares) e.fixedShares = {}; 
         if (!e.splitType) e.splitType = 'equal'; 
@@ -146,7 +220,7 @@ export function repairLegacyData() {
             }
         }
         if (!e.tags) e.tags = [];
-        if (!e.date) e.date = new Date().toISOString().split('T')[0];
+        if (!e.date) e.date = getLocalDateString();
         
         // Fair currency lock repair for old data
         if ((!e.exchangeRate || !isFinite(e.exchangeRate) || e.exchangeRate <= 0) && e.localCurrency !== 'USD') {
@@ -192,12 +266,20 @@ export function repairLegacyData() {
     }
 }
 
-export function saveState(skipAutoSync = false, skipHistorySnapshot = false) {
-    if (!skipHistorySnapshot) {
+export function saveState(skipAutoSync = false, skipHistorySnapshot = false, preserveLastModified = false) {
+    if (!preserveLastModified) {
+        if (!state.tripId) {
+            state.tripId = generateTripId();
+        }
+        state.dataRevision = (state.dataRevision || 0) + 1;
+        const now = Date.now();
+        state.localLastModified = now <= state.localLastModified ? state.localLastModified + 1 : now;
+        setUnsyncedLocalData(true);
+    }
+
+    if (!skipHistorySnapshot && !preserveLastModified) {
         import('./history.js').then(H => H.pushHistorySnapshot());
     }
-    const now = Date.now();
-    state.localLastModified = now <= state.localLastModified ? state.localLastModified + 1 : now;
     
     const payload = buildTripPayload(true);
 
@@ -205,6 +287,10 @@ export function saveState(skipAutoSync = false, skipHistorySnapshot = false) {
         localStorage.setItem('tripSplitterLatest', JSON.stringify(payload));
     } catch (err) {
         console.error("Failed to persist state to localStorage:", err);
+    }
+
+    if (preserveLastModified) {
+        return;
     }
 
     if (state.isOfflineMode) {
@@ -219,10 +305,22 @@ export function saveState(skipAutoSync = false, skipHistorySnapshot = false) {
 }
 
 export function loadState() {
+    if (typeof localStorage !== 'undefined') {
+        state.isOfflineMode = localStorage.getItem('tripSplitter_isOfflineMode') === 'true';
+        state.hasPendingCloudSync = localStorage.getItem('tripSplitter_hasPendingCloudSync') === 'true';
+        state.hasUnsyncedLocalData = localStorage.getItem('tripSplitter_hasUnsyncedLocalData') === 'true';
+        state.lastSyncedHash = localStorage.getItem('tripSplitter_lastSyncedHash') || "";
+        state.pinFailedAttempts = parseInt(localStorage.getItem('tripSplitter_pinFailedAttempts') || '0', 10) || 0;
+        if (localStorage.getItem('tripSplitter_pendingSync') === 'true') {
+            setPendingCloudSync(true);
+        }
+    }
+
     const saved = localStorage.getItem('tripSplitterLatest');
     if (saved) {
         try {
             const data = JSON.parse(saved);
+            state.tripId = data.tripId || "";
             state.tripName = data.tripName || "My Trip";
             state.tripComment = data.tripComment || ""; 
             state.participants = data.participants || [];
@@ -243,17 +341,10 @@ export function loadState() {
             state.autoColorNotes = data.autoColorNotes || false;
             state.isHeaderCollapsed = data.isHeaderCollapsed || false;
             state.recentCurrencies = data.recentCurrencies || [];
-            state.localLastModified = data.lastModified || Date.now();
+            state.localLastModified = Number.isFinite(Number(data.lastModified)) ? Number(data.lastModified) : 0;
+            state.dataRevision = Number.isFinite(Number(data.dataRevision)) ? Number(data.dataRevision) : 0;
             state.defaultTags = data.defaultTags || ['car', 'gas', 'flight', 'stay', 'grocery', 'restaurant'];
             state.historyEnabled = data.historyEnabled || false;
-            
-            if (typeof localStorage !== 'undefined') {
-                state.isOfflineMode = localStorage.getItem('tripSplitter_isOfflineMode') === 'true';
-                state.hasPendingCloudSync = localStorage.getItem('tripSplitter_hasPendingCloudSync') === 'true';
-                if (localStorage.getItem('tripSplitter_pendingSync') === 'true') {
-                    setPendingCloudSync(true);
-                }
-            }
 
             repairLegacyData();
             return true;

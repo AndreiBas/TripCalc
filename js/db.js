@@ -1,8 +1,50 @@
-import { state, saveState, repairLegacyData, buildTripPayload, setPendingCloudSync } from './state.js';
+import { state, saveState, repairLegacyData, buildTripPayload, setPendingCloudSync, computeTripContentHash, setUnsyncedLocalData, setLastSyncedHash, generateTripId } from './state.js';
 import { CATEGORIES } from './config.js';
 import { updateCurrencySelectors, warmCurrencyRatesCache } from './currency.js';
 
 let isSyncingOffline = false;
+let isSilentSaving = false;
+let fetchCloudPromise = null;
+let lastCloudFetchFinishedAt = 0;
+
+function persistPinFailedAttempts(count) {
+    state.pinFailedAttempts = count;
+    if (typeof localStorage !== 'undefined') {
+        if (count > 0) {
+            localStorage.setItem('tripSplitter_pinFailedAttempts', String(count));
+        } else {
+            localStorage.removeItem('tripSplitter_pinFailedAttempts');
+        }
+    }
+}
+
+function resetCloudMetadata() {
+    ['manual_trip', 'manual_trip_2', 'manual_trip_3', 'auto_trip'].forEach(slot => {
+        state.cloudTripNames[slot] = "";
+        if (state.cloudTripIds) state.cloudTripIds[slot] = "";
+        state.cloudTimestamps[slot] = 0;
+        if (state.cloudRevisions) state.cloudRevisions[slot] = 0;
+        if (state.cloudHashes) state.cloudHashes[slot] = "";
+    });
+}
+
+function isSameTrip(remoteTripId, remoteTripName) {
+    if (state.tripId && remoteTripId) {
+        return state.tripId === remoteTripId;
+    }
+    return Boolean(remoteTripName && remoteTripName === state.tripName);
+}
+
+function isSlotUpdateAvailable(slotId, localHash) {
+    const name = state.cloudTripNames[slotId];
+    if (!name || name === 'Empty' || name.includes('Locked')) return false;
+    if (!isSameTrip(state.cloudTripIds?.[slotId], name)) return false;
+    const remoteHash = state.cloudHashes?.[slotId];
+    if (remoteHash && remoteHash === localHash) return false;
+    if (!state.hasUnsyncedLocalData) return true;
+    return ((state.cloudRevisions?.[slotId] || 0) > (state.dataRevision || 0)) ||
+           ((state.cloudTimestamps?.[slotId] || 0) > (state.localLastModified || 0));
+}
 
 // Get clean dependencies from UI dynamically to avoid circular import issues
 let uiModule = null;
@@ -192,12 +234,12 @@ export async function toggleOfflineMode(forceVal = null, options = {}) {
                     UI.showToast('📶 Reconnected! Syncing offline changes to cloud...', 'save');
                 }
                 await syncPendingOfflineChanges();
-                await fetchCloudTripNames({ skipPendingSyncCheck: true });
+                await fetchCloudTripNames({ skipPendingSyncCheck: true, force: true });
             } else {
                 if (UI && typeof UI.showToast === 'function') {
                     UI.showToast('📶 Online mode active. Real-time auto-sync resumed.', 'save');
                 }
-                fetchCloudTripNames();
+                fetchCloudTripNames({ force: true });
             }
         }
     }
@@ -237,17 +279,29 @@ export async function syncPendingOfflineChanges() {
             }
             if (remoteParsed && remoteParsed.tripName) {
                 const remoteTs = remoteParsed.lastModified || 0;
-                if (remoteParsed.tripName !== state.tripName) {
+                const remoteRev = Number(remoteParsed.dataRevision) || 0;
+                const remoteHash = computeTripContentHash(remoteParsed);
+                const localHash = computeTripContentHash(buildTripPayload(false));
+                const same = isSameTrip(remoteParsed.tripId || "", remoteParsed.tripName);
+
+                if (!same) {
                     const shouldOverwrite = confirm(`⚠️ Cloud Auto-Sync currently holds a different trip ("${remoteParsed.tripName}").\n\nOverwrite Cloud Auto-Sync with your offline changes for "${state.tripName}"?`);
                     if (!shouldOverwrite) {
                         if (statusEl) statusEl.innerHTML = `<span style="color: #d97706; font-weight: 700;">⚠️ Sync paused (Trip mismatch)</span>`;
                         return false;
                     }
-                } else if (remoteTs > state.localLastModified) {
-                    const shouldOverwrite = confirm(`⚠️ Cloud Auto-Sync has a newer version of "${state.tripName}".\n\nClick OK to overwrite cloud with your local offline edits, or Cancel to keep the cloud version intact.`);
+                } else if (remoteHash !== localHash && (
+                    (state.lastSyncedHash && remoteHash !== state.lastSyncedHash) ||
+                    remoteRev > (state.dataRevision || 0) ||
+                    remoteTs > state.localLastModified
+                )) {
+                    const shouldOverwrite = confirm(`⚠️ Cloud Auto-Sync has a newer version of "${remoteParsed.tripName}".\n\nClick OK to overwrite cloud with your local offline edits, or Cancel to keep the cloud version intact.`);
                     if (!shouldOverwrite) {
                         state.cloudTripNames['auto_trip'] = remoteParsed.tripName;
+                        if (state.cloudTripIds) state.cloudTripIds['auto_trip'] = remoteParsed.tripId || "";
                         state.cloudTimestamps['auto_trip'] = remoteTs;
+                        if (state.cloudRevisions) state.cloudRevisions['auto_trip'] = remoteRev;
+                        if (state.cloudHashes) state.cloudHashes['auto_trip'] = remoteHash;
                         compareVersions();
                         if (statusEl) statusEl.innerHTML = `<span style="color: #d97706; font-weight: 700;">⚠️ Cloud has newer version</span>`;
                         return false;
@@ -256,7 +310,12 @@ export async function syncPendingOfflineChanges() {
             }
         }
 
-        const payloadStr = JSON.stringify(buildTripPayload(true));
+        if (!state.tripId) {
+            state.tripId = generateTripId();
+        }
+        const localPayloadObj = buildTripPayload(true);
+        const localHash = computeTripContentHash(localPayloadObj);
+        const payloadStr = JSON.stringify(localPayloadObj);
         const encryptedData = await encryptData(key, payloadStr);
         const accessHash = await generateAccessHash(key);
 
@@ -275,8 +334,13 @@ export async function syncPendingOfflineChanges() {
         if (error) throw error;
 
         setPendingCloudSync(false);
+        setUnsyncedLocalData(false);
+        setLastSyncedHash(localHash);
         state.cloudTripNames['auto_trip'] = state.tripName;
+        if (state.cloudTripIds) state.cloudTripIds['auto_trip'] = state.tripId;
         state.cloudTimestamps['auto_trip'] = state.localLastModified;
+        if (state.cloudRevisions) state.cloudRevisions['auto_trip'] = state.dataRevision || 0;
+        state.cloudHashes['auto_trip'] = localHash;
         const autoEl = document.getElementById('auto-cloud-name');
         if (autoEl) autoEl.innerText = state.tripName;
         compareVersions();
@@ -291,7 +355,7 @@ export async function syncPendingOfflineChanges() {
             UI.showToast('✅ All offline changes synced to Auto-Sync cloud slot!', 'save');
         }
         if (!state.cloudTripNames['manual_trip']) {
-            fetchCloudTripNames({ skipPendingSyncCheck: true });
+            fetchCloudTripNames({ skipPendingSyncCheck: true, force: true });
         }
         saveHistoryToCloud('auto_trip');
         return true;
@@ -333,6 +397,10 @@ export function openChangePinModal() {
 }
 
 export async function submitChangePin() {
+    if (state.isOfflineMode) {
+        alert("Please switch to Online Mode before changing the Session PIN.");
+        return;
+    }
     const currentPinInput = document.getElementById('current-session-pin').value.trim();
     const newPin = document.getElementById('new-session-pin').value.trim();
     
@@ -357,24 +425,40 @@ export async function submitChangePin() {
         if (fetchErr) throw fetchErr;
 
         const newAccessHash = await generateAccessHash(newFullKey);
+        const oldFullKey = devKey + (state.sessionPin || "");
+        const preparedRows = [];
 
         if (data && data.length > 0) {
             for (const row of data) {
                 let parsed = typeof row.trip_data === 'string' ? JSON.parse(row.trip_data) : row.trip_data;
                 if (parsed && parsed.ciphertext) {
-                   const oldFullKey = devKey + (state.sessionPin || "");
-                   const decrypted = await decryptData(oldFullKey, parsed);
-                   if (decrypted) {
-                       const reEncrypted = await encryptData(newFullKey, decrypted);
-                       const { error: saveErr } = await client.rpc('save_secure_trip', {
-                           p_id: row.id,
-                           p_hash: newAccessHash,
-                           p_data: reEncrypted
-                       });
-                       if (saveErr) throw saveErr;
-                   }
+                    const decrypted = await decryptData(oldFullKey, parsed);
+                    if (!decrypted) {
+                        throw new Error(`Failed to decrypt cloud slot "${row.id}" with current PIN. Aborting without modifying cloud data.`);
+                    }
+                    const reEncrypted = await encryptData(newFullKey, decrypted);
+                    preparedRows.push({ id: row.id, data: reEncrypted });
                 }
             }
+        }
+
+        const failedIds = [];
+        for (const item of preparedRows) {
+            const { error: saveErr } = await client.rpc('save_secure_trip', {
+                p_id: item.id,
+                p_hash: newAccessHash,
+                p_data: item.data
+            });
+            if (saveErr) {
+                failedIds.push(item.id);
+            }
+        }
+
+        if (failedIds.length > 0) {
+            alert(`⚠️ Partial failure updating PIN on slots: ${failedIds.join(', ')}. Some slots may still use the previous PIN.`);
+            btn.innerText = "Save New PIN";
+            btn.disabled = false;
+            return;
         }
 
         state.sessionPin = newPin;
@@ -385,7 +469,7 @@ export async function submitChangePin() {
 
     } catch (e) {
         console.error("Change PIN error", e);
-        alert("❌ Error changing PIN.");
+        alert("❌ Error changing PIN: " + (e.message || "Unknown error"));
     }
     btn.innerText = "Save New PIN";
     btn.disabled = false;
@@ -402,6 +486,10 @@ export function openNuclearResetModal() {
 }
 
 export async function submitNuclearReset() {
+    if (state.isOfflineMode) {
+        alert("Please switch to Online Mode before wiping the cloud database.");
+        return;
+    }
     const enteredCode = document.getElementById('nuclear-reset-confirm').value.trim();
     const savedAccessCode = localStorage.getItem('tripSplitter_cloudAccess');
 
@@ -428,7 +516,10 @@ export async function submitNuclearReset() {
         ]);
         if (error) {
             console.error("Delete error", error);
-            alert("Error deleting remote data. Check your connection/access code.");
+            alert("❌ Failed to delete remote cloud data: " + error.message + "\n\nLocal sync settings were kept intact.");
+            btn.innerText = "Delete Everything";
+            btn.disabled = false;
+            return;
         }
     }
 
@@ -575,28 +666,29 @@ export async function submitPinUnlock() {
     btn.disabled = false;
 
     if (!isValid) { 
-        state.pinFailedAttempts++;
-        if (state.pinFailedAttempts >= 5) {
+        const attempts = (state.pinFailedAttempts || 0) + 1;
+        persistPinFailedAttempts(attempts);
+        if (attempts >= 5) {
             alert("❌ Incorrect Session PIN entered 5 times.\n\nFor your security, your Cloud Sync configuration has been completely reset.");
-            state.pinFailedAttempts = 0;
+            persistPinFailedAttempts(0);
             resetSupabaseConfig(true);
             document.getElementById('cloud-pin-overlay').classList.remove('active');
             if (state.cloudAuthPromiseResolve) state.cloudAuthPromiseResolve(false);
             state.cloudAuthPromiseResolve = null;
             return;
         } else {
-            alert(`❌ Incorrect Session PIN.\n\nAttempt ${state.pinFailedAttempts} of 5. After 5 failed attempts, your sync config will be reset.`); 
+            alert(`❌ Incorrect Session PIN.\n\nAttempt ${attempts} of 5. After 5 failed attempts, your sync config will be reset.`); 
             document.getElementById('unlock-session-pin').value = ''; 
             setTimeout(() => document.getElementById('unlock-session-pin').focus(), 100);
             return;
         }
     }
 
-    state.pinFailedAttempts = 0;
+    persistPinFailedAttempts(0);
     state.sessionPin = pin;
     document.getElementById('cloud-pin-overlay').classList.remove('active');
     updateSyncBtnState(); 
-    fetchCloudTripNames();
+    fetchCloudTripNames({ force: true });
     
     if (state.cloudAuthPromiseResolve) state.cloudAuthPromiseResolve(true);
     state.cloudAuthPromiseResolve = null;
@@ -641,19 +733,41 @@ export function resetSupabaseConfig(force = false) {
         localStorage.removeItem('tripSplitter_cloudAccess');
         localStorage.removeItem('tripSplitter_deviceKey');
         localStorage.removeItem('tripSplitter_hasPin');
+        persistPinFailedAttempts(0);
+        setLastSyncedHash("");
+        setUnsyncedLocalData(false);
+        resetCloudMetadata();
         state.sessionPin = ""; 
         state.supabaseClient = null;
+        compareVersions();
         updateSyncBtnState(); 
-        fetchCloudTripNames(); 
+        fetchCloudTripNames({ force: true }); 
         if (!force) alert("Cloud configuration cleared."); 
     }
 }
 
 export function compareVersions() {
-    const checkSlot = (id, btnId, defaultText) => {
-        const btn = document.getElementById(btnId);
+    const localHash = computeTripContentHash(buildTripPayload(false));
+    const slotMeta = [
+        { id: 'auto_trip', btnId: 'cloud-load-auto-btn', defaultText: 'Load Last', label: 'Auto-Sync' },
+        { id: 'manual_trip', btnId: 'cloud-load-btn-1', defaultText: 'L', label: 'Manual 1' },
+        { id: 'manual_trip_2', btnId: 'cloud-load-btn-2', defaultText: 'L', label: 'Manual 2' },
+        { id: 'manual_trip_3', btnId: 'cloud-load-btn-3', defaultText: 'L', label: 'Manual 3' }
+    ];
+
+    let bestUpdate = null;
+
+    slotMeta.forEach(({ id, btnId, defaultText, label }) => {
+        const btn = typeof document !== 'undefined' ? document.getElementById(btnId) : null;
+        const hasUpdate = isSlotUpdateAvailable(id, localHash);
+        if (hasUpdate) {
+            const ts = state.cloudTimestamps[id] || 0;
+            if (!bestUpdate || ts > bestUpdate.ts) {
+                bestUpdate = { id, label, ts };
+            }
+        }
         if (!btn) return;
-        if (state.cloudTripNames[id] === state.tripName && state.cloudTimestamps[id] > state.localLastModified) {
+        if (hasUpdate) {
             btn.classList.add('btn-update-available');
             btn.innerHTML = defaultText === 'L' ? '⚠️ Load' : '⚠️ Update Found';
             btn.title = "A newer version of this trip exists in the cloud!";
@@ -662,104 +776,139 @@ export function compareVersions() {
             btn.innerHTML = defaultText;
             btn.title = "";
         }
-    };
+    });
 
-    checkSlot('manual_trip', 'cloud-load-btn-1', 'L');
-    checkSlot('manual_trip_2', 'cloud-load-btn-2', 'L');
-    checkSlot('manual_trip_3', 'cloud-load-btn-3', 'L');
-    checkSlot('auto_trip', 'cloud-load-auto-btn', 'Load Last');
+    const banner = typeof document !== 'undefined' ? document.getElementById('cloud-update-banner') : null;
+    if (banner) {
+        if (bestUpdate) {
+            banner.innerHTML = `<span>🔄 Newer version available in <strong>${bestUpdate.label}</strong></span><button class="small" onclick="loadFromSupabase('${bestUpdate.id}')">Load Update</button>`;
+            banner.style.display = 'flex';
+        } else {
+            banner.innerHTML = '';
+            banner.style.display = 'none';
+        }
+    }
 }
 
 export async function fetchCloudTripNames(options = {}) {
-    const { skipPendingSyncCheck = false } = options;
+    const { skipPendingSyncCheck = false, force = false } = options;
     if (state.isOfflineMode) {
         updateOfflineUI();
         return;
     }
-    if (!skipPendingSyncCheck && state.hasPendingCloudSync) {
-        await syncPendingOfflineChanges();
+    if (fetchCloudPromise) {
+        return fetchCloudPromise;
     }
-    const client = getSupabaseClient(); 
-    if (!client) return; 
-    
-    const elements = {
-        'manual_trip': document.getElementById('manual-cloud-name-1'),
-        'manual_trip_2': document.getElementById('manual-cloud-name-2'),
-        'manual_trip_3': document.getElementById('manual-cloud-name-3'),
-        'auto_trip': document.getElementById('auto-cloud-name')
-    };
-
-    Object.values(elements).forEach(el => {
-        if (el) el.innerText = "Checking...";
-    });
-    
-    const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Cloud check timed out')), 5000)
-    );
-
-    const { data, error } = await Promise.race([
-        client.from('trip_sync').select('id, trip_data').in('id', ['manual_trip', 'manual_trip_2', 'manual_trip_3', 'auto_trip']),
-        timeoutPromise
-    ]).catch(err => {
-        return { data: null, error: err, timedOut: true };
-    });
-    
-    if (error) {
-        console.error("Fetch names error:", error);
-        const errLabel = error.message === 'Cloud check timed out' ? "Offline" : "Sync Error";
-        Object.values(elements).forEach(el => {
-            if (el) el.innerText = errLabel;
-        });
+    if (!force && (Date.now() - lastCloudFetchFinishedAt) < 3000) {
         return;
     }
 
-    let names = { manual_trip: "Empty", manual_trip_2: "Empty", manual_trip_3: "Empty", auto_trip: "Empty" };
-    
-    if (data) {
-        for (const row of data) {
-            try {
-                let parsed = typeof row.trip_data === 'string' ? JSON.parse(row.trip_data) : row.trip_data;
-                if (parsed && parsed.ciphertext) {
-                    const hasPin = localStorage.getItem('tripSplitter_hasPin') === 'true';
-                    if (!hasPin || state.sessionPin) {
-                        const fullKey = localStorage.getItem('tripSplitter_deviceKey') + (state.sessionPin || "");
-                        const decrypted = await decryptData(fullKey, parsed);
-                        if (decrypted) { 
-                            parsed = JSON.parse(decrypted); 
-                        } else { 
-                            parsed = { tripName: "🔒 Locked (Wrong PIN?)" }; 
+    fetchCloudPromise = (async () => {
+        try {
+            if (!skipPendingSyncCheck && state.hasPendingCloudSync) {
+                await syncPendingOfflineChanges();
+            }
+            const client = getSupabaseClient(); 
+            if (!client) return; 
+            
+            const elements = {
+                'manual_trip': document.getElementById('manual-cloud-name-1'),
+                'manual_trip_2': document.getElementById('manual-cloud-name-2'),
+                'manual_trip_3': document.getElementById('manual-cloud-name-3'),
+                'auto_trip': document.getElementById('auto-cloud-name')
+            };
+
+            Object.values(elements).forEach(el => {
+                if (el) el.innerText = "Checking...";
+            });
+            
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Cloud check timed out')), 10000)
+            );
+
+            const { data, error } = await Promise.race([
+                client.from('trip_sync').select('id, trip_data').in('id', ['manual_trip', 'manual_trip_2', 'manual_trip_3', 'auto_trip']),
+                timeoutPromise
+            ]).catch(err => {
+                return { data: null, error: err, timedOut: true };
+            });
+            
+            if (error) {
+                console.error("Fetch names error:", error);
+                const errLabel = error.message === 'Cloud check timed out' ? "Offline" : "Sync Error";
+                Object.values(elements).forEach(el => {
+                    if (el) el.innerText = errLabel;
+                });
+                return;
+            }
+
+            resetCloudMetadata();
+            let names = { manual_trip: "Empty", manual_trip_2: "Empty", manual_trip_3: "Empty", auto_trip: "Empty" };
+            
+            if (data) {
+                for (const row of data) {
+                    try {
+                        let parsed = typeof row.trip_data === 'string' ? JSON.parse(row.trip_data) : row.trip_data;
+                        if (parsed && parsed.ciphertext) {
+                            const hasPin = localStorage.getItem('tripSplitter_hasPin') === 'true';
+                            if (!hasPin || state.sessionPin) {
+                                const fullKey = localStorage.getItem('tripSplitter_deviceKey') + (state.sessionPin || "");
+                                const decrypted = await decryptData(fullKey, parsed);
+                                if (decrypted) { 
+                                    parsed = JSON.parse(decrypted); 
+                                } else { 
+                                    parsed = { tripName: "🔒 Locked (Wrong PIN?)" }; 
+                                }
+                            } else { 
+                                parsed = { tripName: "🔒 Locked" }; 
+                            }
                         }
-                    } else { 
-                        parsed = { tripName: "🔒 Locked" }; 
+                        if (parsed && parsed.tripName) {
+                            state.cloudTripNames[row.id] = parsed.tripName;
+                            if (state.cloudTripIds) state.cloudTripIds[row.id] = parsed.tripId || "";
+                            state.cloudTimestamps[row.id] = Number(parsed.lastModified) || 0;
+                            if (state.cloudRevisions) state.cloudRevisions[row.id] = Number(parsed.dataRevision) || 0;
+                            if (state.cloudHashes) {
+                                state.cloudHashes[row.id] = (!parsed.tripName.includes("Locked"))
+                                    ? computeTripContentHash(parsed)
+                                    : "";
+                            }
+                            names[row.id] = parsed.tripName;
+                        }
+                    } catch(e) { 
+                        console.error("Parse error", e); 
                     }
                 }
-                if (parsed && parsed.tripName) {
-                    state.cloudTripNames[row.id] = parsed.tripName; 
-                    state.cloudTimestamps[row.id] = parsed.lastModified || 0;
-                    names[row.id] = parsed.tripName;
-                }
-            } catch(e) { 
-                console.error("Parse error", e); 
             }
-        }
-    }
-    
-    if (elements.manual_trip) elements.manual_trip.innerText = names.manual_trip;
-    if (elements.manual_trip_2) elements.manual_trip_2.innerText = names.manual_trip_2;
-    if (elements.manual_trip_3) elements.manual_trip_3.innerText = names.manual_trip_3;
-    if (elements.auto_trip) elements.auto_trip.innerText = names.auto_trip;
-    
-    compareVersions();
+            
+            if (elements.manual_trip) elements.manual_trip.innerText = names.manual_trip;
+            if (elements.manual_trip_2) elements.manual_trip_2.innerText = names.manual_trip_2;
+            if (elements.manual_trip_3) elements.manual_trip_3.innerText = names.manual_trip_3;
+            if (elements.auto_trip) elements.auto_trip.innerText = names.auto_trip;
+            
+            compareVersions();
 
-    // Offline reconciliation: if local lastModified is newer than cloud auto_trip, trigger sync up to cloud
-    if (!state.isOfflineMode && !isSyncingOffline &&
-        state.cloudTripNames['auto_trip'] !== "🔒 Locked (Wrong PIN?)" && 
-        state.cloudTripNames['auto_trip'] !== "🔒 Locked" &&
-        state.cloudTripNames['auto_trip'] === state.tripName && 
-        state.localLastModified > (state.cloudTimestamps['auto_trip'] || 0)) {
-        console.log("Local offline changes detected. Syncing up to the cloud...");
-        silentCloudSave();
-    }
+            // Safe reconciliation: only auto-push if this device explicitly has unsynced local changes and cloud has not diverged
+            const autoName = state.cloudTripNames['auto_trip'];
+            const autoLocked = !autoName || autoName === "🔒 Locked (Wrong PIN?)" || autoName === "🔒 Locked";
+            const localHash = computeTripContentHash(buildTripPayload(false));
+            const cloudAutoHash = state.cloudHashes?.['auto_trip'] || "";
+            const sameAutoTrip = isSameTrip(state.cloudTripIds?.['auto_trip'], autoName);
+            const cloudUnchangedSinceSync = !state.lastSyncedHash || !cloudAutoHash || cloudAutoHash === state.lastSyncedHash;
+
+            if (!state.isOfflineMode && !isSyncingOffline && !isSilentSaving &&
+                (state.hasUnsyncedLocalData || state.hasPendingCloudSync) &&
+                !autoLocked && sameAutoTrip && cloudAutoHash !== localHash && cloudUnchangedSinceSync) {
+                console.log("Unsynced local edits detected. Syncing up to the cloud...");
+                silentCloudSave();
+            }
+        } finally {
+            lastCloudFetchFinishedAt = Date.now();
+            fetchCloudPromise = null;
+        }
+    })();
+
+    return fetchCloudPromise;
 }
 
 export async function saveToSupabase(targetId) {
@@ -771,7 +920,7 @@ export async function saveToSupabase(targetId) {
         }
     }
 
-    if (state.cloudTripNames[targetId] && !state.cloudTripNames[targetId].includes("Locked") && state.cloudTripNames[targetId] !== "Empty" && state.cloudTripNames[targetId] !== state.tripName) {
+    if (state.cloudTripNames[targetId] && !state.cloudTripNames[targetId].includes("Locked") && state.cloudTripNames[targetId] !== "Empty" && !isSameTrip(state.cloudTripIds?.[targetId], state.cloudTripNames[targetId])) {
         if (!confirm(`⚠️ Warning: Cloud slot currently holds a different trip ("${state.cloudTripNames[targetId]}").\n\nAre you sure you want to overwrite it with "${state.tripName}"?`)) return;
     }
 
@@ -780,7 +929,12 @@ export async function saveToSupabase(targetId) {
     const client = getSupabaseClient(); 
     if (!client) return;
 
-    const payloadStr = JSON.stringify(buildTripPayload(true));
+    if (!state.tripId) {
+        state.tripId = generateTripId();
+    }
+    const payloadObj = buildTripPayload(true);
+    const savedHash = computeTripContentHash(payloadObj);
+    const payloadStr = JSON.stringify(payloadObj);
     
     const btnId = targetId === 'manual_trip' ? 'cloud-save-btn-1' : (targetId === 'manual_trip_2' ? 'cloud-save-btn-2' : 'cloud-save-btn-3');
     const btn = document.getElementById(btnId); 
@@ -800,9 +954,15 @@ export async function saveToSupabase(targetId) {
             console.error(error); 
             alert("Error saving to cloud: " + error.message); 
         } else { 
+            state.cloudTripNames[targetId] = state.tripName;
+            if (state.cloudTripIds) state.cloudTripIds[targetId] = state.tripId;
+            state.cloudTimestamps[targetId] = state.localLastModified;
+            if (state.cloudRevisions) state.cloudRevisions[targetId] = state.dataRevision || 0;
+            if (state.cloudHashes) state.cloudHashes[targetId] = savedHash;
+            compareVersions();
             let slotName = targetId === 'manual_trip' ? 'Manual 1' : (targetId === 'manual_trip_2' ? 'Manual 2' : 'Manual 3');
             alert(`✅ Securely encrypted and saved to ${slotName}!`); 
-            fetchCloudTripNames(); 
+            fetchCloudTripNames({ force: true }); 
             saveHistoryToCloud(targetId);
         }
     } catch (err) { 
@@ -814,16 +974,71 @@ export async function saveToSupabase(targetId) {
 
 export async function silentCloudSave() {
     state.cloudSyncTimeout = null;
-    if (state.isOfflineMode) return;
+    if (state.isOfflineMode || isSilentSaving) return;
     const key = await getValidCloudKey(true); 
     if (!key) return;
     const client = getSupabaseClient(); 
     if (!client) return;
     
-    const payloadStr = JSON.stringify(buildTripPayload(true));
+    if (!state.tripId) {
+        state.tripId = generateTripId();
+    }
+    const localPayloadObj = buildTripPayload(true);
+    const localHash = computeTripContentHash(localPayloadObj);
+    const payloadStr = JSON.stringify(localPayloadObj);
     const statusEl = document.getElementById('cloud-status');
     
+    isSilentSaving = true;
     try {
+        // Pre-upload conflict check on auto_trip to prevent overwriting another device's edits
+        const checkTimeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Auto-sync check timed out')), 8000)
+        );
+        const { data: remoteRow, error: checkError } = await Promise.race([
+            client.from('trip_sync').select('trip_data').eq('id', 'auto_trip').maybeSingle(),
+            checkTimeoutPromise
+        ]).catch(err => ({ data: null, error: err }));
+
+        if (checkError) {
+            setPendingCloudSync(true);
+            if (statusEl) {
+                statusEl.innerText = "⚠️ Offline (Saved Locally)";
+                statusEl.style.color = "var(--warning)";
+            }
+            return;
+        }
+
+        if (remoteRow && remoteRow.trip_data) {
+            let remoteParsed = typeof remoteRow.trip_data === 'string' ? JSON.parse(remoteRow.trip_data) : remoteRow.trip_data;
+            if (remoteParsed && remoteParsed.ciphertext) {
+                const decryptedRemote = await decryptData(key, remoteParsed);
+                remoteParsed = decryptedRemote ? JSON.parse(decryptedRemote) : null;
+            }
+            if (remoteParsed && remoteParsed.tripName) {
+                const remoteHash = computeTripContentHash(remoteParsed);
+                const same = isSameTrip(remoteParsed.tripId || "", remoteParsed.tripName);
+                if (!same) {
+                    const shouldOverwrite = confirm(`⚠️ Cloud Auto-Sync currently holds a different trip ("${remoteParsed.tripName}").\n\nOverwrite Auto-Sync with "${state.tripName}"?`);
+                    if (!shouldOverwrite) {
+                        if (statusEl) statusEl.innerHTML = `<span style="color: #d97706; font-weight: 700;">⚠️ Sync paused (Trip mismatch)</span>`;
+                        return;
+                    }
+                } else if (remoteHash !== localHash && state.lastSyncedHash && remoteHash !== state.lastSyncedHash) {
+                    const shouldOverwrite = confirm(`⚠️ Another device updated "${remoteParsed.tripName}" in Cloud Auto-Sync since your last sync.\n\nClick OK to overwrite Cloud Auto-Sync with your edits here, or Cancel to keep the cloud version intact.`);
+                    if (!shouldOverwrite) {
+                        state.cloudTripNames['auto_trip'] = remoteParsed.tripName;
+                        if (state.cloudTripIds) state.cloudTripIds['auto_trip'] = remoteParsed.tripId || "";
+                        state.cloudTimestamps['auto_trip'] = Number(remoteParsed.lastModified) || 0;
+                        if (state.cloudRevisions) state.cloudRevisions['auto_trip'] = Number(remoteParsed.dataRevision) || 0;
+                        if (state.cloudHashes) state.cloudHashes['auto_trip'] = remoteHash;
+                        compareVersions();
+                        if (statusEl) statusEl.innerHTML = `<span style="color: #d97706; font-weight: 700;">⚠️ Newer version in cloud</span>`;
+                        return;
+                    }
+                }
+            }
+        }
+
         const encryptedData = await encryptData(key, payloadStr);
         const accessHash = await generateAccessHash(key);
         
@@ -847,8 +1062,13 @@ export async function silentCloudSave() {
             }
         } else { 
             setPendingCloudSync(false);
+            setUnsyncedLocalData(false);
+            setLastSyncedHash(localHash);
             state.cloudTripNames['auto_trip'] = state.tripName;
+            if (state.cloudTripIds) state.cloudTripIds['auto_trip'] = state.tripId;
             state.cloudTimestamps['auto_trip'] = state.localLastModified;
+            if (state.cloudRevisions) state.cloudRevisions['auto_trip'] = state.dataRevision || 0;
+            state.cloudHashes['auto_trip'] = localHash;
             const autoEl = document.getElementById('auto-cloud-name');
             if (autoEl) autoEl.innerText = state.tripName;
             compareVersions();
@@ -861,6 +1081,8 @@ export async function silentCloudSave() {
         }
     } catch (err) { 
         console.error("Silent save encryption failed.", err); 
+    } finally {
+        isSilentSaving = false;
     }
 }
 
@@ -880,6 +1102,11 @@ export async function loadFromSupabase(targetId) {
     if (!key) return;
     const client = getSupabaseClient(); 
     if (!client) return;
+
+    if (state.cloudSyncTimeout) {
+        clearTimeout(state.cloudSyncTimeout);
+        state.cloudSyncTimeout = null;
+    }
     
     let btnId = 'cloud-load-auto-btn';
     if (targetId === 'manual_trip') btnId = 'cloud-load-btn-1';
@@ -887,89 +1114,120 @@ export async function loadFromSupabase(targetId) {
     if (targetId === 'manual_trip_3') btnId = 'cloud-load-btn-3';
     
     const btn = document.getElementById(btnId); 
-    const originalText = btn ? btn.innerText : ''; 
-    if (btn) btn.innerText = "⏳ Load...";
-    
-    const { data, error } = await client.from('trip_sync').select('trip_data').eq('id', targetId).maybeSingle();
-    
-    if (error) { 
-        console.error(error); 
-        alert("Error loading from cloud: " + error.message); 
-    } else if (data && data.trip_data) {
-        try {
-            let parsedData = typeof data.trip_data === 'string' ? JSON.parse(data.trip_data) : data.trip_data;
-            
-            if (parsedData.ciphertext) {
-                const decryptedStr = await decryptData(key, parsedData);
-                if (!decryptedStr) {
-                    alert("❌ Decryption failed! Incorrect Session PIN or corrupted data.");
-                    state.sessionPin = ""; 
-                    updateSyncBtnState(); 
-                    fetchCloudTripNames(); 
-                    if (btn) btn.innerText = originalText; 
-                    return;
-                }
-                parsedData = JSON.parse(decryptedStr);
-            }
-            
-            state.tripName = parsedData.tripName || "Imported Trip"; 
-            state.tripComment = parsedData.tripComment || ""; 
-            state.participants = parsedData.participants || []; 
-            state.participantGroups = parsedData.participantGroups || {};
-            state.expenses = parsedData.expenses || []; 
-            state.secondaryCurrency = parsedData.secondaryCurrency || "";
-            state.currentExchangeRate = (parsedData.currentExchangeRate !== undefined && parsedData.currentExchangeRate !== null && !isNaN(parsedData.currentExchangeRate))
-                ? Number(parsedData.currentExchangeRate)
-                : (state.secondaryCurrency ? 0 : 1);
-            state.currencyRates = (parsedData.currencyRates && typeof parsedData.currencyRates === 'object' && !Array.isArray(parsedData.currencyRates))
-                ? parsedData.currencyRates
-                : {};
-            state.currentSort = parsedData.currentSort || 'date-desc';
-            state.tripDays = parsedData.tripDays || 1; 
-            state.showPerDay = parsedData.showPerDay || false;
-            state.tripNotes = parsedData.tripNotes || ""; 
-            state.tripNotesDelta = parsedData.tripNotesDelta || null; 
-            state.autoColorNotes = parsedData.autoColorNotes || false;
-            state.isHeaderCollapsed = parsedData.isHeaderCollapsed || false;
-            state.recentCurrencies = parsedData.recentCurrencies || [];
-            state.defaultTags = parsedData.defaultTags || ['car', 'gas', 'flight', 'stay', 'grocery', 'restaurant'];
-            state.historyEnabled = parsedData.historyEnabled || false;
-            state.localLastModified = parsedData.lastModified || Date.now();
-            state.insightFilter = null;
-            state.searchText = '';
-
-            repairLegacyData();
-            
-            const UI = await getUI();
-            UI.applyHeaderState();
-            state.activeCategoryFilters = new Set(Object.keys(CATEGORIES)); 
-            
-            // Sync database data back to UI elements
-            UI.syncStateToDOM();
-            
-            setPendingCloudSync(false);
-            saveState(true); 
-            updateCurrencySelectors({ selectSecondary: true }); 
-            UI.updateUI();  
-            UI.cancelEdit();
-            compareVersions();
-            
-            let slotName = "Autosave";
-            if(targetId === 'manual_trip') slotName = "Manual 1";
-            if(targetId === 'manual_trip_2') slotName = "Manual 2";
-            if(targetId === 'manual_trip_3') slotName = "Manual 3";
-            alert(`✅ Decrypted and loaded from the ${slotName} slot!`);
-            
-            import('./history.js').then(H => H.setCurrentHistorySlot(targetId));
-            loadHistoryFromCloud(targetId);
-        } catch(e) { 
-            alert("Error parsing cloud data."); 
-            console.error(e); 
-        }
-    } else { 
-        alert("No trip data found in this slot."); 
+    if (btn) {
+        btn.disabled = true;
+        btn.innerText = "⏳ Load...";
     }
-    if (btn) btn.innerText = originalText;
+    
+    try {
+        const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Cloud load timed out')), 8000)
+        );
+        const { data, error } = await Promise.race([
+            client.from('trip_sync').select('trip_data').eq('id', targetId).maybeSingle(),
+            timeoutPromise
+        ]).catch(err => ({ data: null, error: err }));
+        
+        if (error) { 
+            console.error(error); 
+            alert("Error loading from cloud: " + error.message); 
+        } else if (data && data.trip_data) {
+            try {
+                let parsedData = typeof data.trip_data === 'string' ? JSON.parse(data.trip_data) : data.trip_data;
+                
+                if (parsedData.ciphertext) {
+                    const decryptedStr = await decryptData(key, parsedData);
+                    if (!decryptedStr) {
+                        alert("❌ Decryption failed! Incorrect Session PIN or corrupted data.");
+                        state.sessionPin = ""; 
+                        updateSyncBtnState(); 
+                        fetchCloudTripNames({ force: true }); 
+                        return;
+                    }
+                    parsedData = JSON.parse(decryptedStr);
+                }
+                
+                state.tripId = parsedData.tripId || "";
+                state.tripName = parsedData.tripName || "Imported Trip"; 
+                state.tripComment = parsedData.tripComment || ""; 
+                state.participants = parsedData.participants || []; 
+                state.participantGroups = parsedData.participantGroups || {};
+                state.expenses = parsedData.expenses || []; 
+                state.secondaryCurrency = parsedData.secondaryCurrency || "";
+                state.currentExchangeRate = (parsedData.currentExchangeRate !== undefined && parsedData.currentExchangeRate !== null && !isNaN(parsedData.currentExchangeRate))
+                    ? Number(parsedData.currentExchangeRate)
+                    : (state.secondaryCurrency ? 0 : 1);
+                state.currencyRates = (parsedData.currencyRates && typeof parsedData.currencyRates === 'object' && !Array.isArray(parsedData.currencyRates))
+                    ? parsedData.currencyRates
+                    : {};
+                state.currentSort = parsedData.currentSort || 'date-desc';
+                state.tripDays = parsedData.tripDays || 1; 
+                state.showPerDay = parsedData.showPerDay || false;
+                state.tripNotes = parsedData.tripNotes || ""; 
+                state.tripNotesDelta = parsedData.tripNotesDelta || null; 
+                state.autoColorNotes = parsedData.autoColorNotes || false;
+                state.isHeaderCollapsed = parsedData.isHeaderCollapsed || false;
+                state.recentCurrencies = parsedData.recentCurrencies || [];
+                state.defaultTags = parsedData.defaultTags || ['car', 'gas', 'flight', 'stay', 'grocery', 'restaurant'];
+                state.historyEnabled = parsedData.historyEnabled || false;
+                state.localLastModified = Number.isFinite(Number(parsedData.lastModified)) ? Number(parsedData.lastModified) : 0;
+                state.dataRevision = Number.isFinite(Number(parsedData.dataRevision)) ? Number(parsedData.dataRevision) : 0;
+                state.insightFilter = null;
+                state.searchText = '';
+                state.selectedCalendarDates = new Set();
+
+                repairLegacyData();
+                
+                const UI = await getUI();
+                UI.applyHeaderState();
+                state.activeCategoryFilters = new Set(Object.keys(CATEGORIES)); 
+                
+                // Sync database data back to UI elements
+                UI.syncStateToDOM();
+
+                try {
+                    const { renderCalendar } = await import('./calendar.js');
+                    renderCalendar();
+                } catch(e) {}
+
+                const loadedHash = computeTripContentHash(buildTripPayload(false));
+                state.cloudTripNames[targetId] = state.tripName;
+                if (state.cloudTripIds) state.cloudTripIds[targetId] = state.tripId;
+                state.cloudTimestamps[targetId] = state.localLastModified;
+                if (state.cloudRevisions) state.cloudRevisions[targetId] = state.dataRevision;
+                if (state.cloudHashes) state.cloudHashes[targetId] = loadedHash;
+
+                setPendingCloudSync(false);
+                setUnsyncedLocalData(false);
+                setLastSyncedHash(loadedHash);
+                saveState(true, true, true); 
+                updateCurrencySelectors({ selectSecondary: true }); 
+                UI.updateUI();  
+                UI.cancelEdit();
+                compareVersions();
+                
+                let slotName = "Autosave";
+                if(targetId === 'manual_trip') slotName = "Manual 1";
+                if(targetId === 'manual_trip_2') slotName = "Manual 2";
+                if(targetId === 'manual_trip_3') slotName = "Manual 3";
+                alert(`✅ Decrypted and loaded from the ${slotName} slot!`);
+                
+                import('./history.js').then(H => {
+                    H.setCurrentHistorySlot(targetId);
+                    H.syncHistoryBaseline();
+                });
+                loadHistoryFromCloud(targetId);
+            } catch(e) { 
+                alert("Error parsing cloud data."); 
+                console.error(e); 
+            }
+        } else { 
+            alert("No trip data found in this slot."); 
+        }
+    } finally {
+        if (btn) btn.disabled = false;
+        compareVersions();
+    }
 }
 
 function historySlotId(id) {
@@ -1061,9 +1319,12 @@ export async function saveFileUniversal(content, fileName, mimeType, fileHandle 
 
     if (window.showSaveFilePicker) {
         try {
+            const baseMime = mimeType.split(';')[0].trim();
+            const extMatch = fileName.match(/\.[a-z0-9]+$/i);
+            const acceptExts = extMatch ? [extMatch[0].toLowerCase()] : ['.json', '.tsplit'];
             const handle = await window.showSaveFilePicker({
                 suggestedName: fileName,
-                types: [{ description: 'Trip File', accept: { [mimeType]: ['.json', '.tsplit'] } }]
+                types: [{ description: baseMime === 'text/html' ? 'HTML Report' : 'Trip File', accept: { [baseMime]: acceptExts } }]
             });
             const writable = await handle.createWritable();
             await writable.write(blob);
@@ -1137,6 +1398,11 @@ export async function importTrip(e) {
         } catch (err) { alert("Invalid file format."); document.getElementById('file-import').value = ""; return; }
 
         if (parsedData) {
+            if (state.cloudSyncTimeout) {
+                clearTimeout(state.cloudSyncTimeout);
+                state.cloudSyncTimeout = null;
+            }
+            state.tripId = parsedData.tripId || "";
             state.tripName = parsedData.tripName || "Imported Trip"; 
             state.tripComment = parsedData.tripComment || ""; 
             state.participants = parsedData.participants || []; 
@@ -1161,7 +1427,9 @@ export async function importTrip(e) {
             state.historyEnabled = parsedData.historyEnabled || false;
             state.insightFilter = null;
             state.searchText = '';
-            state.localLastModified = parsedData.lastModified || Date.now();
+            state.selectedCalendarDates = new Set();
+            state.localLastModified = Number.isFinite(Number(parsedData.lastModified)) ? Number(parsedData.lastModified) : 0;
+            state.dataRevision = Number.isFinite(Number(parsedData.dataRevision)) ? Number(parsedData.dataRevision) : 0;
             
             const UI = await getUI();
             UI.applyHeaderState();
@@ -1170,13 +1438,24 @@ export async function importTrip(e) {
             repairLegacyData();
             
             UI.syncStateToDOM();
+
+            try {
+                const { renderCalendar } = await import('./calendar.js');
+                renderCalendar();
+            } catch(e) {}
             
-            saveState(true); 
+            setLastSyncedHash("");
+            setUnsyncedLocalData(false);
+            saveState(true, true, true); 
             updateCurrencySelectors({ selectSecondary: true }); 
             UI.updateUI(); 
             UI.cancelEdit();
+            compareVersions();
             
-            import('./history.js').then(H => H.clearHistory());
+            import('./history.js').then(H => {
+                H.clearHistory();
+                H.syncHistoryBaseline();
+            });
             if (UI.renderHistoryUI) UI.renderHistoryUI();
         }
         document.getElementById('file-import').value = "";

@@ -1,6 +1,7 @@
 import { state } from './state.js';
 import { CATEGORIES } from './config.js';
 import { formatMoney } from './currency.js';
+import { saveFileUniversal } from './db.js';
 
 // Import UI utilities dynamically to avoid load-time circular dependencies
 let uiModule = null;
@@ -27,7 +28,7 @@ export async function exportHTMLReport() {
                 if (cat !== 'Transfer' && state.currentStats.categoryTotals[cat] > 0) {
                     const total = state.currentStats.categoryTotals[cat]; 
                     const acts = state.currentStats.categoryActivityCounts[cat]; 
-                    const avgPerPerson = total / state.currentStats.categoryParticipations[cat];
+                    const avgPerPerson = total / (state.currentStats.categoryParticipations[cat] || 1);
                     categoryBreakdownRows += `
                     <tr>
                         <td><span class="cat-icon">${CATEGORIES[cat]?.icon || '📝'}</span> ${UI.escapeHTML(cat)}</td>
@@ -46,7 +47,7 @@ export async function exportHTMLReport() {
                 if (stats.owed === 0 && stats.paid === 0) return;
                 const diff = stats.paid - stats.owed;
                 const diffClass = diff > 0.01 ? 'owed' : (diff < -0.01 ? 'owes' : 'settled');
-                const diffText = diff > 0.01 ? `+${formatMoney(diff)}` : (diff < -0.01 ? `-${formatMoney(Math.abs(diff))}` : '$0.00');
+                const diffText = diff > 0.01 ? `+${formatMoney(diff)}` : (diff < -0.01 ? `-${formatMoney(Math.abs(diff))}` : formatMoney(0));
                 
                 const isGroup = stats.members.length > 1 || stats.members[0] !== gName;
                 const gColor = isGroup ? UI.getGroupColor(gName) : UI.getColor(stats.members[0]);
@@ -70,7 +71,7 @@ export async function exportHTMLReport() {
                         const mStats = stats.memberStats[m];
                         const mDiff = mStats.paid - mStats.owed;
                         const mDiffClass = mDiff > 0.01 ? 'owed' : (mDiff < -0.01 ? 'owes' : 'settled');
-                        const mDiffText = mDiff > 0.01 ? `+${formatMoney(mDiff)}` : (mDiff < -0.01 ? `-${formatMoney(Math.abs(mDiff))}` : '$0.00');
+                        const mDiffText = mDiff > 0.01 ? `+${formatMoney(mDiff)}` : (mDiff < -0.01 ? `-${formatMoney(Math.abs(mDiff))}` : formatMoney(0));
                         const mColor = UI.getColor(m);
                         
                         groupStandingRows += `
@@ -103,6 +104,17 @@ export async function exportHTMLReport() {
                 });
             }
         }
+
+        const activeCatCount = state.activeCategoryFilters ? state.activeCategoryFilters.size : Object.keys(CATEGORIES).length;
+        const totalCatCount = Object.keys(CATEGORIES).length;
+        const filterReasons = [];
+        if (state.searchText && state.searchText.trim()) filterReasons.push(`Search: "${state.searchText.trim()}"`);
+        if (state.insightFilter) filterReasons.push(`Insight: ${state.insightFilter.name} (${state.insightFilter.cat})`);
+        if (state.selectedCalendarDates && state.selectedCalendarDates.size > 0) filterReasons.push(`${state.selectedCalendarDates.size} calendar date(s)`);
+        if (activeCatCount < totalCatCount) filterReasons.push(`${activeCatCount}/${totalCatCount} categories`);
+        const filterBannerHtml = filterReasons.length > 0
+            ? `<div style="margin-top: 12px; padding: 10px 14px; background: #fffbeb; border: 1px solid #f59e0b; border-radius: 8px; color: #92400e; font-size: 0.85rem; font-weight: 700;">⚠️ Filtered Report: Totals and settlements below reflect active filters (${UI.escapeHTML(filterReasons.join(' • '))}).</div>`
+            : '';
 
         let reportHtml = `<!DOCTYPE html>
 <html lang="en">
@@ -334,6 +346,7 @@ export async function exportHTMLReport() {
             <h1>${UI.escapeHTML(state.tripName || 'Trip Report')}</h1>
             ${state.tripComment ? `<p>${UI.escapeHTML(state.tripComment)}</p>` : ''}
             <div class="meta-info">Generated on: ${new Date().toLocaleDateString()} • All amounts in ${UI.escapeHTML(document.getElementById('view-currency')?.value || 'USD')}</div>
+            ${filterBannerHtml}
         </header>
 
         ${state.currentStats && state.currentStats.validActiveCount > 0 ? `
@@ -397,7 +410,7 @@ export async function exportHTMLReport() {
                 </div>
                 <div class="stat-card">
                     <span class="stat-label">Average per Activity</span>
-                    <span class="stat-value">${(state.currentStats?.validActiveCount || 0) > 0 ? formatMoney(state.currentStats.totalSpent / state.currentStats.validActiveCount) : '$0.00'}</span>
+                    <span class="stat-value">${(state.currentStats?.validActiveCount || 0) > 0 ? formatMoney(state.currentStats.totalSpent / state.currentStats.validActiveCount) : formatMoney(0)}</span>
                 </div>
             </div>
             
@@ -420,22 +433,8 @@ export async function exportHTMLReport() {
 </body>
 </html>`;
 
-        // Create Blob and trigger native browser file download
-        const blob = new Blob([reportHtml], { type: 'text/html;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
         const safeTripName = (state.tripName || 'Trip').replace(/[/\\?%*:|"<>]/g, '').trim().replace(/\s+/g, '_') || 'Trip';
-        const a = document.createElement('a');
-        a.style.display = 'none';
-        a.href = url;
-        a.download = `${safeTripName}_Report.html`;
-        document.body.appendChild(a);
-        a.click();
-        
-        // Cleanup
-        setTimeout(() => {
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-        }, 150);
+        await saveFileUniversal(reportHtml, `${safeTripName}_Report.html`, 'text/html;charset=utf-8');
 
     } catch (err) {
         console.error(err);

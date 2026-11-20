@@ -173,6 +173,30 @@ export function searchNotes() {
     if (countEl) countEl.innerText = count > 0 ? `${count}` : "0";
 }
 
+function escapeNotesHtml(str) {
+    return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+export function refreshNotesEditorFromState() {
+    const overlay = typeof document !== 'undefined' ? document.getElementById('notes-overlay') : null;
+    if (!overlay || !overlay.classList.contains('active') || !state.quill) return;
+    if (state.tripNotesDelta && Object.keys(state.tripNotesDelta).length > 0) {
+        state.quill.setContents(state.tripNotesDelta);
+    } else {
+        const targetHTML = sanitizeHTML(state.tripNotes || "");
+        state.quill.setText('');
+        if (targetHTML) {
+            state.quill.clipboard.dangerouslyPasteHTML(targetHTML);
+        }
+    }
+    state.isNotesDirty = false;
+}
+
 export function showNotesToC() {
     const popup = document.getElementById('notes-toc-popup');
     const searchInput = document.getElementById('notes-search');
@@ -190,9 +214,10 @@ export function showNotesToC() {
     } else {
         let html = '';
         headers.forEach((h2, index) => {
-            if (!h2.id) h2.id = 'note-header-' + index;
+            h2.id = 'note-header-' + index;
             const text = h2.innerText || 'Header';
-            html += `<div class="toc-item" onclick="jumpToNoteHeader('${h2.id}')" title="${text}">${text}</div>`;
+            const safeText = escapeNotesHtml(text);
+            html += `<div class="toc-item" onclick="jumpToNoteHeader('${h2.id}')" title="${safeText}">${safeText}</div>`;
         });
         popup.innerHTML = html;
     }
@@ -293,6 +318,7 @@ export function initNotesEditor() {
             state.isNotesDirty = true;
             clearTimeout(state.notesDebounceTimer);
             state.notesDebounceTimer = setTimeout(() => {
+                clearSearchHighlights();
                 const currentClean = sanitizeHTML(state.quill.root.innerHTML);
                 const savedClean = sanitizeHTML(state.tripNotes);
                 if (currentClean !== savedClean || !state.tripNotesDelta) {

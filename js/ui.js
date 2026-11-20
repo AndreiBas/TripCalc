@@ -1,6 +1,6 @@
-import { state, saveState, loadState } from './state.js';
+import { state, saveState, loadState, getLocalDateString, generateTripId, setPendingCloudSync, setUnsyncedLocalData, setLastSyncedHash } from './state.js';
 import { CATEGORIES, COLORS, TAG_COLORS, CURRENCY_SYMBOLS } from './config.js';
-import { formatMoney, getPerDayText, getPerDayTextSmall, fetchExchangeRate, fetchRateOnly, updateCurrencySelectors, getCachedRate, ensureCurrencyOption } from './currency.js';
+import { formatMoney, getPerDayText, getPerDayTextSmall, fetchExchangeRate, fetchRateOnly, updateCurrencySelectors, getCachedRate, ensureCurrencyOption, recordRecentCurrency, resolveCurrencyCode } from './currency.js';
 
 // --- HELPERS ---
 export function escapeHTML(str) {
@@ -119,6 +119,8 @@ export function showToast(message, type = 'success') {
     if (type === 'create') icon = '✨';
     else if (type === 'undo') icon = '🔄';
     else if (type === 'delete') icon = '🗑️';
+    else if (type === 'save') icon = '☁️';
+    else if (type === 'warning') icon = '⚠️';
     toast.innerText = `${icon} ${message}`;
 
     container.appendChild(toast);
@@ -147,7 +149,7 @@ export function showToast(message, type = 'success') {
 
 // --- FILTER MATCHING ---
 export function doesExpenseMatchFilters(e, groupsMap, overrideSearchText) {
-    const cat = e.category || 'Other';
+    const cat = CATEGORIES[e.category] ? e.category : 'Other';
     
     // Calendar Date Filter
     if (state.selectedCalendarDates && state.selectedCalendarDates.size > 0) {
@@ -231,6 +233,7 @@ export function renameParticipant(oldName) {
     }
 
     const idx = state.participants.indexOf(oldName);
+    if (idx === -1) return;
     state.participants[idx] = newName;
     state.participantGroups[newName] = state.participantGroups[oldName] === oldName ? newName : state.participantGroups[oldName];
     delete state.participantGroups[oldName];
@@ -309,33 +312,38 @@ export function saveGroupTemplate() {
 export function loadGroupTemplate() {
     const saved = localStorage.getItem('tripSplitter_GroupTemplate');
     if (saved) {
-        const data = JSON.parse(saved);
-        const savedParticipants = Array.isArray(data) ? data : data.participants;
-        const savedGroups = Array.isArray(data) ? {} : (data.participantGroups || {});
-        
-        let addedPeople = 0;
-        savedParticipants.forEach(p => { 
-            if (!state.participants.includes(p)) { 
-                state.participants.push(p); 
-                state.participantGroups[p] = savedGroups[p] || p; 
-                addedPeople++; 
-            } 
-        });
-        
-        let addedTags = 0;
-        if (data && data.defaultTags && Array.isArray(data.defaultTags)) {
-            if (!state.defaultTags) state.defaultTags = [];
-            data.defaultTags.forEach(t => {
-                if (!state.defaultTags.includes(t)) {
-                    state.defaultTags.push(t);
-                    addedTags++;
-                }
+        try {
+            const data = JSON.parse(saved);
+            const savedParticipants = Array.isArray(data) ? data : (data?.participants || []);
+            const savedGroups = Array.isArray(data) ? {} : (data?.participantGroups || {});
+            
+            let addedPeople = 0;
+            savedParticipants.forEach(p => { 
+                if (!state.participants.includes(p)) { 
+                    state.participants.push(p); 
+                    state.participantGroups[p] = savedGroups[p] || p; 
+                    addedPeople++; 
+                } 
             });
+            
+            let addedTags = 0;
+            if (data && data.defaultTags && Array.isArray(data.defaultTags)) {
+                if (!state.defaultTags) state.defaultTags = [];
+                data.defaultTags.forEach(t => {
+                    if (!state.defaultTags.includes(t)) {
+                        state.defaultTags.push(t);
+                        addedTags++;
+                    }
+                });
+            }
+            
+            saveState(); 
+            updateUI(); 
+            alert(`Loaded ${addedPeople} participants and ${addedTags} default tags from your saved setup.`);
+        } catch (err) {
+            console.error("Failed to parse saved setup template:", err);
+            alert("Saved setup data was corrupted and could not be loaded.");
         }
-        
-        saveState(); 
-        updateUI(); 
-        alert(`Loaded ${addedPeople} participants and ${addedTags} default tags from your saved setup.`);
     } else { 
         alert("No saved setup found."); 
     }
@@ -344,6 +352,11 @@ export function loadGroupTemplate() {
 // --- STATE ACTIONS ---
 export async function resetTrip() {
     if(confirm("Start a new trip? This wipes your current progress! Make sure you saved your file first.")) {
+        if (state.cloudSyncTimeout) {
+            clearTimeout(state.cloudSyncTimeout);
+            state.cloudSyncTimeout = null;
+        }
+        state.tripId = generateTripId();
         state.tripName = "My Trip"; 
         state.tripComment = ""; 
         state.participants = []; 
@@ -360,10 +373,14 @@ export async function resetTrip() {
         state.autoColorNotes = false;
         state.isHeaderCollapsed = false; 
         state.defaultTags = ['car', 'gas', 'flight', 'stay', 'grocery', 'restaurant'];
-        state.localLastModified = Date.now();
+        state.localLastModified = 0;
+        state.dataRevision = 0;
         state.selectedCalendarDates = new Set();
         state.insightFilter = null;
         state.searchText = '';
+        setPendingCloudSync(false);
+        setUnsyncedLocalData(false);
+        setLastSyncedHash("");
         
         const searchFilterInput = document.getElementById('search-filter');
         if (searchFilterInput) {
@@ -401,7 +418,12 @@ export async function resetTrip() {
         state.activeCategoryFilters = new Set(Object.keys(CATEGORIES)); 
         cancelEdit(); 
         localStorage.removeItem('tripSplitterLatest');
-        updateCurrencySelectors(); 
+        import('./history.js').then(H => {
+            H.clearHistory();
+            H.syncHistoryBaseline();
+            renderHistoryUI();
+        });
+        updateCurrencySelectors({ selectSecondary: true }); 
         updateUI();
         document.getElementById('next-payer-container').innerHTML = ''; 
         document.getElementById('cloud-status').innerText = '';
@@ -425,7 +447,7 @@ export function updateTripComment() {
 export function toggleHeader() {
     state.isHeaderCollapsed = !state.isHeaderCollapsed;
     applyHeaderState();
-    saveState(true); 
+    saveState(true, true, true); 
 }
 
 export function applyHeaderState() {
@@ -460,18 +482,32 @@ export function togglePerDay() {
         if (state.showPerDay && !state.tripDays) state.tripDays = 1;
         daysInput.value = state.tripDays;
     }
-    saveState(); 
+    saveState(true, true, true); 
     updateUI();
 }
 
-export function updateTripDays() {
-    let val = parseInt(document.getElementById('trip-days-input').value);
-    if (!isNaN(val) && val > 0) { 
-        state.tripDays = val; 
-        saveState(); 
-        updateUI(); 
-    } else {
-        document.getElementById('trip-days-input').value = state.tripDays;
+export function updateTripDays(commit = false) {
+    const input = document.getElementById('trip-days-input');
+    if (!input) return;
+    const raw = input.value.trim();
+    if (raw === '') {
+        if (commit) {
+            input.value = state.tripDays || 1;
+        }
+        return;
+    }
+    const val = parseInt(raw, 10);
+    if (!isNaN(val) && val > 0) {
+        if (val !== state.tripDays) {
+            state.tripDays = val;
+            saveState();
+            updateUI();
+        }
+        if (commit) {
+            input.value = String(val);
+        }
+    } else if (commit) {
+        input.value = state.tripDays || 1;
     }
 }
 
@@ -735,9 +771,26 @@ export function calculateRemainingPercentage() {
     }
 }
 
-export function handleFormCurrencyChange() {
+export async function handleFormCurrencyChange() {
     updateFormCurrencyUI({ preserveRate: false });
     updateSplitTypeUI({ preserveValues: true });
+
+    const localCurrency = (document.getElementById('exp-currency')?.value || '').trim().toUpperCase();
+    const rateInput = document.getElementById('exp-exchange-rate');
+    if (localCurrency && localCurrency !== 'USD' && rateInput && !rateInput.value && !state.isOfflineMode) {
+        const rate = await fetchRateOnly(localCurrency, false);
+        if (isFinite(rate) && rate > 0) {
+            const currentCur = (document.getElementById('exp-currency')?.value || '').trim().toUpperCase();
+            if (currentCur === localCurrency && !rateInput.value) {
+                rateInput.value = formatRateInput(rate);
+                rateInput.dataset.currency = localCurrency;
+                rateInput.placeholder = '';
+                rateInput.style.borderColor = '';
+                if (!state.currencyRates) state.currencyRates = {};
+                state.currencyRates[localCurrency] = rate;
+            }
+        }
+    }
 }
 
 export function updateFormCurrencyUI(options = {}) {
@@ -1131,7 +1184,7 @@ export function filterByInsight(name, cat) {
 
 export function handleSortChange() { 
     state.currentSort = document.getElementById('ledger-sort').value; 
-    saveState(); 
+    saveState(true, true, true); 
     updateUI(); 
 }
 
@@ -1197,12 +1250,14 @@ export function saveExpense() {
     const desc = document.getElementById('exp-desc').value.trim();
     
     const rawTags = document.getElementById('exp-tags').value;
-    const tags = (rawTags.match(/[#＃]([\p{L}\p{N}_-]+)/gu) || []).map(t => t.replace(/^[#＃]/, '').toLowerCase()).sort((a, b) => a.localeCompare(b));
+    const tags = [...new Set((rawTags.match(/[#＃]([\p{L}\p{N}_-]+)/gu) || []).map(t => t.replace(/^[#＃]/, '').toLowerCase()))].sort((a, b) => a.localeCompare(b));
     
     const notes = document.getElementById('exp-notes').value.trim();
     const date = document.getElementById('exp-date').value;
     const localAmount = parseFloat(document.getElementById('exp-amount').value);
-    const localCurrency = document.getElementById('exp-currency').value;
+    const rawCurrencyInput = document.getElementById('exp-currency').value;
+    const resolvedCur = resolveCurrencyCode(rawCurrencyInput);
+    const localCurrency = resolvedCur || rawCurrencyInput.trim().toUpperCase();
     const payer = document.getElementById('exp-payer').value;
     const splitType = document.getElementById('exp-split-type').value;
     
@@ -1269,9 +1324,14 @@ export function saveExpense() {
         return;
     }
 
-    if (!localCurrency || localCurrency === 'FX') {
-        alert("Please select a valid currency (e.g., USD or your trip currency) before saving.");
+    if (!localCurrency || localCurrency === 'FX' || (localCurrency !== 'USD' && !/^[A-Z0-9]{3}$/.test(localCurrency))) {
+        alert("Please select a valid currency (e.g., USD or a 3-letter currency code like EUR) before saving.");
         return;
+    }
+    const expCurInput = document.getElementById('exp-currency');
+    if (expCurInput) {
+        expCurInput.value = localCurrency;
+        if (expCurInput.dataset) expCurInput.dataset.committedCurrency = localCurrency;
     }
 
     let rateToUse = 1;
@@ -1290,6 +1350,7 @@ export function saveExpense() {
         }
         if (!state.currencyRates) state.currencyRates = {};
         state.currencyRates[localCurrency] = rateToUse;
+        recordRecentCurrency(localCurrency);
         if (localCurrency === state.secondaryCurrency && (!isFinite(state.currentExchangeRate) || state.currentExchangeRate <= 0)) {
             state.currentExchangeRate = rateToUse;
         }
@@ -1368,12 +1429,13 @@ export function editExpense(id) {
     document.getElementById('exp-desc').value = exp.desc;
     document.getElementById('exp-tags').value = exp.tags ? exp.tags.map(t => '#' + t).join(' ') + ' ' : '';
     document.getElementById('exp-notes').value = exp.notes || '';
-    document.getElementById('exp-date').value = exp.date || new Date().toISOString().split('T')[0];
+    document.getElementById('exp-date').value = exp.date || getLocalDateString();
     
     const targetCur = exp.localCurrency || 'USD';
     const expCurEl = document.getElementById('exp-currency');
     ensureCurrencyOption(expCurEl, targetCur);
     expCurEl.value = targetCur;
+    if (expCurEl && expCurEl.dataset) expCurEl.dataset.committedCurrency = targetCur;
     const rateInput = document.getElementById('exp-exchange-rate');
     if (targetCur !== 'USD') {
         const expRate = (isFinite(exp.exchangeRate) && exp.exchangeRate > 0) ? exp.exchangeRate : getCachedRate(targetCur);
@@ -1552,7 +1614,7 @@ export function cancelEdit() {
     document.getElementById('exp-category').value = 'Other';
     document.getElementById('exp-desc').value = '';
     
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalDateString();
     document.getElementById('exp-date').value = today;
     document.getElementById('exp-tags').value = '';
     document.getElementById('exp-notes').value = '';
@@ -1702,8 +1764,10 @@ export function syncStateToDOM() {
     
     const dateInput = document.getElementById('exp-date');
     if (dateInput && !dateInput.value) {
-        dateInput.value = new Date().toISOString().split('T')[0];
+        dateInput.value = getLocalDateString();
     }
+
+    import('./notes.js').then(N => N.refreshNotesEditorFromState?.()).catch(() => {});
 }
 
 export function updateUI() {
@@ -1823,12 +1887,12 @@ export function updateUI() {
         
         validActiveCount++;
         const payerGroup = state.participantGroups[e.payer] || e.payer;
-        const cat = e.category || 'Other';
+        const cat = CATEGORIES[e.category] ? e.category : 'Other';
         
         if (cat !== 'Transfer') {
             totalSpent += e.amount;
             if (e.amount > biggestSplurge.amount) {
-                biggestSplurge = { desc: e.desc, amount: e.amount, category: e.category };
+                biggestSplurge = { desc: e.desc, amount: e.amount, category: cat };
             }
             dateTotals[e.date] = (dateTotals[e.date] || 0) + e.amount;
             (e.involved || []).forEach(p => activeInvolvedParticipants.add(p));
@@ -1848,6 +1912,9 @@ export function updateUI() {
                 groupStats[payerGroup].memberStats[e.payer].catPaid[c] = 0;
             });
         } else if (!groupStats[payerGroup].memberStats[e.payer]) {
+            if (!groupStats[payerGroup].members.includes(e.payer)) {
+                groupStats[payerGroup].members.push(e.payer);
+            }
             groupStats[payerGroup].memberStats[e.payer] = { paid: 0, frontedPaid: 0, owed: 0, catShares: {}, catPaid: {} };
             Object.keys(CATEGORIES).forEach(c => { 
                 groupStats[payerGroup].memberStats[e.payer].catShares[c] = 0; 
@@ -1889,6 +1956,9 @@ export function updateUI() {
                         groupStats[involvedGroup].memberStats[p].catPaid[c] = 0;
                     });
                 } else if (!groupStats[involvedGroup].memberStats[p]) {
+                    if (!groupStats[involvedGroup].members.includes(p)) {
+                        groupStats[involvedGroup].members.push(p);
+                    }
                     groupStats[involvedGroup].memberStats[p] = { paid: 0, frontedPaid: 0, owed: 0, catShares: {}, catPaid: {} };
                     Object.keys(CATEGORIES).forEach(c => { 
                         groupStats[involvedGroup].memberStats[p].catShares[c] = 0; 
@@ -1950,6 +2020,9 @@ export function updateUI() {
                         groupStats[involvedGroup].memberStats[p].catPaid[c] = 0;
                     });
                 } else if (!groupStats[involvedGroup].memberStats[p]) {
+                    if (!groupStats[involvedGroup].members.includes(p)) {
+                        groupStats[involvedGroup].members.push(p);
+                    }
                     groupStats[involvedGroup].memberStats[p] = { paid: 0, frontedPaid: 0, owed: 0, catShares: {}, catPaid: {} };
                     Object.keys(CATEGORIES).forEach(c => { 
                         groupStats[involvedGroup].memberStats[p].catShares[c] = 0; 
@@ -2013,19 +2086,18 @@ export function updateUI() {
     const eList = document.getElementById('expense-list');
     let sorted = [...state.expenses];
     if (state.currentSort === 'date-desc') { 
-        sorted.sort((a,b) => new Date(b.date) - new Date(a.date) || b.timestamp - a.timestamp); 
+        sorted.sort((a,b) => (b.date || '').localeCompare(a.date || '') || (b.timestamp || 0) - (a.timestamp || 0)); 
     } else if (state.currentSort === 'date-asc') { 
-        sorted.sort((a,b) => new Date(a.date) - new Date(b.date) || a.timestamp - b.timestamp); 
+        sorted.sort((a,b) => (a.date || '').localeCompare(b.date || '') || (a.timestamp || 0) - (b.timestamp || 0)); 
     } else if (state.currentSort === 'amt-desc') { 
-        sorted.sort((a,b) => b.amount - a.amount || b.timestamp - a.timestamp); 
+        sorted.sort((a,b) => b.amount - a.amount || (b.timestamp || 0) - (a.timestamp || 0)); 
     } else if (state.currentSort === 'amt-asc') { 
-        sorted.sort((a,b) => a.amount - b.amount || a.timestamp - b.timestamp); 
+        sorted.sort((a,b) => a.amount - b.amount || (a.timestamp || 0) - (b.timestamp || 0)); 
     } else if (state.currentSort === 'payer-asc') { 
-        sorted.sort((a,b) => (a.payer || '').localeCompare(b.payer || '') || new Date(b.date) - new Date(a.date) || b.timestamp - a.timestamp); 
+        sorted.sort((a,b) => (a.payer || '').localeCompare(b.payer || '') || (b.date || '').localeCompare(a.date || '') || (b.timestamp || 0) - (a.timestamp || 0)); 
     }
 
     const filteredExpenses = sorted.filter(e => doesExpenseMatchFilters(e, groupsMap));
-    state.filteredExpenses = filteredExpenses;
     
     const searchInput = document.getElementById('search-filter');
     const clearBtn = document.getElementById('clear-search-btn');
@@ -2084,6 +2156,7 @@ export function updateUI() {
     }
 
     if (eList) {
+        const currentViewCur = document.getElementById('view-currency')?.value || 'USD';
         eList.innerHTML = filteredExpenses.length ? filteredExpenses.map(e => {
             const payerColor = getColor(e.payer); 
             const catInfo = CATEGORIES[e.category] || CATEGORIES['Other'];
@@ -2093,6 +2166,7 @@ export function updateUI() {
             const localAmtNum = (e.localAmount !== undefined && e.localAmount !== null && !isNaN(Number(e.localAmount))) ? Number(e.localAmount) : Number(e.amount || 0);
             const amtNum = Number(e.amount || 0);
             const hasCurrencyMismatch = (e.localCurrency === 'FX') || (e.localCurrency === 'USD' && Math.abs(localAmtNum - amtNum) > 0.05);
+            const breakdownRate = (currentViewCur !== 'USD' && currentViewCur === e.localCurrency && isFinite(e.exchangeRate) && e.exchangeRate > 0) ? e.exchangeRate : null;
             let displayMainAmount = `${localSym}${localAmtNum.toFixed(2)}`;
             let displaySubAmount = '';
             
@@ -2111,7 +2185,7 @@ export function updateUI() {
                 breakdownHtml = e.involved.map(p => {
                     const pPerc = (e.percentageShares && e.percentageShares[p] !== undefined) ? e.percentageShares[p] : defaultPerc;
                     const finalShare = e.amount * (pPerc / 100);
-                    return `<span style="white-space: nowrap;" title="${escapeHTML(p)}"><span style="color: ${getColor(p)}; font-weight: 700;">${escapeHTML(shortName(p))}</span> <span class="tabular-nums" style="font-size: 0.85rem; color: var(--secondary);">(${formatMoney(finalShare)} / ${pPerc.toFixed(1)}%)</span></span>`;
+                    return `<span style="white-space: nowrap;" title="${escapeHTML(p)}"><span style="color: ${getColor(p)}; font-weight: 700;">${escapeHTML(shortName(p))}</span> <span class="tabular-nums" style="font-size: 0.85rem; color: var(--secondary);">(${formatMoney(finalShare, currentViewCur, breakdownRate)} / ${pPerc.toFixed(1)}%)</span></span>`;
                 }).join(', ');
             } else {
                 let totalPersonalForExp = 0;
@@ -2131,16 +2205,22 @@ export function updateUI() {
 
                 const sharedAmount = Math.max(0, e.amount - totalFixedForExp - totalPersonalForExp); 
                 const baseShare = unfixedCount > 0 ? sharedAmount / unfixedCount : 0;
+                const fixedRoundingDiff = (unfixedCount === 0 && e.involved.length > 0)
+                    ? (e.amount - totalFixedForExp - totalPersonalForExp)
+                    : 0;
                 
-                breakdownHtml = e.involved.map(p => {
+                breakdownHtml = e.involved.map((p, idx) => {
                     if (e.fixedShares && e.fixedShares[p] !== undefined) {
-                        const fixedShare = e.fixedShares[p];
-                        return `<span style="white-space: nowrap;" title="${escapeHTML(p)}"><span style="color: ${getColor(p)}; font-weight: 700;">${escapeHTML(shortName(p))}</span> <span class="tabular-nums" style="font-size: 0.85rem; color: var(--secondary);">(${formatMoney(fixedShare)} <span style="color:#d97706;">exact</span>)</span></span>`;
+                        let fixedShare = e.fixedShares[p];
+                        if (idx === 0 && Math.abs(fixedRoundingDiff) > 0 && Math.abs(fixedRoundingDiff) <= 0.05) {
+                            fixedShare = Math.max(0, fixedShare + fixedRoundingDiff);
+                        }
+                        return `<span style="white-space: nowrap;" title="${escapeHTML(p)}"><span style="color: ${getColor(p)}; font-weight: 700;">${escapeHTML(shortName(p))}</span> <span class="tabular-nums" style="font-size: 0.85rem; color: var(--secondary);">(${formatMoney(fixedShare, currentViewCur, breakdownRate)} <span style="color:#d97706;">exact</span>)</span></span>`;
                     } else {
                         const personal = (e.personalExpenses && e.personalExpenses[p]) ? e.personalExpenses[p] : 0;
                         const finalShare = baseShare + personal;
-                        let personalNote = personal > 0 ? ` <span style="font-size:0.75rem; color: var(--primary);">(+ ${formatMoney(personal)} extra)</span>` : '';
-                        return `<span style="white-space: nowrap;" title="${escapeHTML(p)}"><span style="color: ${getColor(p)}; font-weight: 700;">${escapeHTML(shortName(p))}</span> <span class="tabular-nums" style="font-size: 0.85rem; color: var(--secondary);">(${formatMoney(finalShare)}${personalNote})</span></span>`;
+                        let personalNote = personal > 0 ? ` <span style="font-size:0.75rem; color: var(--primary);">(+ ${formatMoney(personal, currentViewCur, breakdownRate)} extra)</span>` : '';
+                        return `<span style="white-space: nowrap;" title="${escapeHTML(p)}"><span style="color: ${getColor(p)}; font-weight: 700;">${escapeHTML(shortName(p))}</span> <span class="tabular-nums" style="font-size: 0.85rem; color: var(--secondary);">(${formatMoney(finalShare, currentViewCur, breakdownRate)}${personalNote})</span></span>`;
                     }
                 }).join(', ');
             }
@@ -2353,7 +2433,7 @@ export function updateUI() {
                     individualBreakdownHtml += `<details class="indiv-details"><summary>Individual Breakdown</summary><div class="indiv-content">`;
                     stats.members.forEach(m => {
                         const mStats = stats.memberStats[m];
-                        if (mStats.paid > 0 || mStats.owed > 0) {
+                        if (mStats.paid !== 0 || mStats.owed !== 0) {
                             let mCatHtml = '';
                             Object.keys(CATEGORIES).forEach(cat => {
                                 const amt = mStats.catShares[cat];
@@ -2536,7 +2616,7 @@ export function settleUpDebt(fromGroupName, toGroupName, amountInUsd) {
     const localCurrency = useSecondary ? viewCur : 'USD';
     const exchangeRate = useSecondary ? state.currentExchangeRate : 1;
     const localAmount = useSecondary ? Number((numAmt * exchangeRate).toFixed(2)) : Number(numAmt.toFixed(2));
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getLocalDateString();
 
     const newTransfer = {
         id: Date.now().toString(36) + Math.random().toString(36).substr(2),
@@ -2775,6 +2855,16 @@ export function closeBulkEditTagsModal() {
 
 export function applyBulkEditTags() {
     if (!state.bulkEditActivities || state.bulkEditActivities.length === 0) return;
+
+    const pendingInput = document.getElementById('bulk-new-tag');
+    if (pendingInput && pendingInput.value.trim() !== '') {
+        addTagToBulkList();
+    }
+
+    if (state.bulkRemovedTags.size === 0 && state.bulkAddedTags.length === 0) {
+        closeBulkEditTagsModal();
+        return;
+    }
     
     state.bulkEditActivities.forEach(e => {
         let currentTags = [...(e.tags || [])];
@@ -2846,8 +2936,10 @@ export function toggleHistoryEnabled() {
     state.historyEnabled = document.getElementById('history-enabled-toggle').checked;
     if (!state.historyEnabled) {
         import('./history.js').then(H => H.clearHistory());
+    } else {
+        import('./history.js').then(H => H.syncHistoryBaseline());
     }
-    saveState();
+    saveState(true, true, true);
     renderHistoryUI();
 }
 

@@ -7,12 +7,14 @@
     --primary: hsl(var(--primary-h), var(--primary-s), var(--primary-l));
     --primary-hover: hsl(var(--primary-h), var(--primary-s), calc(var(--primary-l) - 8%));
     --primary-light: hsla(var(--primary-h), var(--primary-s), var(--primary-l), 0.08);
+    --primary-glow: hsla(var(--primary-h), var(--primary-s), var(--primary-l), 0.18);
     
     --secondary: #64748b;
     --secondary-hover: #475569;
     
     --danger: #f43f5e;
     --danger-hover: #e11d48;
+    --warning: #d97706;
     
     --green: #10b981;
     --red: #f43f5e;
@@ -20,9 +22,11 @@
     --bg: #f8fafc;
     --card-bg: rgba(255, 255, 255, 0.7);
     --text: #0f172a;
+    --text-color: var(--text);
     --border: rgba(203, 213, 225, 0.6);
     
     --radius: 12px;
+    --radius-md: 10px;
     --radius-sm: 8px;
     
     /* Premium Soft Shadows */
@@ -492,13 +496,13 @@ input:focus, select:focus {
     align-items: stretch; 
     width: 100%; 
 }
-.amount-currency-group input { 
+.amount-currency-group input:first-child { 
     border-radius: var(--radius-sm) 0 0 var(--radius-sm); 
     border-right: 1px solid var(--border); 
     flex: 1; 
     min-width: 0;
 }
-.amount-currency-group select { 
+.amount-currency-group select, .amount-currency-group .exp-currency-input { 
     border-radius: 0 var(--radius-sm) var(--radius-sm) 0; 
     border-left: none; 
     background: #f1f5f9; 
@@ -1308,6 +1312,23 @@ details.indiv-details[open] summary::after {
     background: #fef3c7;
 }
 
+.currency-picker-item.base-usd {
+    background: #eff6ff;
+}
+
+.currency-picker-item.base-usd:hover {
+    background: #dbeafe;
+}
+
+.amount-currency-group .exp-currency-input {
+    width: 66px;
+    text-align: center;
+    color: var(--primary);
+    padding: 0 6px;
+    cursor: pointer;
+    height: auto;
+}
+
 .currency-picker-flag {
     font-size: 1.1rem;
 }
@@ -1356,6 +1377,33 @@ details.indiv-details[open] summary::after {
     background: #dcfce7;
     border-color: #4ade80;
     color: #047857;
+}
+
+#cloud-update-banner {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 6px 12px;
+    background: #fffbeb;
+    border: 1px solid #f59e0b;
+    border-radius: var(--radius-sm);
+    color: #92400e;
+    font-size: 0.82rem;
+    font-weight: 700;
+    box-shadow: var(--shadow-sm);
+}
+
+#cloud-update-banner button {
+    flex: none;
+    background: #f59e0b;
+    color: #ffffff;
+    padding: 4px 10px;
+    font-size: 0.78rem;
+}
+
+#cloud-update-banner button:hover {
+    background: #d97706;
 }
 
 

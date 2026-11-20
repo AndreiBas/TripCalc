@@ -1,12 +1,22 @@
 import { state, loadState } from './state.js';
 import { initNotesEditor } from './notes.js';
 import { initCalculatorFocusTracker, initCalculatorDraggable } from './calculator.js';
-import { initCalendarFocusTracker, initCalendarDraggable } from './calendar.js';
-import { applyHeaderState, updateUI, updateFormColor, syncStateToDOM } from './ui.js';
+import { initCalendarDraggable } from './calendar.js';
+import { applyHeaderState, updateUI, updateFormColor, syncStateToDOM, showToast } from './ui.js';
 import { updateCurrencySelectors, warmCurrencyRatesCache } from './currency.js';
 import { fetchCloudTripNames, updateSyncBtnState } from './db.js';
 import './export.js';
 import { loadHistoryLocal, restoreHistoryState } from './history.js';
+
+// --- WAKE-UP EVENT LISTENERS ---
+let isFetchingCloudNames = false;
+const debouncedFetch = () => {
+    if (isFetchingCloudNames) return;
+    isFetchingCloudNames = true;
+    fetchCloudTripNames().finally(() => {
+        setTimeout(() => isFetchingCloudNames = false, 500);
+    });
+};
 
 // Boot Sequence
 function bootApp() {
@@ -20,9 +30,8 @@ function bootApp() {
     initNotesEditor();
     initCalculatorFocusTracker();
     initCalculatorDraggable();
-    initCalendarFocusTracker();
     initCalendarDraggable();
-    fetchCloudTripNames();
+    debouncedFetch();
     updateSyncBtnState();
     warmCurrencyRatesCache(false);
 }
@@ -33,16 +42,6 @@ if (document.readyState === 'loading') {
 } else {
     bootApp();
 }
-
-// --- WAKE-UP EVENT LISTENERS ---
-let isFetchingCloudNames = false;
-const debouncedFetch = () => {
-    if (isFetchingCloudNames) return;
-    isFetchingCloudNames = true;
-    fetchCloudTripNames().finally(() => {
-        setTimeout(() => isFetchingCloudNames = false, 500);
-    });
-};
 
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') debouncedFetch();
@@ -67,6 +66,12 @@ window.addEventListener('beforeunload', function (e) {
 // PWA Service Worker Registration
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
+        const hadController = Boolean(navigator.serviceWorker.controller);
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (hadController) {
+                showToast('✨ New TripCalc version ready — reload to update.', 'save');
+            }
+        });
         navigator.serviceWorker.register('./sw.js')
             .then(registration => {
                 console.log('ServiceWorker registration successful with scope: ', registration.scope);

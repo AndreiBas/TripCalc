@@ -38,7 +38,7 @@ Splits the total bill evenly among all checked participants.
 ### 2. Percentage Split
 Splits the total bill based on specific percentage weights.
 * Use this for shared rooms, unequal car rentals, or family size weightings.
-* Enter a percentage for each checked participant. The system requires the total sum of percentages to equal exactly **100%** before saving.
+* Enter a percentage for specific checked participants. Any remaining percentage is divided equally among checked participants without a manual entry (or percentages must total **100%** if every checked participant has a manual percentage).
 
 ### 3. Search Tags
 * Add hashtags (e.g. `#dinner #taxi`) inside the tag field when logging an activity. You can filter the ledger list by searching these tags, or type `-#tag` to exclude activities containing that tag. Autocomplete suggestions dynamically list tags present in shown activities.
@@ -65,14 +65,13 @@ If you frequently travel with the same group of friends or family members:
 ## 📜 Activity Ledger & Smart Filters
 Navigate, sorting, and isolating your transactions:
 * **Collapsible Ledger**: Click the arrow triangle `▼` to collapse/expand the ledger list.
-* **Sorting**: Sort activities by Date, Amount, Description, or Category in ascending or descending order.
+* **Sorting**: Sort activities by Date, Amount, or Payer in ascending or descending order.
 * **Ignore / Include All**: Tap the dynamic **🚫 All** or **✅ All** button next to the ledger header to toggle all expenses on/off instantly from calculations.
 * **Search & Exclude Tags**: Type `#tag` to filter by that tag, or type `-#tag` to exclude activities containing that tag. Autocomplete suggestions dynamically list tags present in shown activities.
 * **Bulk Edit Tags**: Click the 🏷️ **Multiple Edit** button on any activity card to open a bulk tag editor modal. You can add or remove tags globally across all currently filtered, active activities at once.
 * **Click-to-Filter Insights**:
-  * Click on a **Category Icon** (e.g. 🍔 Food) in the Category Breakdown table to instantly filter the ledger to show only food items.
-  - Click on a **Name** in the Standings table to show only activities paid by or involving that person.
-  - Click the **"All"** category filter item or refresh the page to clear filters.
+  * Click on a **Category Row** inside any Group/Personal Insight card to filter the ledger to that person or group and category.
+  * Click the category filter pills above the ledger to isolate specific categories, or click **×** to clear active filters.
 
 ---
 
@@ -95,12 +94,12 @@ If you travel internationally, you can track expenses in local currencies:
 ---
 
 ## ☁️ Supabase Cloud Sync, Offline Mode & Security
-TripCalc features high-level **client-side encryption** (AES-256-GCM with 400k PBKDF2 iterations) to synchronize your data securely to the cloud:
+TripCalc features high-level **client-side encryption** (AES-256-GCM with 100k PBKDF2 iterations) to synchronize your data securely to the cloud:
 1. Click **Sync** in the header.
 2. Enter your Supabase Access Code, Device Key, and optional **Session PIN**.
 3. **Security Model:** Your trip data is encrypted *locally inside your browser* before upload. The Supabase database stores only ciphertext.
 4. **📶 Online / 📴 Offline Switch:** Toggle Offline Mode in the header toolbar (or Cloud Settings) when on choppy connections. All edits save locally and automatically sync to the **Auto-Sync** cloud slot when you switch back to Online mode.
-5. **Slots & Trip History:** Use **S** (Save) and **L** (Load) on Manual Slots 1–3, **Load Last** on **Auto-Sync**, and optionally enable **Trip History** to keep up to 3 restore points per slot.
+5. **Slots, Update Banner & Trip History:** Use **S** (Save) and **L** (Load) on Manual Slots 1–3, **Load Last** on **Auto-Sync**, and optionally enable **Trip History** to keep up to 3 restore points per slot. When another device saves newer edits, an update banner appears at the top of the app so you can load the latest version in one tap.
 
 ---
 

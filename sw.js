@@ -1,5 +1,5 @@
 // Bump this version number every time you update your HTML/CSS/JS!
-const CACHE_NAME = 'trip-calc-cache-v55'; 
+const CACHE_NAME = 'trip-calc-cache-v56'; 
 const REPO_NAME = new URL(self.registration.scope).pathname.replace(/\/$/, '') || '';
 
 // ONLY put guaranteed local files here. Do NOT put external CDNs here.
@@ -28,7 +28,14 @@ self.addEventListener('install', event => {
   self.skipWaiting(); // Force the waiting service worker to become the active service worker.
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache => {
-      return cache.addAll(localUrlsToCache);
+      return Promise.all(
+        localUrlsToCache.map(url =>
+          fetch(url, { cache: 'reload' }).then(res => {
+            if (!res || !res.ok) throw new Error(`Failed to precache ${url}`);
+            return cache.put(url, res);
+          })
+        )
+      );
     })
   );
 });
@@ -49,36 +56,62 @@ self.addEventListener('activate', event => {
   self.clients.claim(); // Take control of all pages immediately.
 });
 
-// 3. Stale-While-Revalidate Fetch Strategy
+// 3. Network-First (with fast timeout) for local app files; Stale-While-Revalidate for external CDNs
 self.addEventListener('fetch', event => {
   // Never try to cache Supabase database calls or live exchange rate API responses
   if (event.request.url.includes('supabase.co') || event.request.url.includes('currency-api')) {
     return;
   }
 
+  let requestUrl;
+  try {
+    requestUrl = new URL(event.request.url);
+  } catch (e) {
+    return;
+  }
+
+  const isSameOriginGet = requestUrl.origin === self.location.origin && event.request.method === 'GET';
+  if (isSameOriginGet) {
+    event.respondWith((async () => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2500);
+      try {
+        const networkResponse = await fetch(event.request, { signal: controller.signal });
+        clearTimeout(timeoutId);
+        if (networkResponse && networkResponse.status === 200) {
+          const cache = await caches.open(CACHE_NAME);
+          cache.put(event.request, networkResponse.clone());
+        }
+        return networkResponse;
+      } catch (err) {
+        clearTimeout(timeoutId);
+        const cachedResponse = await caches.match(event.request, { ignoreSearch: true });
+        if (cachedResponse) {
+          return cachedResponse;
+        }
+        if (event.request.mode === 'navigate') {
+          return caches.match(`${REPO_NAME}/index.html`);
+        }
+        throw err;
+      }
+    })());
+    return;
+  }
+
   event.respondWith(
-    // ignoreSearch: true is critical. It ensures /TripCalc/?standalone=true still matches the cache
     caches.match(event.request, { ignoreSearch: true }).then(cachedResponse => {
-      
-      // IF IN CACHE: Return it instantly (bypassing Airplane WiFi lag).
       if (cachedResponse) {
-        // Silently try to fetch a newer version in the background
         fetch(event.request).then(networkResponse => {
           if (networkResponse && networkResponse.status === 200 && event.request.method === 'GET') {
             caches.open(CACHE_NAME).then(cache => {
               cache.put(event.request, networkResponse.clone());
             });
           }
-        }).catch(() => {
-           // Ignore background fetch errors (e.g., when actually offline)
-        });
-        
+        }).catch(() => {});
         return cachedResponse;
       }
 
-      // IF NOT IN CACHE: (e.g., external CDNs loading for the first time)
       return fetch(event.request).then(networkResponse => {
-        // Cache the external file dynamically so it's available offline next time
         if (networkResponse && networkResponse.status === 200 && event.request.method === 'GET') {
           const responseToCache = networkResponse.clone();
           caches.open(CACHE_NAME).then(cache => {
@@ -86,12 +119,6 @@ self.addEventListener('fetch', event => {
           });
         }
         return networkResponse;
-      }).catch(error => {
-        // FINAL FALLBACK: If the network fails entirely, ensure the main page loads
-        if (event.request.mode === 'navigate') {
-          return caches.match(`${REPO_NAME}/index.html`);
-        }
-        throw error;
       });
     })
   );

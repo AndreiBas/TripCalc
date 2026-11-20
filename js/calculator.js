@@ -6,7 +6,7 @@ let lastActiveInput = null;
 export function initCalculatorFocusTracker() {
     document.addEventListener('focusin', (e) => {
         if ((e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.classList.contains('ql-editor'))) {
-            if (!e.target.closest('#mini-calculator') && !e.target.id.startsWith('qc-')) {
+            if (!e.target.closest('#mini-calculator') && !e.target.id.startsWith('qc-') && e.target.id !== 'global-currency' && e.target.id !== 'exp-currency') {
                 lastActiveInput = e.target;
             }
         }
@@ -45,14 +45,84 @@ export function calcClear() {
     if (display) display.innerText = "0"; 
 }
 
+function evaluateMathExpr(expr) {
+    const tokens = [];
+    const tokenRegex = /\s*([+\-*/()]|\d+(?:\.\d+)?|\.\d+)\s*/y;
+    let idx = 0;
+    while (idx < expr.length) {
+        tokenRegex.lastIndex = idx;
+        const m = tokenRegex.exec(expr);
+        if (!m) throw new Error('Invalid token');
+        tokens.push(m[1]);
+        idx = tokenRegex.lastIndex;
+    }
+    if (tokens.length === 0) throw new Error('Empty expression');
+    let pos = 0;
+    const peek = () => tokens[pos];
+    const consume = () => tokens[pos++];
+
+    function parseExpr() {
+        let left = parseTerm();
+        while (peek() === '+' || peek() === '-') {
+            const op = consume();
+            const right = parseTerm();
+            left = op === '+' ? left + right : left - right;
+        }
+        return left;
+    }
+
+    function parseTerm() {
+        let left = parseFactor();
+        while (peek() === '*' || peek() === '/') {
+            const op = consume();
+            const right = parseFactor();
+            if (op === '/') {
+                if (right === 0) throw new Error('Division by zero');
+                left = left / right;
+            } else {
+                left = left * right;
+            }
+        }
+        return left;
+    }
+
+    function parseFactor() {
+        const tok = peek();
+        if (tok === '+') {
+            consume();
+            return parseFactor();
+        }
+        if (tok === '-') {
+            consume();
+            return -parseFactor();
+        }
+        if (tok === '(') {
+            consume();
+            const val = parseExpr();
+            if (consume() !== ')') throw new Error('Mismatched parenthesis');
+            return val;
+        }
+        if (tok !== undefined && /^(?:\d+(?:\.\d+)?|\.\d+)$/.test(tok)) {
+            consume();
+            return Number(tok);
+        }
+        throw new Error('Unexpected token');
+    }
+
+    const result = parseExpr();
+    if (pos !== tokens.length || !isFinite(result)) {
+        throw new Error('Invalid expression');
+    }
+    return result;
+}
+
 export function calcSolve() {
     try {
         let safeExpr = calcExpr.replace(/[^-()\d/*+.%]/g, '');
         if(safeExpr === "") return;
         safeExpr = safeExpr.replace(/(\d+(?:\.\d+)?)[\s]*([+-])[\s]*(\d+(?:\.\d+)?)%/g, '$1$2($1*$3/100)');
         safeExpr = safeExpr.replace(/(\d+(?:\.\d+)?)%/g, '($1/100)');
-        let result = Function('"use strict";return (' + safeExpr + ')')();
-        if (!isFinite(result)) throw new Error('Division by zero');
+        let result = evaluateMathExpr(safeExpr);
         result = Math.round((result + Number.EPSILON) * 100) / 100;
         calcExpr = result.toString();
         const display = document.getElementById('calc-display');
@@ -64,51 +134,59 @@ export function calcSolve() {
     }
 }
 
+function pasteCalcValueToLastActiveInput(valueStr) {
+    if (lastActiveInput && typeof document.body.contains === 'function' && !document.body.contains(lastActiveInput)) {
+        lastActiveInput = null;
+    }
+    if (!lastActiveInput) return false;
+    try {
+        if (lastActiveInput.classList && lastActiveInput.classList.contains('ql-editor')) {
+            if (state.quill) {
+                const insertIndex = state.lastQuillRange ? state.lastQuillRange.index : state.quill.getLength() - 1;
+                state.quill.insertText(insertIndex, valueStr, 'user');
+                state.quill.setSelection(insertIndex + valueStr.length);
+            }
+        } else if (lastActiveInput.type === 'number') {
+            lastActiveInput.value = valueStr;
+        } else {
+            const start = lastActiveInput.selectionStart;
+            const end = lastActiveInput.selectionEnd;
+            const text = lastActiveInput.value || '';
+            if (start !== null && start !== undefined && end !== null && end !== undefined) {
+                lastActiveInput.value = text.slice(0, start) + valueStr + text.slice(end);
+            } else {
+                lastActiveInput.value = text + valueStr;
+            }
+        }
+        if (typeof lastActiveInput.dispatchEvent === 'function' && typeof Event !== 'undefined') {
+            lastActiveInput.dispatchEvent(new Event('input', { bubbles: true }));
+            lastActiveInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        if (lastActiveInput.classList && (lastActiveInput.classList.contains('part-personal') || lastActiveInput.classList.contains('part-fixed'))) {
+            import('./ui.js').then(UI => UI.calculateRemainingPercentage());
+        }
+        return true;
+    } catch(e) {
+        console.error("Could not paste into input", e);
+        return false;
+    }
+}
+
 export function calcCopy() {
-    if (calcExpr && calcExpr !== "Error") {
-        navigator.clipboard.writeText(calcExpr).then(async () => {
-            const btn = document.getElementById('calc-copy-btn'); 
-            if (btn) btn.innerText = "✅ Pasted!";
-            
-            if (lastActiveInput && !document.body.contains(lastActiveInput)) {
-                lastActiveInput = null;
-            }
-            
-            if (lastActiveInput) {
-                try {
-                    if (lastActiveInput.classList.contains('ql-editor')) {
-                        if (state.quill) {
-                            const insertIndex = state.lastQuillRange ? state.lastQuillRange.index : state.quill.getLength() - 1;
-                            state.quill.insertText(insertIndex, calcExpr, 'user'); 
-                            state.quill.setSelection(insertIndex + calcExpr.length);
-                        }
-                    } else if (lastActiveInput.type === 'number') {
-                        lastActiveInput.value = calcExpr;
-                    } else {
-                        const start = lastActiveInput.selectionStart; 
-                        const end = lastActiveInput.selectionEnd;
-                        const text = lastActiveInput.value;
-                        if (start !== null && end !== null) {
-                            lastActiveInput.value = text.slice(0, start) + calcExpr + text.slice(end);
-                        } else {
-                            lastActiveInput.value += calcExpr;
-                        }
-                    }
-                    lastActiveInput.dispatchEvent(new Event('input', { bubbles: true })); 
-                    lastActiveInput.dispatchEvent(new Event('change', { bubbles: true }));
-                    
-                    if (lastActiveInput.classList.contains('part-personal') || lastActiveInput.classList.contains('part-fixed')) {
-                        const UI = await import('./ui.js');
-                        UI.calculateRemainingPercentage();
-                    }
-                } catch(e) { 
-                    console.error("Could not paste into input", e); 
-                }
-            }
-            if (btn) {
-                setTimeout(() => btn.innerText = "📋 Copy & Paste Result", 1500);
-            }
-        }).catch(err => console.error('Clipboard denied', err));
+    if (!calcExpr || calcExpr === "Error") return;
+    if (/[+\-*/%()]/.test(calcExpr.slice(1)) || calcExpr.startsWith('(')) {
+        calcSolve();
+    }
+    if (!calcExpr || calcExpr === "Error") return;
+
+    const pasted = pasteCalcValueToLastActiveInput(calcExpr);
+    if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        navigator.clipboard.writeText(calcExpr).catch(err => console.warn('Clipboard denied', err));
+    }
+    const btn = document.getElementById('calc-copy-btn');
+    if (btn) {
+        btn.innerText = pasted ? "✅ Pasted!" : "✅ Copied!";
+        setTimeout(() => { btn.innerText = "📋 Copy & Paste Result"; }, 1500);
     }
 }
 
@@ -135,6 +213,7 @@ export function initCalculatorDraggable() {
         mouseX = e.touches[0].clientX;
         mouseY = e.touches[0].clientY;
         document.addEventListener('touchend', closeDragElement);
+        document.addEventListener('touchcancel', closeDragElement);
         document.addEventListener('touchmove', elementTouchDrag, { passive: false });
     }
 
@@ -188,6 +267,7 @@ export function initCalculatorDraggable() {
         document.removeEventListener('mouseup', closeDragElement);
         document.removeEventListener('mousemove', elementDrag);
         document.removeEventListener('touchend', closeDragElement);
+        document.removeEventListener('touchcancel', closeDragElement);
         document.removeEventListener('touchmove', elementTouchDrag);
     }
 }

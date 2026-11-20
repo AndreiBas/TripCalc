@@ -14,6 +14,11 @@ export function setCurrentHistorySlot(slotId) {
 
 // Guard flag: prevent pushHistorySnapshot from running during a restore
 let isApplyingSnapshot = false;
+let lastKnownPayload = null;
+
+export function syncHistoryBaseline() {
+    lastKnownPayload = structuredClone(buildTripPayload(false));
+}
 
 let historyCloudSyncTimeout = null;
 function scheduleHistoryCloudSync() {
@@ -39,12 +44,14 @@ export function pushHistorySnapshot() {
     const savedAt = Date.now();
     
     const currentPayload = structuredClone(buildTripPayload(false));
-    if (state.historyStack.length > 0) {
-        const lastPayload = state.historyStack[state.historyStack.length - 1].payload;
-        if (JSON.stringify(lastPayload) === JSON.stringify(currentPayload)) return;
+    if (!lastKnownPayload) {
+        lastKnownPayload = currentPayload;
+        return;
     }
+    if (JSON.stringify(lastKnownPayload) === JSON.stringify(currentPayload)) return;
 
-    const snapshot = { savedAt, label: formatLabel(new Date(savedAt)), payload: currentPayload };
+    const snapshot = { savedAt, label: formatLabel(new Date(savedAt)), payload: lastKnownPayload };
+    lastKnownPayload = currentPayload;
     state.historyStack.push(snapshot);
     if (state.historyStack.length > 3) state.historyStack.shift(); 
     
@@ -58,6 +65,7 @@ export async function restoreHistoryState(index) {
     const { payload } = state.historyStack[index];
     state.historyStack = state.historyStack.slice(0, index);
 
+    if (payload.tripId) state.tripId = payload.tripId;
     state.tripName = payload.tripName; 
     state.tripComment = payload.tripComment;
     state.participants = payload.participants || [];
@@ -81,6 +89,7 @@ export async function restoreHistoryState(index) {
     state.defaultTags = payload.defaultTags || ['car', 'gas', 'flight', 'stay', 'grocery', 'restaurant'];
 
     repairLegacyData();
+    syncHistoryBaseline();
     
     isApplyingSnapshot = true;  // Prevent recursive snapshot
     saveState(false, true); 
@@ -94,7 +103,7 @@ export async function restoreHistoryState(index) {
     UI.cancelEdit();
     UI.renderHistoryUI();
     
-    if (window.showToast) window.showToast('Trip state restored', 'undo');
+    if (typeof UI.showToast === 'function') UI.showToast('Trip state restored', 'undo');
     
     persistHistoryLocal();
     scheduleHistoryCloudSync();
@@ -108,7 +117,10 @@ export function clearHistory() {
 export function loadHistoryLocal() {
     try {
         const saved = localStorage.getItem('tripSplitterHistory');
-        if (!saved) return;
+        if (!saved) {
+            syncHistoryBaseline();
+            return;
+        }
         const data = JSON.parse(saved);
         if (data.forTripName === state.tripName) {
             state.historyStack = data.historyStack || [];
@@ -118,4 +130,5 @@ export function loadHistoryLocal() {
     } catch(e) {
         state.historyStack = [];
     }
+    syncHistoryBaseline();
 }

@@ -59,8 +59,44 @@ export function getCachedRate(targetCurrency) {
     return null;
 }
 
+export const MAX_RECENT_CURRENCIES = 4;
+
+export function getRecentCurrencies() {
+    const seen = new Set();
+    const cleaned = [];
+    for (const raw of (state.recentCurrencies || [])) {
+        const code = String(raw || '').trim().toUpperCase();
+        if (!code || code === 'USD' || code === 'FX' || seen.has(code)) continue;
+        seen.add(code);
+        cleaned.push(code);
+        if (cleaned.length >= MAX_RECENT_CURRENCIES) break;
+    }
+    return cleaned;
+}
+
+export function recordRecentCurrency(code) {
+    const normalized = String(code || '').trim().toUpperCase();
+    if (!normalized || normalized === 'USD' || normalized === 'FX') return;
+    const next = [normalized, ...getRecentCurrencies().filter(c => c !== normalized)];
+    state.recentCurrencies = next.slice(0, MAX_RECENT_CURRENCIES);
+}
+
+export function resolveCurrencyCode(rawVal) {
+    const inputVal = String(rawVal || '').trim().toUpperCase();
+    if (inputVal === '') return '';
+    if (inputVal === 'USD') return 'USD';
+    if (/^[A-Z0-9]{3}$/.test(inputVal)) return inputVal;
+
+    const normTarget = inputVal.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const match = ALL_CURRENCIES.find(c => c.code === inputVal) ||
+                  ALL_CURRENCIES.find(c => c.name.toUpperCase() === inputVal || c.name.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") === normTarget) ||
+                  ALL_CURRENCIES.find(c => c.name.toUpperCase().startsWith(inputVal) || c.name.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").startsWith(normTarget)) ||
+                  ALL_CURRENCIES.find(c => c.name.toUpperCase().includes(inputVal) || c.name.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(normTarget));
+    return match ? match.code : null;
+}
+
 export function ensureCurrencyOption(selectEl, currencyCode) {
-    if (!selectEl || !currencyCode) return;
+    if (!selectEl || !currencyCode || selectEl.tagName !== 'SELECT') return;
     const exists = Array.from(selectEl.options || []).some(opt => opt.value === currencyCode);
     if (!exists && typeof document !== 'undefined') {
         const opt = document.createElement('option');
@@ -132,13 +168,13 @@ export async function warmCurrencyRatesCache(forceRefresh = false) {
                         const UI = await import('./ui.js');
                         UI.updateFormCurrencyUI({ preserveRate: false, forceRefreshRate: true });
                     }
-                    saveState(true, true);
+                    saveState(true, true, true);
                     if (document.getElementById('view-currency')?.value === state.secondaryCurrency) {
                         const UI = await import('./ui.js');
                         UI.updateUI();
                     }
                 } else {
-                    saveState(true, true);
+                    saveState(true, true, true);
                 }
             }
         }
@@ -170,12 +206,12 @@ export async function warmCurrencyRatesCache(forceRefresh = false) {
                     if (!state.editingExpenseId && document.getElementById('exp-currency')?.value === state.secondaryCurrency) {
                         UI.updateFormCurrencyUI({ preserveRate: false, forceRefreshRate: true });
                     }
-                    saveState(true, true);
+                    saveState(true, true, true);
                     if (document.getElementById('view-currency')?.value === state.secondaryCurrency) {
                         UI.updateUI();
                     }
                 } else {
-                    saveState(true, true);
+                    saveState(true, true, true);
                 }
             }
         }
@@ -205,19 +241,10 @@ export async function handleCurrencyChange() {
         return;
     }
 
-    let targetCode = inputVal;
-    if (targetCode.length !== 3) {
-        const normTarget = targetCode.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        const match = ALL_CURRENCIES.find(c => c.code === targetCode) ||
-                      ALL_CURRENCIES.find(c => c.name.toUpperCase() === targetCode || c.name.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") === normTarget) ||
-                      ALL_CURRENCIES.find(c => c.name.toUpperCase().startsWith(targetCode) || c.name.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").startsWith(normTarget)) ||
-                      ALL_CURRENCIES.find(c => c.name.toUpperCase().includes(targetCode) || c.name.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(normTarget));
-        if (match) {
-            targetCode = match.code;
-        } else {
-            document.getElementById('global-currency').value = state.secondaryCurrency || ""; 
-            return; 
-        }
+    const targetCode = resolveCurrencyCode(inputVal);
+    if (!targetCode) {
+        document.getElementById('global-currency').value = state.secondaryCurrency || "";
+        return;
     }
 
     if (targetCode === "USD") {
@@ -267,9 +294,7 @@ export async function handleCurrencyChange() {
     }
 
     state.secondaryCurrency = targetCode;
-    state.recentCurrencies = (state.recentCurrencies || []).filter(c => c !== targetCode);
-    state.recentCurrencies.unshift(targetCode);
-    if (state.recentCurrencies.length > 5) state.recentCurrencies.pop();
+    recordRecentCurrency(targetCode);
     saveState();
     updateCurrencySelectors({ selectSecondary: !state.editingExpenseId });
     UI.updateUI();
@@ -328,27 +353,34 @@ export function updateCurrencySelectors(options = {}) {
         if (qcNotesContainer) qcNotesContainer.style.display = 'none';
     }
 
+    const normalizedCurrExp = String(currExpVal || '').trim().toUpperCase();
     let preserveCur = 'USD';
     if (state.editingExpenseId) {
         const editingExp = (state.expenses || []).find(e => e.id === state.editingExpenseId);
-        preserveCur = currExpVal || editingExp?.localCurrency || 'USD';
+        preserveCur = normalizedCurrExp || editingExp?.localCurrency || 'USD';
         if (preserveCur && preserveCur !== 'USD' && preserveCur !== state.secondaryCurrency) {
             expHtml += `<option value="${preserveCur}">${preserveCur}</option>`;
         }
     }
-    
-    expSelector.innerHTML = expHtml;
-    viewSelector.innerHTML = viewHtml;
-    
+
+    let nextExpCur = 'USD';
     if (state.editingExpenseId) {
-        ensureCurrencyOption(expSelector, preserveCur);
-        expSelector.value = preserveCur;
+        nextExpCur = preserveCur;
     } else if (selectSecondary) {
-        expSelector.value = state.secondaryCurrency || 'USD';
-    } else if (state.secondaryCurrency && currExpVal === state.secondaryCurrency) {
-        expSelector.value = state.secondaryCurrency;
-    } else {
-        expSelector.value = 'USD';
+        nextExpCur = state.secondaryCurrency || 'USD';
+    } else if (/^[A-Z0-9]{3}$/.test(normalizedCurrExp) && normalizedCurrExp !== 'FX') {
+        nextExpCur = normalizedCurrExp;
+    }
+
+    if (expSelector.tagName === 'SELECT') {
+        expSelector.innerHTML = expHtml;
+        ensureCurrencyOption(expSelector, nextExpCur);
+    }
+    viewSelector.innerHTML = viewHtml;
+
+    expSelector.value = nextExpCur;
+    if (expSelector.dataset) {
+        expSelector.dataset.committedCurrency = expSelector.value;
     }
 
     if (state.secondaryCurrency && currViewVal === state.secondaryCurrency) viewSelector.value = state.secondaryCurrency;
@@ -420,42 +452,118 @@ export function quickConvertNotes(source) {
 
 // --- Currency Picker Logic ---
 let pickerEl = null;
+let pickerListenersAttached = false;
+let activePickerTarget = 'global'; // 'global' | 'expense'
+
+function getActivePickerInput() {
+    if (activePickerTarget === 'expense') {
+        return document.getElementById('exp-currency');
+    }
+    return document.getElementById('global-currency');
+}
+
+function escapePickerHtml(str) {
+    return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function ensureCurrencyPicker() {
+    if (!pickerEl) {
+        pickerEl = document.createElement('div');
+        pickerEl.className = 'currency-picker';
+    }
+    if (typeof document.body?.contains === 'function' ? !document.body.contains(pickerEl) : !pickerEl.parentNode) {
+        document.body.appendChild(pickerEl);
+    }
+
+    if (!pickerListenersAttached) {
+        pickerListenersAttached = true;
+        const handleOutside = (e) => {
+            if (!pickerEl || !pickerEl.classList.contains('show')) return;
+            const activeInput = getActivePickerInput();
+            if (pickerEl.contains(e.target) || e.target === activeInput) return;
+
+            const prevTarget = activePickerTarget;
+            hideCurrencyPicker();
+            if (prevTarget === 'global') {
+                const globalInput = document.getElementById('global-currency');
+                if (globalInput && globalInput.value.trim().toUpperCase() !== (state.secondaryCurrency || "")) {
+                    handleCurrencyChange();
+                }
+            } else if (prevTarget === 'expense') {
+                commitExpCurrencyInput();
+            }
+        };
+        if (typeof window !== 'undefined' && window.PointerEvent) {
+            document.addEventListener('pointerdown', handleOutside);
+        } else {
+            document.addEventListener('mousedown', handleOutside);
+            document.addEventListener('touchstart', handleOutside, { passive: true });
+        }
+
+        window.addEventListener('resize', positionCurrencyPicker);
+        window.addEventListener('scroll', positionCurrencyPicker, true);
+    }
+}
 
 export function positionCurrencyPicker() {
     if (!pickerEl || !pickerEl.classList.contains('show')) return;
-    const inputEl = document.getElementById('global-currency');
+    const inputEl = getActivePickerInput();
     if (!inputEl) return;
-    
+
     const rect = inputEl.getBoundingClientRect();
-    pickerEl.style.top = `${rect.bottom}px`;
-    pickerEl.style.left = `${rect.left + (rect.width / 2)}px`;
+    const winWidth = typeof window !== 'undefined' ? (window.innerWidth || 360) : 360;
+    const winHeight = typeof window !== 'undefined' ? (window.innerHeight || 640) : 640;
+    const pickerWidth = pickerEl.offsetWidth || 220;
+    const halfW = pickerWidth / 2;
+    const rawCenter = rect.left + (rect.width / 2);
+    const clampedCenter = Math.max(halfW + 8, Math.min(winWidth - halfW - 8, rawCenter));
+    pickerEl.style.left = `${clampedCenter}px`;
+
+    const spaceBelow = winHeight - rect.bottom - 12;
+    const spaceAbove = rect.top - 12;
+    const pickerHeight = Math.min(pickerEl.scrollHeight || 300, 300);
+    if (spaceBelow < Math.min(pickerHeight, 180) && spaceAbove > spaceBelow) {
+        const clampedMax = Math.max(120, Math.min(300, spaceAbove));
+        const usedHeight = Math.min(pickerHeight || clampedMax, clampedMax);
+        pickerEl.style.top = `${Math.max(8, rect.top - usedHeight - 4)}px`;
+        pickerEl.style.maxHeight = `${clampedMax}px`;
+        pickerEl.style.marginTop = '0px';
+    } else {
+        pickerEl.style.top = `${rect.bottom}px`;
+        pickerEl.style.maxHeight = `${Math.max(120, Math.min(300, spaceBelow))}px`;
+        pickerEl.style.marginTop = '4px';
+    }
 }
 
 export function showCurrencyPicker() {
     const inputEl = document.getElementById('global-currency');
     if (!inputEl) return;
 
-    if (!pickerEl) {
-        pickerEl = document.createElement('div');
-        pickerEl.className = 'currency-picker';
-        document.body.appendChild(pickerEl);
-        
-        document.addEventListener('mousedown', (e) => {
-            const globalInput = document.getElementById('global-currency');
-            if (pickerEl && pickerEl.classList.contains('show') && !pickerEl.contains(e.target) && e.target !== globalInput) {
-                hideCurrencyPicker();
-                if (globalInput && globalInput.value.trim().toUpperCase() !== (state.secondaryCurrency || "")) {
-                    handleCurrencyChange();
-                }
-            }
-        });
-        
-        window.addEventListener('resize', positionCurrencyPicker);
-        window.addEventListener('scroll', positionCurrencyPicker, true);
-    }
-
+    activePickerTarget = 'global';
+    ensureCurrencyPicker();
     inputEl.select();
     renderCurrencyPicker(inputEl.value === state.secondaryCurrency ? '' : inputEl.value);
+    pickerEl.classList.add('show');
+    positionCurrencyPicker();
+}
+
+export function showExpCurrencyPicker() {
+    const inputEl = document.getElementById('exp-currency');
+    if (!inputEl) return;
+
+    activePickerTarget = 'expense';
+    ensureCurrencyPicker();
+    const currNormalized = inputEl.value.trim().toUpperCase();
+    if (inputEl.dataset && !inputEl.dataset.committedCurrency) {
+        inputEl.dataset.committedCurrency = currNormalized || state.secondaryCurrency || 'USD';
+    }
+    inputEl.select();
+    renderCurrencyPicker('');
     pickerEl.classList.add('show');
     positionCurrencyPicker();
 }
@@ -466,31 +574,38 @@ export function hideCurrencyPicker() {
 
 export function renderCurrencyPicker(filterText = '') {
     if (!pickerEl) return;
-    
+
     const filter = filterText.trim().toLowerCase();
     let html = '';
-    const recents = state.recentCurrencies || [];
+    const recents = getRecentCurrencies();
 
     if (!filter) {
-        if (recents.length > 0) {
-            html += `<div class="currency-picker-section-label">Recent</div>`;
-            recents.forEach(code => {
-                const currencyInfo = ALL_CURRENCIES.find(c => c.code === code) || { code, flag: '🌍', name: 'Custom' };
-                html += `<div class="currency-picker-item recent" onmousedown="applyCurrencyFromPicker('${code}'); event.preventDefault();">
-                            <span class="currency-picker-flag">${currencyInfo.flag}</span>
-                            <span class="currency-picker-code">${code}</span>
-                            <span class="currency-picker-name">${currencyInfo.name}</span>
-                         </div>`;
-            });
-        }
+        html += `<div class="currency-picker-section-label">${recents.length > 0 ? 'Recent' : 'Default'}</div>`;
+        recents.forEach(code => {
+            const currencyInfo = ALL_CURRENCIES.find(c => c.code === code) || { code, flag: '🌍', name: 'Custom' };
+            const safeCode = encodeURIComponent(code);
+            html += `<div class="currency-picker-item recent" onmousedown="event.preventDefault();" onclick="applyCurrencyFromPicker(decodeURIComponent('${safeCode}'))">
+                        <span class="currency-picker-flag">${escapePickerHtml(currencyInfo.flag)}</span>
+                        <span class="currency-picker-code">${escapePickerHtml(code)}</span>
+                        <span class="currency-picker-name">${escapePickerHtml(currencyInfo.name)}</span>
+                     </div>`;
+        });
+
+        const usdInfo = ALL_CURRENCIES.find(c => c.code === 'USD') || { code: 'USD', flag: '🇺🇸', name: 'US Dollar' };
+        html += `<div class="currency-picker-item base-usd" onmousedown="event.preventDefault();" onclick="applyCurrencyFromPicker('USD')">
+                    <span class="currency-picker-flag">${escapePickerHtml(usdInfo.flag)}</span>
+                    <span class="currency-picker-code">USD</span>
+                    <span class="currency-picker-name">${escapePickerHtml(usdInfo.name)}</span>
+                 </div>`;
 
         html += `<div class="currency-picker-section-label">Common</div>`;
         COMMON_CURRENCIES.forEach(c => {
-            if (recents.includes(c.code)) return;
-            html += `<div class="currency-picker-item" onmousedown="applyCurrencyFromPicker('${c.code}'); event.preventDefault();">
-                        <span class="currency-picker-flag">${c.flag}</span>
-                        <span class="currency-picker-code">${c.code}</span>
-                        <span class="currency-picker-name">${c.name}</span>
+            if (c.code === 'USD' || recents.includes(c.code)) return;
+            const safeCode = encodeURIComponent(c.code);
+            html += `<div class="currency-picker-item" onmousedown="event.preventDefault();" onclick="applyCurrencyFromPicker(decodeURIComponent('${safeCode}'))">
+                        <span class="currency-picker-flag">${escapePickerHtml(c.flag)}</span>
+                        <span class="currency-picker-code">${escapePickerHtml(c.code)}</span>
+                        <span class="currency-picker-name">${escapePickerHtml(c.name)}</span>
                      </div>`;
         });
     } else {
@@ -517,18 +632,20 @@ export function renderCurrencyPicker(filterText = '') {
         if (matches.length > 0 || is3Letter) {
             html += `<div class="currency-picker-section-label">Matches</div>`;
             matches.slice(0, 40).forEach(c => {
-                html += `<div class="currency-picker-item" onmousedown="applyCurrencyFromPicker('${c.code}'); event.preventDefault();">
-                            <span class="currency-picker-flag">${c.flag}</span>
-                            <span class="currency-picker-code">${c.code}</span>
-                            <span class="currency-picker-name">${c.name}</span>
+                const safeCode = encodeURIComponent(c.code);
+                html += `<div class="currency-picker-item" onmousedown="event.preventDefault();" onclick="applyCurrencyFromPicker(decodeURIComponent('${safeCode}'))">
+                            <span class="currency-picker-flag">${escapePickerHtml(c.flag)}</span>
+                            <span class="currency-picker-code">${escapePickerHtml(c.code)}</span>
+                            <span class="currency-picker-name">${escapePickerHtml(c.name)}</span>
                          </div>`;
             });
 
             if (is3Letter && !hasExactMatch) {
-                html += `<div class="currency-picker-item" onmousedown="applyCurrencyFromPicker('${upper}'); event.preventDefault();">
+                const safeUpper = encodeURIComponent(upper);
+                html += `<div class="currency-picker-item" onmousedown="event.preventDefault();" onclick="applyCurrencyFromPicker(decodeURIComponent('${safeUpper}'))">
                             <span class="currency-picker-flag">🌍</span>
-                            <span class="currency-picker-code">${upper}</span>
-                            <span class="currency-picker-name">Use "${upper}"</span>
+                            <span class="currency-picker-code">${escapePickerHtml(upper)}</span>
+                            <span class="currency-picker-name">Use "${escapePickerHtml(upper)}"</span>
                          </div>`;
             }
         }
@@ -541,11 +658,57 @@ export function renderCurrencyPicker(filterText = '') {
     pickerEl.innerHTML = html;
 }
 
-export function applyCurrencyFromPicker(code) {
+export async function commitExpCurrencyInput() {
+    const inputEl = document.getElementById('exp-currency');
+    if (!inputEl) return;
+
+    const prevCommitted = inputEl.dataset?.committedCurrency || state.secondaryCurrency || 'USD';
+    const resolved = resolveCurrencyCode(inputEl.value);
+    if (!resolved || resolved === 'FX') {
+        inputEl.value = prevCommitted;
+        if (inputEl.dataset) inputEl.dataset.committedCurrency = prevCommitted;
+        return;
+    }
+
+    inputEl.value = resolved;
+    if (inputEl.dataset) inputEl.dataset.committedCurrency = resolved;
+    if (resolved !== 'USD') {
+        recordRecentCurrency(resolved);
+    }
+
+    const rateInput = document.getElementById('exp-exchange-rate');
+    if (resolved !== prevCommitted || (resolved !== 'USD' && (!rateInput || !rateInput.value))) {
+        const UI = await import('./ui.js');
+        await UI.handleFormCurrencyChange();
+    }
+}
+
+export async function applyCurrencyFromPicker(code) {
+    const target = activePickerTarget;
+    hideCurrencyPicker();
+
+    if (target === 'expense') {
+        const expEl = document.getElementById('exp-currency');
+        if (!expEl) return;
+        const normalized = String(code || '').trim().toUpperCase() || 'USD';
+        const prevCommitted = expEl.dataset?.committedCurrency || '';
+        expEl.value = normalized;
+        if (expEl.dataset) expEl.dataset.committedCurrency = normalized;
+        if (normalized !== 'USD') {
+            recordRecentCurrency(normalized);
+        }
+        if (typeof expEl.blur === 'function') expEl.blur();
+        const rateInput = document.getElementById('exp-exchange-rate');
+        if (normalized !== prevCommitted || (normalized !== 'USD' && (!rateInput || !rateInput.value))) {
+            const UI = await import('./ui.js');
+            await UI.handleFormCurrencyChange();
+        }
+        return;
+    }
+
     const inputEl = document.getElementById('global-currency');
     if (inputEl) {
         inputEl.value = code;
-        hideCurrencyPicker();
         handleCurrencyChange();
     }
 }
@@ -553,8 +716,13 @@ export function applyCurrencyFromPicker(code) {
 export function handleCurrencyInput() {
     const inputEl = document.getElementById('global-currency');
     if (inputEl) {
+        activePickerTarget = 'global';
+        ensureCurrencyPicker();
         renderCurrencyPicker(inputEl.value);
-        if (pickerEl) pickerEl.classList.add('show');
+        if (pickerEl) {
+            pickerEl.classList.add('show');
+            positionCurrencyPicker();
+        }
     }
 }
 
@@ -570,12 +738,42 @@ export function handleCurrencyKeyDown(e) {
     }
 }
 
+export function handleExpCurrencyInput() {
+    const inputEl = document.getElementById('exp-currency');
+    if (inputEl) {
+        activePickerTarget = 'expense';
+        ensureCurrencyPicker();
+        renderCurrencyPicker(inputEl.value);
+        if (pickerEl) {
+            pickerEl.classList.add('show');
+            positionCurrencyPicker();
+        }
+    }
+}
+
+export function handleExpCurrencyKeyDown(e) {
+    if (e.key === 'Escape') {
+        hideCurrencyPicker();
+        const inputEl = document.getElementById('exp-currency');
+        if (inputEl) {
+            inputEl.value = inputEl.dataset?.committedCurrency || state.secondaryCurrency || 'USD';
+        }
+    } else if (e.key === 'Enter') {
+        hideCurrencyPicker();
+        commitExpCurrencyInput();
+        e.target.blur();
+    }
+}
+
 // Bind to window for HTML event handlers compatibility
 window.handleCurrencyChange = handleCurrencyChange;
 window.quickConvert = quickConvert;
 window.quickConvertNotes = quickConvertNotes;
 window.showCurrencyPicker = showCurrencyPicker;
+window.showExpCurrencyPicker = showExpCurrencyPicker;
 window.hideCurrencyPicker = hideCurrencyPicker;
 window.applyCurrencyFromPicker = applyCurrencyFromPicker;
 window.handleCurrencyInput = handleCurrencyInput;
 window.handleCurrencyKeyDown = handleCurrencyKeyDown;
+window.handleExpCurrencyInput = handleExpCurrencyInput;
+window.handleExpCurrencyKeyDown = handleExpCurrencyKeyDown;

@@ -2,16 +2,50 @@ import { state } from './state.js';
 
 let currentYear = new Date().getFullYear();
 let currentMonth = new Date().getMonth(); // 0-11
-let lastActiveInput = null;
 
-export function initCalendarFocusTracker() {
-    document.addEventListener('focusin', (e) => {
-        if ((e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.classList.contains('ql-editor'))) {
-            if (!e.target.closest('#mini-calculator') && !e.target.closest('#mini-calendar') && !e.target.id.startsWith('qc-')) {
-                lastActiveInput = e.target;
-            }
-        }
-    });
+function createAdjacentDayButton(dayNum, dateStr, isSelected, hasActivity, onSelect) {
+    const btn = document.createElement('button');
+    btn.className = "outline small";
+    btn.style.padding = "2px 0";
+    btn.style.fontSize = "0.75rem";
+    btn.style.height = "32px";
+    btn.style.width = "100%";
+    btn.style.minWidth = "0";
+    btn.style.borderRadius = "4px";
+    btn.style.border = "1px solid transparent";
+    btn.style.cursor = "pointer";
+    btn.style.display = "flex";
+    btn.style.flexDirection = "column";
+    btn.style.alignItems = "center";
+    btn.style.justifyContent = "center";
+
+    const textSpan = document.createElement('span');
+    textSpan.innerText = dayNum;
+    textSpan.style.lineHeight = "1.1";
+    btn.appendChild(textSpan);
+
+    if (isSelected) {
+        btn.style.background = "var(--primary)";
+        btn.style.color = "#ffffff";
+        btn.style.opacity = "0.55";
+    } else {
+        btn.style.opacity = "0.35";
+        btn.style.color = "var(--secondary)";
+        btn.style.background = "transparent";
+    }
+
+    if (hasActivity) {
+        const dot = document.createElement('span');
+        dot.style.width = "4px";
+        dot.style.height = "4px";
+        dot.style.borderRadius = "50%";
+        dot.style.background = isSelected ? "#ffffff" : "var(--primary)";
+        dot.style.marginTop = "2px";
+        btn.appendChild(dot);
+    }
+
+    btn.onclick = onSelect;
+    return btn;
 }
 
 export function toggleCalendar() {
@@ -64,22 +98,6 @@ export function renderCalendar() {
         if (i < firstDayIndex) {
             // Day from previous month
             const prevDay = totalDaysOfPrevMonth - firstDayIndex + i + 1;
-            const prevBtn = document.createElement('div');
-            prevBtn.style.padding = "2px 0";
-            prevBtn.style.fontSize = "0.75rem";
-            prevBtn.style.height = "32px";
-            prevBtn.style.width = "100%";
-            prevBtn.style.display = "flex";
-            prevBtn.style.flexDirection = "column";
-            prevBtn.style.alignItems = "center";
-            prevBtn.style.justifyContent = "center";
-            
-            const textSpan = document.createElement('span');
-            textSpan.innerText = prevDay;
-            textSpan.style.lineHeight = "1.1";
-            prevBtn.appendChild(textSpan);
-            
-            // Check if this date is selected
             let prevYear = currentYear;
             let prevMonthIndex = currentMonth - 1;
             if (prevMonthIndex < 0) {
@@ -89,28 +107,7 @@ export function renderCalendar() {
             const pad = (n) => n.toString().padStart(2, '0');
             const prevDateStr = `${prevYear}-${pad(prevMonthIndex + 1)}-${pad(prevDay)}`;
             const isSelected = state.selectedCalendarDates && state.selectedCalendarDates.has(prevDateStr);
-
-            if (isSelected) {
-                prevBtn.style.background = "var(--primary)";
-                prevBtn.style.color = "#ffffff";
-                prevBtn.style.borderRadius = "4px";
-                prevBtn.style.opacity = "0.4";
-            } else {
-                prevBtn.style.opacity = "0.35";
-                prevBtn.style.color = "var(--secondary)";
-            }
-
-            // Draw Activity Dot Indicator for previous month day
-            if (activityDates.has(prevDateStr)) {
-                const dot = document.createElement('span');
-                dot.style.width = "4px";
-                dot.style.height = "4px";
-                dot.style.borderRadius = "50%";
-                dot.style.background = isSelected ? "#ffffff" : "var(--primary)";
-                dot.style.marginTop = "2px";
-                prevBtn.appendChild(dot);
-            }
-
+            const prevBtn = createAdjacentDayButton(prevDay, prevDateStr, isSelected, activityDates.has(prevDateStr), () => selectCalendarDate(prevYear, prevMonthIndex, prevDay));
             daysGrid.appendChild(prevBtn);
         } else if (i >= firstDayIndex && i < firstDayIndex + totalDays) {
             // Current month day
@@ -188,22 +185,6 @@ export function renderCalendar() {
         } else {
             // Day from next month
             const nextDay = i - (firstDayIndex + totalDays) + 1;
-            const nextBtn = document.createElement('div');
-            nextBtn.style.padding = "2px 0";
-            nextBtn.style.fontSize = "0.75rem";
-            nextBtn.style.height = "32px";
-            nextBtn.style.width = "100%";
-            nextBtn.style.display = "flex";
-            nextBtn.style.flexDirection = "column";
-            nextBtn.style.alignItems = "center";
-            nextBtn.style.justifyContent = "center";
-            
-            const textSpan = document.createElement('span');
-            textSpan.innerText = nextDay;
-            textSpan.style.lineHeight = "1.1";
-            nextBtn.appendChild(textSpan);
-            
-            // Check if this date is selected
             let nextYear = currentYear;
             let nextMonthIndex = currentMonth + 1;
             if (nextMonthIndex > 11) {
@@ -213,28 +194,7 @@ export function renderCalendar() {
             const pad = (n) => n.toString().padStart(2, '0');
             const nextDateStr = `${nextYear}-${pad(nextMonthIndex + 1)}-${pad(nextDay)}`;
             const isSelected = state.selectedCalendarDates && state.selectedCalendarDates.has(nextDateStr);
-
-            if (isSelected) {
-                nextBtn.style.background = "var(--primary)";
-                nextBtn.style.color = "#ffffff";
-                nextBtn.style.borderRadius = "4px";
-                nextBtn.style.opacity = "0.4";
-            } else {
-                nextBtn.style.opacity = "0.35";
-                nextBtn.style.color = "var(--secondary)";
-            }
-
-            // Draw Activity Dot Indicator for next month day
-            if (activityDates.has(nextDateStr)) {
-                const dot = document.createElement('span');
-                dot.style.width = "4px";
-                dot.style.height = "4px";
-                dot.style.borderRadius = "50%";
-                dot.style.background = isSelected ? "#ffffff" : "var(--primary)";
-                dot.style.marginTop = "2px";
-                nextBtn.appendChild(dot);
-            }
-
+            const nextBtn = createAdjacentDayButton(nextDay, nextDateStr, isSelected, activityDates.has(nextDateStr), () => selectCalendarDate(nextYear, nextMonthIndex, nextDay));
             daysGrid.appendChild(nextBtn);
         }
     }
@@ -261,12 +221,6 @@ export function nextMonth() {
 export function selectCalendarDate(year, month, day) {
     const pad = (n) => n.toString().padStart(2, '0');
     const formattedISO = `${year}-${pad(month + 1)}-${pad(day)}`;
-    
-    const monthNames = [
-        "January", "February", "March", "April", "May", "June",
-        "July", "August", "September", "October", "November", "December"
-    ];
-    const formattedHuman = `${monthNames[month]} ${day}, ${year}`;
 
     // Toggle selected state in the Set
     if (!state.selectedCalendarDates) {
@@ -293,6 +247,8 @@ export function calendarGoToToday() {
 export async function calendarFilterLedger() {
     const UI = await import('./ui.js');
     UI.updateUI();
+    const cal = document.getElementById('mini-calendar');
+    if (cal) cal.style.display = 'none';
 }
 
 export async function calendarClearFilter() {
@@ -327,6 +283,7 @@ export function initCalendarDraggable() {
         mouseX = e.touches[0].clientX;
         mouseY = e.touches[0].clientY;
         document.addEventListener('touchend', closeDragElement);
+        document.addEventListener('touchcancel', closeDragElement);
         document.addEventListener('touchmove', elementTouchDrag, { passive: false });
     }
 
@@ -380,6 +337,7 @@ export function initCalendarDraggable() {
         document.removeEventListener('mouseup', closeDragElement);
         document.removeEventListener('mousemove', elementDrag);
         document.removeEventListener('touchend', closeDragElement);
+        document.removeEventListener('touchcancel', closeDragElement);
         document.removeEventListener('touchmove', elementTouchDrag);
     }
 }
