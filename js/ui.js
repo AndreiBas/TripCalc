@@ -1,6 +1,6 @@
 import { state, saveState, loadState } from './state.js';
 import { CATEGORIES, COLORS, TAG_COLORS, CURRENCY_SYMBOLS } from './config.js';
-import { formatMoney, getPerDayText, getPerDayTextSmall, fetchExchangeRate, fetchRateOnly, updateCurrencySelectors } from './currency.js';
+import { formatMoney, getPerDayText, getPerDayTextSmall, fetchExchangeRate, fetchRateOnly, updateCurrencySelectors, getCachedRate, ensureCurrencyOption } from './currency.js';
 
 // --- HELPERS ---
 export function escapeHTML(str) {
@@ -258,8 +258,15 @@ export function renameParticipant(oldName) {
             delete e.percentageShares[oldName];
         }
     });
+    const pSelect = document.getElementById('exp-payer');
+    const wasSelectedPayer = Boolean(pSelect && pSelect.value === oldName);
+    if (wasSelectedPayer) pSelect.value = '';
     saveState(); 
     updateUI();
+    if (wasSelectedPayer && pSelect) {
+        pSelect.value = newName;
+        updatePayerColor();
+    }
 }
 
 export function changeGroup(name) {
@@ -344,6 +351,7 @@ export async function resetTrip() {
         state.expenses = [];
         state.secondaryCurrency = ""; 
         state.currentExchangeRate = 1; 
+        state.currencyRates = {};
         state.currentSort = 'date-desc'; 
         state.tripDays = 1;
         state.showPerDay = false; 
@@ -570,7 +578,8 @@ export function handleEqualSplitInput(inputEl, mode) {
     calculateRemainingPercentage();
 }
 
-export function updateSplitTypeUI() {
+export function updateSplitTypeUI(options = {}) {
+    const { preserveValues = false } = options;
     const type = document.getElementById('exp-split-type').value;
     const helper = document.getElementById('split-helper-text');
     const extraInputs = document.querySelectorAll('.part-personal');
@@ -583,7 +592,7 @@ export function updateSplitTypeUI() {
         extraInputs.forEach(input => { 
             input.placeholder = "Share %"; 
             input.max = "100"; 
-            input.value = ''; 
+            if (!preserveValues) input.value = ''; 
         });
         fixedInputs.forEach(input => input.style.display = 'none');
         calculateRemainingPercentage();
@@ -594,11 +603,11 @@ export function updateSplitTypeUI() {
         extraInputs.forEach(input => { 
             input.placeholder = `+ Extra ${sym}`; 
             input.removeAttribute('max'); 
-            input.value = ''; 
+            if (!preserveValues) input.value = ''; 
         });
         fixedInputs.forEach(input => { 
             input.placeholder = `= Exact ${sym}`; 
-            if(!state.editingExpenseId) input.value = ''; 
+            if (!preserveValues && !state.editingExpenseId) input.value = ''; 
             input.style.display = 'block'; 
         });
         calculateRemainingPercentage();
@@ -726,36 +735,80 @@ export function calculateRemainingPercentage() {
     }
 }
 
-export function updateFormCurrencyUI() {
-    const localCurrency = document.getElementById('exp-currency').value;
+export function handleFormCurrencyChange() {
+    updateFormCurrencyUI({ preserveRate: false });
+    updateSplitTypeUI({ preserveValues: true });
+}
+
+export function updateFormCurrencyUI(options = {}) {
+    const { preserveRate = false, forceRefreshRate = false } = options;
+    const localCurrency = document.getElementById('exp-currency')?.value || '';
     const rateRow = document.getElementById('rate-row');
     const rateLabel = document.getElementById('exp-rate-currency-label');
     const rateInput = document.getElementById('exp-exchange-rate');
     
     if (!rateRow || !rateLabel || !rateInput) return;
 
-    if (localCurrency !== 'USD') {
-        rateRow.style.display = 'flex';
-        rateLabel.innerText = localCurrency;
-        if (!rateInput.value && state.currentExchangeRate > 0) {
-            rateInput.value = formatRateInput(state.currentExchangeRate);
-        }
-    } else {
+    if (!localCurrency || localCurrency === 'USD') {
         rateRow.style.display = 'none';
         rateInput.value = '';
+        rateInput.placeholder = '';
+        rateInput.style.borderColor = '';
+        delete rateInput.dataset.currency;
+        return;
     }
+
+    rateRow.style.display = 'flex';
+    rateLabel.innerText = localCurrency;
+    const sameCurrency = rateInput.dataset.currency === localCurrency;
+    if (forceRefreshRate || !sameCurrency || (!preserveRate && !rateInput.value)) {
+        let resolvedRate = null;
+        if (state.editingExpenseId) {
+            const editingExp = state.expenses.find(e => e.id === state.editingExpenseId);
+            if (editingExp && editingExp.localCurrency === localCurrency && isFinite(editingExp.exchangeRate) && editingExp.exchangeRate > 0) {
+                resolvedRate = editingExp.exchangeRate;
+            }
+        }
+        if (!(isFinite(resolvedRate) && resolvedRate > 0)) {
+            resolvedRate = getCachedRate(localCurrency);
+        }
+        if (isFinite(resolvedRate) && resolvedRate > 0) {
+            rateInput.value = formatRateInput(resolvedRate);
+            rateInput.placeholder = '';
+            rateInput.style.borderColor = '';
+        } else {
+            rateInput.value = '';
+            rateInput.placeholder = 'Enter rate!';
+            rateInput.style.borderColor = 'var(--danger)';
+        }
+    }
+    rateInput.dataset.currency = localCurrency;
 }
 
 export async function refreshFormRate() {
     const localCurrency = document.getElementById('exp-currency').value;
     if (localCurrency === 'USD') return;
+    if (state.isOfflineMode) {
+        showToast('✈️ Offline Mode active — enter rate manually or switch Online to fetch.', 'edit');
+        return;
+    }
     
     const btn = document.querySelector('#rate-row button');
     if (btn) btn.innerText = "⏳";
     const rate = await fetchRateOnly(localCurrency, false);
-    if (rate && rate > 0) {
+    if (isFinite(rate) && rate > 0) {
         const rateInput = document.getElementById('exp-exchange-rate');
-        if (rateInput) rateInput.value = formatRateInput(rate);
+        if (rateInput) {
+            rateInput.value = formatRateInput(rate);
+            rateInput.dataset.currency = localCurrency;
+            rateInput.placeholder = '';
+            rateInput.style.borderColor = '';
+        }
+        if (!state.currencyRates) state.currencyRates = {};
+        state.currencyRates[localCurrency] = rate;
+        if (localCurrency === state.secondaryCurrency) {
+            state.currentExchangeRate = rate;
+        }
     }
     if (btn) btn.innerText = "🔄 Fetch Latest";
 }
@@ -1216,11 +1269,29 @@ export function saveExpense() {
         return;
     }
 
+    if (!localCurrency || localCurrency === 'FX') {
+        alert("Please select a valid currency (e.g., USD or your trip currency) before saving.");
+        return;
+    }
+
     let rateToUse = 1;
     if (localCurrency !== 'USD') {
         rateToUse = parseFloat(document.getElementById('exp-exchange-rate').value);
-        if (isNaN(rateToUse) || rateToUse <= 0) {
-            rateToUse = state.currentExchangeRate;
+        if (isNaN(rateToUse) || !isFinite(rateToUse) || rateToUse <= 0) {
+            const fallback = getCachedRate(localCurrency);
+            if (isFinite(fallback) && fallback > 0) {
+                rateToUse = fallback;
+            }
+        }
+        if (isNaN(rateToUse) || !isFinite(rateToUse) || rateToUse <= 0) {
+            alert(`Please enter a valid exchange rate for ${localCurrency} (1 USD = ? ${localCurrency}) before saving.`);
+            document.getElementById('exp-exchange-rate')?.focus();
+            return;
+        }
+        if (!state.currencyRates) state.currencyRates = {};
+        state.currencyRates[localCurrency] = rateToUse;
+        if (localCurrency === state.secondaryCurrency && (!isFinite(state.currentExchangeRate) || state.currentExchangeRate <= 0)) {
+            state.currentExchangeRate = rateToUse;
         }
     }
 
@@ -1265,9 +1336,16 @@ export function saveExpense() {
         document.getElementById('exp-amount').value = ''; 
         document.querySelectorAll('.part-personal').forEach(input => input.value = ''); 
         document.querySelectorAll('.part-fixed').forEach(input => input.value = ''); 
+        document.querySelectorAll('#participant-list-inputs .part-checkbox').forEach(cb => cb.checked = true);
+        checkMasterCheckboxState();
+        const rateInput = document.getElementById('exp-exchange-rate');
+        if (rateInput) {
+            rateInput.value = '';
+            delete rateInput.dataset.currency;
+        }
         calculateRemainingPercentage();
         updateFormColor();
-        updateFormCurrencyUI();
+        updateFormCurrencyUI({ forceRefreshRate: true });
         showToast("Activity added!", 'create');
     }
     saveState(); 
@@ -1278,6 +1356,12 @@ export function editExpense(id) {
     const exp = state.expenses.find(e => e.id === id);
     if (!exp) return;
 
+    const hasMismatch = (exp.localCurrency === 'FX') ||
+        (exp.localCurrency === 'USD' && isFinite(exp.localAmount) && isFinite(exp.amount) && Math.abs(exp.localAmount - exp.amount) > 0.05);
+    if (hasMismatch) {
+        alert(`⚠️ Currency mismatch detected on "${exp.desc}" (stored as ${exp.localAmount} ${exp.localCurrency || 'USD'} vs $${Number(exp.amount).toFixed(2)} USD @ ${exp.exchangeRate || 1}). Please verify the currency and exchange rate before updating.`);
+    }
+
     state.editingExpenseId = id;
     document.getElementById('activity-title-text').innerText = "✏️ Edit Activity";
     document.getElementById('exp-category').value = exp.category || 'Other';
@@ -1286,10 +1370,24 @@ export function editExpense(id) {
     document.getElementById('exp-notes').value = exp.notes || '';
     document.getElementById('exp-date').value = exp.date || new Date().toISOString().split('T')[0];
     
-    document.getElementById('exp-currency').value = exp.localCurrency || 'USD';
-    updateFormCurrencyUI();
-    if (exp.localCurrency !== 'USD') {
-        document.getElementById('exp-exchange-rate').value = formatRateInput(exp.exchangeRate || state.currentExchangeRate);
+    const targetCur = exp.localCurrency || 'USD';
+    const expCurEl = document.getElementById('exp-currency');
+    ensureCurrencyOption(expCurEl, targetCur);
+    expCurEl.value = targetCur;
+    const rateInput = document.getElementById('exp-exchange-rate');
+    if (targetCur !== 'USD') {
+        const expRate = (isFinite(exp.exchangeRate) && exp.exchangeRate > 0) ? exp.exchangeRate : getCachedRate(targetCur);
+        if (rateInput) {
+            rateInput.value = (isFinite(expRate) && expRate > 0) ? formatRateInput(expRate) : '';
+            rateInput.dataset.currency = targetCur;
+        }
+        updateFormCurrencyUI({ preserveRate: Boolean(isFinite(expRate) && expRate > 0) });
+    } else {
+        if (rateInput) {
+            rateInput.value = '';
+            delete rateInput.dataset.currency;
+        }
+        updateFormCurrencyUI({ preserveRate: false });
     }
     
     document.getElementById('exp-split-type').value = exp.splitType || 'equal';
@@ -1308,10 +1406,10 @@ export function editExpense(id) {
             if (exp.splitType === 'percentage' && exp.percentageShares && exp.percentageShares[name] !== undefined) {
                 extraInput.value = exp.percentageShares[name];
             } else if (!exp.splitType || exp.splitType === 'equal') {
-                const safeRate = exp.exchangeRate || state.currentExchangeRate || 1;
+                const safeRate = (isFinite(exp.exchangeRate) && exp.exchangeRate > 0) ? exp.exchangeRate : (getCachedRate(targetCur) || 1);
                 if (exp.personalExpenses && exp.personalExpenses[name]) {
                     let pVal = exp.personalExpenses[name];
-                    if (exp.localCurrency !== 'USD') pVal = pVal * safeRate;
+                    if (targetCur !== 'USD') pVal = pVal * safeRate;
                     extraInput.value = pVal.toFixed(2);
                 } else { 
                     extraInput.value = ''; 
@@ -1319,7 +1417,7 @@ export function editExpense(id) {
                 
                 if (exp.fixedShares && exp.fixedShares[name] !== undefined) {
                     let fVal = exp.fixedShares[name];
-                    if (exp.localCurrency !== 'USD') fVal = fVal * safeRate;
+                    if (targetCur !== 'USD') fVal = fVal * safeRate;
                     fixedInput.value = fVal.toFixed(2);
                 } else { 
                     fixedInput.value = ''; 
@@ -1345,11 +1443,22 @@ export function editExpense(id) {
         activityCard.classList.remove('activity-collapsed'); 
     }
     
-    document.getElementById('exp-amount').value = exp.localAmount || (exp.amount * (exp.exchangeRate||1));
+    const hasLocalAmt = exp.localAmount !== undefined && exp.localAmount !== null && !isNaN(Number(exp.localAmount));
+    const safeExpRate = (isFinite(exp.exchangeRate) && exp.exchangeRate > 0) ? exp.exchangeRate : 1;
+    document.getElementById('exp-amount').value = hasLocalAmt ? exp.localAmount : (exp.amount * safeExpRate);
     calculateRemainingPercentage();
     
     updateUI(); 
-    document.getElementById('exp-payer').value = exp.payer; 
+    const pSelect = document.getElementById('exp-payer');
+    if (pSelect) {
+        if (exp.payer && !Array.from(pSelect.options).some(opt => opt.value === exp.payer)) {
+            const opt = document.createElement('option');
+            opt.value = exp.payer;
+            opt.textContent = shortName(exp.payer);
+            pSelect.appendChild(opt);
+        }
+        pSelect.value = exp.payer || '';
+    }
     updatePayerColor(); 
     updateFormColor();
     
@@ -1454,12 +1563,13 @@ export function cancelEdit() {
     updatePayerColor(); 
     updateSplitTypeUI();
     
-    const defaultCur = state.secondaryCurrency || 'USD';
-    document.getElementById('exp-currency').value = defaultCur;
-    updateFormCurrencyUI();
-    if (defaultCur !== 'USD') {
-        document.getElementById('exp-exchange-rate').value = formatRateInput(state.currentExchangeRate);
+    updateCurrencySelectors({ selectSecondary: true });
+    const rateInput = document.getElementById('exp-exchange-rate');
+    if (rateInput) {
+        rateInput.value = '';
+        delete rateInput.dataset.currency;
     }
+    updateFormCurrencyUI({ forceRefreshRate: true });
     
     document.querySelectorAll('.part-personal').forEach(input => input.value = ''); 
     document.querySelectorAll('.part-fixed').forEach(input => input.value = ''); 
@@ -1509,9 +1619,25 @@ export function renderCategoryFilters() {
     container.innerHTML = html;
 }
 
-export function renderParticipantInputs() {
+export function renderParticipantInputs(preserveExisting = false) {
     const pListInputs = document.getElementById('participant-list-inputs');
     if (!pListInputs) return;
+
+    const prevValues = {};
+    if (preserveExisting) {
+        pListInputs.querySelectorAll('.participant-row').forEach(row => {
+            const cb = row.querySelector('.part-checkbox');
+            if (cb) {
+                prevValues[cb.value] = {
+                    checked: cb.checked,
+                    extra: row.querySelector('.part-personal')?.value || '',
+                    fixed: row.querySelector('.part-fixed')?.value || ''
+                };
+            }
+        });
+    }
+    const hasPrevValues = Object.keys(prevValues).length > 0;
+
     pListInputs.innerHTML = state.participants.map(p => `
         <div class="participant-row">
             <label class="checkbox-item" style="color: ${getColor(p)}" title="${escapeHTML(p)}">
@@ -1524,6 +1650,21 @@ export function renderParticipantInputs() {
             </div>
         </div>
     `).join('');
+
+    if (hasPrevValues) {
+        pListInputs.querySelectorAll('.participant-row').forEach(row => {
+            const cb = row.querySelector('.part-checkbox');
+            if (cb && Object.prototype.hasOwnProperty.call(prevValues, cb.value)) {
+                const saved = prevValues[cb.value];
+                cb.checked = saved.checked;
+                const extraEl = row.querySelector('.part-personal');
+                const fixedEl = row.querySelector('.part-fixed');
+                if (extraEl) extraEl.value = saved.extra;
+                if (fixedEl) fixedEl.value = saved.fixed;
+            }
+        });
+    }
+
     checkMasterCheckboxState();
 }
 
@@ -1620,14 +1761,19 @@ export function updateUI() {
     const pSelect = document.getElementById('exp-payer');
     if (pSelect) {
         const currentPayer = pSelect.value;
-        pSelect.innerHTML = '<option value="" style="color: var(--text); font-weight: 500;">Who paid?</option>' + state.participants.map(p => `<option value="${escapeHTML(p)}" style="color: ${getColor(p)}; font-weight: 800;" title="${escapeHTML(p)}">${escapeHTML(shortName(p))}</option>`).join('');
-        if(!state.editingExpenseId) pSelect.value = currentPayer; 
+        const missingPayerOption = (currentPayer && !state.participants.includes(currentPayer))
+            ? `<option value="${escapeHTML(currentPayer)}" style="color: ${getColor(currentPayer)}; font-weight: 800;" title="${escapeHTML(currentPayer)}">${escapeHTML(shortName(currentPayer))}</option>`
+            : '';
+        pSelect.innerHTML = '<option value="" style="color: var(--text); font-weight: 500;">Who paid?</option>' +
+            state.participants.map(p => `<option value="${escapeHTML(p)}" style="color: ${getColor(p)}; font-weight: 800;" title="${escapeHTML(p)}">${escapeHTML(shortName(p))}</option>`).join('') +
+            missingPayerOption;
+        pSelect.value = currentPayer;
         updatePayerColor();
     }
 
     if (!state.editingExpenseId) {
-        renderParticipantInputs();
-        updateSplitTypeUI();
+        renderParticipantInputs(true);
+        updateSplitTypeUI({ preserveValues: true });
     }
 
     const groupsMap = {};
@@ -1875,7 +2021,7 @@ export function updateUI() {
     } else if (state.currentSort === 'amt-asc') { 
         sorted.sort((a,b) => a.amount - b.amount || a.timestamp - b.timestamp); 
     } else if (state.currentSort === 'payer-asc') { 
-        sorted.sort((a,b) => a.payer.localeCompare(b.payer) || new Date(b.date) - new Date(a.date) || b.timestamp - a.timestamp); 
+        sorted.sort((a,b) => (a.payer || '').localeCompare(b.payer || '') || new Date(b.date) - new Date(a.date) || b.timestamp - a.timestamp); 
     }
 
     const filteredExpenses = sorted.filter(e => doesExpenseMatchFilters(e, groupsMap));
@@ -1944,11 +2090,14 @@ export function updateUI() {
             const formattedDate = formatDateDisplay(e.date);
             let breakdownHtml = '';
             const localSym = CURRENCY_SYMBOLS[e.localCurrency] ? CURRENCY_SYMBOLS[e.localCurrency] : (e.localCurrency ? e.localCurrency + ' ' : '$');
-            let displayMainAmount = `${localSym}${e.localAmount.toFixed(2)}`;
+            const localAmtNum = (e.localAmount !== undefined && e.localAmount !== null && !isNaN(Number(e.localAmount))) ? Number(e.localAmount) : Number(e.amount || 0);
+            const amtNum = Number(e.amount || 0);
+            const hasCurrencyMismatch = (e.localCurrency === 'FX') || (e.localCurrency === 'USD' && Math.abs(localAmtNum - amtNum) > 0.05);
+            let displayMainAmount = `${localSym}${localAmtNum.toFixed(2)}`;
             let displaySubAmount = '';
             
-            if (e.localCurrency !== 'USD') {
-                displaySubAmount = `<br><span style="font-size: 0.85rem; color: var(--secondary);">($${e.amount.toFixed(2)} USD @ ${(e.exchangeRate||1).toFixed(4)})</span>`;
+            if (e.localCurrency !== 'USD' || hasCurrencyMismatch) {
+                displaySubAmount = `<br><span style="font-size: 0.85rem; color: var(--secondary);">($${amtNum.toFixed(2)} USD @ ${(e.exchangeRate||1).toFixed(4)})</span>`;
             }
 
             if (e.splitType === 'percentage') {
@@ -2009,15 +2158,19 @@ export function updateUI() {
             const editingClass = isEditing ? 'is-editing' : '';
             let cardStyle = `background: linear-gradient(135deg, ${catInfo.bg}, rgba(255, 255, 255, 0.45)); border: 1px solid ${catInfo.color}30; border-left: 6px solid ${catInfo.color};`; 
             const ignoredClass = e.ignored ? 'ignored' : '';
+            const payerDisplay = e.payer
+                ? `<span style="color:${payerColor}; font-weight:800;" title="${escapeHTML(e.payer)}">${escapeHTML(shortName(e.payer))}</span>`
+                : `<span style="color: var(--danger); font-weight: 800;">⚠️ Missing</span>`;
 
             return `
             <div id="exp-row-${e.id}" class="expense-item ${ignoredClass} ${editingClass}" style="${cardStyle}">
                 <div class="expense-details">
                     <span style="color:${catInfo.color}; font-weight: 800; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;">${catInfo.icon} ${e.category}</span><br>
                     <strong style="font-size: 1.15rem; color: #0f172a; letter-spacing: -0.01em;">${escapeHTML(e.desc)}</strong>
-                    ${e.ignored ? '<span style="color: var(--danger); font-size: 0.75rem; font-weight: 800; margin-left: 6px; background: #fee2e2; padding: 2px 4px; border-radius: 4px;">IGNORED</span>' : ''}<br>
+                    ${e.ignored ? '<span style="color: var(--danger); font-size: 0.75rem; font-weight: 800; margin-left: 6px; background: #fee2e2; padding: 2px 4px; border-radius: 4px;">IGNORED</span>' : ''}
+                    ${hasCurrencyMismatch ? '<span style="color: var(--danger); font-size: 0.75rem; font-weight: 800; margin-left: 6px; background: #fee2e2; padding: 2px 5px; border-radius: 4px;">⚠️ CHECK CURRENCY</span>' : ''}<br>
                     <span style="font-size:0.9rem; color:var(--secondary); font-weight: 500;">
-                        ${formattedDate} • Paid by <span style="color:${payerColor}; font-weight:800;" title="${escapeHTML(e.payer)}">${escapeHTML(shortName(e.payer))}</span> • 👥 <strong>${e.involved.length}</strong> involved<br>
+                        ${formattedDate} • Paid by ${payerDisplay} • 👥 <strong>${e.involved.length}</strong> involved<br>
                         <div style="margin-top: 6px; padding-left: 8px; border-left: 2px solid rgba(226,232,240,0.8); font-size: 0.85rem; line-height: 1.4;">
                             <strong style="color: var(--text);">For:</strong> ${breakdownHtml}
                         </div>
@@ -2462,6 +2615,7 @@ window.updateSplitTypeUI = updateSplitTypeUI;
 window.handleEqualSplitInput = handleEqualSplitInput;
 window.calculateRemainingPercentage = calculateRemainingPercentage;
 window.updateFormCurrencyUI = updateFormCurrencyUI;
+window.handleFormCurrencyChange = handleFormCurrencyChange;
 window.refreshFormRate = refreshFormRate;
 window.handleFormTagInput = handleFormTagInput;
 window.selectTagForForm = selectTagForForm;

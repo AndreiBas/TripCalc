@@ -16,6 +16,7 @@ export const state = {
     secondaryCurrency: "", 
     currentExchangeRate: 1, 
     recentCurrencies: [],
+    currencyRates: {},
     currentSort: 'date-desc',
     isHeaderCollapsed: false,
     
@@ -63,12 +64,53 @@ export const state = {
     hasPendingCloudSync: typeof localStorage !== 'undefined' && localStorage.getItem('tripSplitter_hasPendingCloudSync') === 'true'
 };
 
+export function setPendingCloudSync(isPending) {
+    state.hasPendingCloudSync = Boolean(isPending);
+    if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('tripSplitter_hasPendingCloudSync', state.hasPendingCloudSync ? 'true' : 'false');
+        localStorage.removeItem('tripSplitter_pendingSync');
+    }
+}
+
+export function buildTripPayload(includeLastModified = true) {
+    const payload = {
+        tripName: state.tripName,
+        tripComment: state.tripComment,
+        participants: state.participants,
+        participantGroups: state.participantGroups,
+        expenses: state.expenses,
+        secondaryCurrency: state.secondaryCurrency,
+        currentExchangeRate: state.currentExchangeRate,
+        currencyRates: state.currencyRates || {},
+        currentSort: state.currentSort,
+        tripDays: state.tripDays,
+        showPerDay: state.showPerDay,
+        tripNotes: state.tripNotes,
+        tripNotesDelta: state.tripNotesDelta,
+        autoColorNotes: state.autoColorNotes,
+        isHeaderCollapsed: state.isHeaderCollapsed,
+        recentCurrencies: state.recentCurrencies,
+        defaultTags: state.defaultTags,
+        historyEnabled: state.historyEnabled
+    };
+    if (includeLastModified) {
+        payload.lastModified = state.localLastModified;
+    }
+    return payload;
+}
+
 export function repairLegacyData() {
     if (!Array.isArray(state.participants)) {
         state.participants = [];
     }
     if (typeof state.participantGroups === 'undefined' || state.participantGroups === null) {
         state.participantGroups = {};
+    }
+    if (!state.currencyRates || typeof state.currencyRates !== 'object' || Array.isArray(state.currencyRates)) {
+        state.currencyRates = {};
+    }
+    if (state.secondaryCurrency && isFinite(state.currentExchangeRate) && state.currentExchangeRate > 0 && !state.currencyRates[state.secondaryCurrency]) {
+        state.currencyRates[state.secondaryCurrency] = state.currentExchangeRate;
     }
     state.participants.forEach(p => { 
         if (!state.participantGroups[p]) state.participantGroups[p] = p; 
@@ -85,14 +127,30 @@ export function repairLegacyData() {
         if (!e.percentageShares) e.percentageShares = {}; 
         if (typeof e.notes === 'undefined') e.notes = ''; 
         if (!e.timestamp) e.timestamp = Date.now() + i; 
-        if (!e.localCurrency) e.localCurrency = 'USD';
-        if (!e.localAmount) e.localAmount = e.amount;
+        if (e.localAmount === undefined || e.localAmount === null || isNaN(Number(e.localAmount))) {
+            e.localAmount = e.amount;
+        }
+        const hasForeignMath = isFinite(e.exchangeRate) && e.exchangeRate > 0 && Math.abs(e.exchangeRate - 1) > 0.0001 &&
+            isFinite(e.localAmount) && isFinite(e.amount) && Math.abs(e.localAmount - e.amount) > 0.05 &&
+            Math.abs((e.localAmount / e.exchangeRate) - e.amount) <= Math.max(0.05, Math.abs(e.amount) * 0.01);
+        if (!e.localCurrency) {
+            if (hasForeignMath) {
+                const secRate = state.secondaryCurrency ? (state.currencyRates[state.secondaryCurrency] || state.currentExchangeRate) : 0;
+                if (state.secondaryCurrency && isFinite(secRate) && secRate > 0 && Math.abs(e.exchangeRate - secRate) / secRate <= 0.15) {
+                    e.localCurrency = state.secondaryCurrency;
+                } else {
+                    e.localCurrency = 'FX';
+                }
+            } else {
+                e.localCurrency = 'USD';
+            }
+        }
         if (!e.tags) e.tags = [];
         if (!e.date) e.date = new Date().toISOString().split('T')[0];
         
         // Fair currency lock repair for old data
-        if (!e.exchangeRate && e.localCurrency !== 'USD') {
-            e.exchangeRate = e.amount !== 0 ? (e.localAmount / e.amount) : 1;
+        if ((!e.exchangeRate || !isFinite(e.exchangeRate) || e.exchangeRate <= 0) && e.localCurrency !== 'USD') {
+            e.exchangeRate = (e.amount && e.amount !== 0) ? (e.localAmount / e.amount) : 1;
         }
         if (!isFinite(e.exchangeRate) || e.exchangeRate <= 0) {
             e.exchangeRate = 1;
@@ -118,6 +176,15 @@ export function repairLegacyData() {
         }
     });
 
+    const expensesByRecency = [...state.expenses].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    expensesByRecency.forEach(e => {
+        if (e.localCurrency && e.localCurrency !== 'USD' && e.localCurrency !== 'FX' && isFinite(e.exchangeRate) && e.exchangeRate > 0) {
+            if (!state.currencyRates[e.localCurrency]) {
+                state.currencyRates[e.localCurrency] = e.exchangeRate;
+            }
+        }
+    });
+
     if (!state.defaultTags || !Array.isArray(state.defaultTags)) {
         state.defaultTags = ['car', 'gas', 'flight', 'stay', 'grocery', 'restaurant'];
     } else {
@@ -132,37 +199,19 @@ export function saveState(skipAutoSync = false, skipHistorySnapshot = false) {
     const now = Date.now();
     state.localLastModified = now <= state.localLastModified ? state.localLastModified + 1 : now;
     
-    const payload = { 
-        tripName: state.tripName, 
-        tripComment: state.tripComment, 
-        participants: state.participants, 
-        participantGroups: state.participantGroups, 
-        expenses: state.expenses, 
-        secondaryCurrency: state.secondaryCurrency, 
-        currentExchangeRate: state.currentExchangeRate, 
-        currentSort: state.currentSort, 
-        tripDays: state.tripDays, 
-        showPerDay: state.showPerDay,
-        tripNotes: state.tripNotes, 
-        tripNotesDelta: state.tripNotesDelta, 
-        autoColorNotes: state.autoColorNotes, 
-        isHeaderCollapsed: state.isHeaderCollapsed, 
-        recentCurrencies: state.recentCurrencies,
-        defaultTags: state.defaultTags,
-        historyEnabled: state.historyEnabled,
-        lastModified: state.localLastModified
-    };
+    const payload = buildTripPayload(true);
 
-    localStorage.setItem('tripSplitterLatest', JSON.stringify(payload));
+    try {
+        localStorage.setItem('tripSplitterLatest', JSON.stringify(payload));
+    } catch (err) {
+        console.error("Failed to persist state to localStorage:", err);
+    }
 
     if (state.isOfflineMode) {
-        state.hasPendingCloudSync = true;
-        if (typeof localStorage !== 'undefined') {
-            localStorage.setItem('tripSplitter_hasPendingCloudSync', 'true');
-        }
-        const statusEl = document.getElementById('cloud-status');
+        setPendingCloudSync(true);
+        const statusEl = typeof document !== 'undefined' ? document.getElementById('cloud-status') : null;
         if (statusEl) {
-            statusEl.innerHTML = `<span style="color: var(--secondary); font-weight: 700;">📴 Offline (Saved locally)</span>`;
+            statusEl.innerHTML = `<span style="color: #d97706; font-weight: 700;">📴 Offline (Pending sync)</span>`;
         }
     } else if (typeof state.triggerCloudSync === 'function') {
         state.triggerCloudSync(skipAutoSync);
@@ -180,7 +229,12 @@ export function loadState() {
             state.participantGroups = data.participantGroups || {};
             state.expenses = data.expenses || [];
             state.secondaryCurrency = data.secondaryCurrency || "";
-            state.currentExchangeRate = data.currentExchangeRate || 1;
+            state.currentExchangeRate = (data.currentExchangeRate !== undefined && data.currentExchangeRate !== null && !isNaN(data.currentExchangeRate))
+                ? Number(data.currentExchangeRate)
+                : (state.secondaryCurrency ? 0 : 1);
+            state.currencyRates = (data.currencyRates && typeof data.currencyRates === 'object' && !Array.isArray(data.currencyRates))
+                ? data.currencyRates
+                : {};
             state.currentSort = data.currentSort || 'date-desc';
             state.tripDays = data.tripDays || 1;
             state.showPerDay = data.showPerDay || false;
@@ -196,6 +250,9 @@ export function loadState() {
             if (typeof localStorage !== 'undefined') {
                 state.isOfflineMode = localStorage.getItem('tripSplitter_isOfflineMode') === 'true';
                 state.hasPendingCloudSync = localStorage.getItem('tripSplitter_hasPendingCloudSync') === 'true';
+                if (localStorage.getItem('tripSplitter_pendingSync') === 'true') {
+                    setPendingCloudSync(true);
+                }
             }
 
             repairLegacyData();

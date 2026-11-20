@@ -1,5 +1,5 @@
 // Bump this version number every time you update your HTML/CSS/JS!
-const CACHE_NAME = 'trip-calc-cache-v54'; 
+const CACHE_NAME = 'trip-calc-cache-v55'; 
 const REPO_NAME = new URL(self.registration.scope).pathname.replace(/\/$/, '') || '';
 
 // ONLY put guaranteed local files here. Do NOT put external CDNs here.
@@ -51,8 +51,8 @@ self.addEventListener('activate', event => {
 
 // 3. Stale-While-Revalidate Fetch Strategy
 self.addEventListener('fetch', event => {
-  // Never try to cache Supabase database calls
-  if (event.request.url.includes('supabase.co')) {
+  // Never try to cache Supabase database calls or live exchange rate API responses
+  if (event.request.url.includes('supabase.co') || event.request.url.includes('currency-api')) {
     return;
   }
 

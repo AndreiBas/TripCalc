@@ -3,7 +3,7 @@ import { initNotesEditor } from './notes.js';
 import { initCalculatorFocusTracker, initCalculatorDraggable } from './calculator.js';
 import { initCalendarFocusTracker, initCalendarDraggable } from './calendar.js';
 import { applyHeaderState, updateUI, updateFormColor, syncStateToDOM } from './ui.js';
-import { updateCurrencySelectors } from './currency.js';
+import { updateCurrencySelectors, warmCurrencyRatesCache } from './currency.js';
 import { fetchCloudTripNames, updateSyncBtnState } from './db.js';
 import './export.js';
 import { loadHistoryLocal, restoreHistoryState } from './history.js';
@@ -14,7 +14,7 @@ function bootApp() {
     loadHistoryLocal();
     syncStateToDOM();
     applyHeaderState();
-    updateCurrencySelectors();
+    updateCurrencySelectors({ selectSecondary: true });
     updateUI();
     updateFormColor();
     initNotesEditor();
@@ -24,6 +24,7 @@ function bootApp() {
     initCalendarDraggable();
     fetchCloudTripNames();
     updateSyncBtnState();
+    warmCurrencyRatesCache(false);
 }
 
 // Run boot sequence when DOM is ready
@@ -48,7 +49,12 @@ document.addEventListener('visibilitychange', () => {
 });
 
 window.addEventListener('focus', debouncedFetch);
-window.addEventListener('online', debouncedFetch);
+window.addEventListener('online', () => {
+    debouncedFetch();
+    if (!state.isOfflineMode) {
+        warmCurrencyRatesCache(false);
+    }
+});
 
 window.addEventListener('beforeunload', function (e) {
     if (state.isNotesDirty || state.cloudSyncTimeout) {

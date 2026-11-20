@@ -1,6 +1,8 @@
-import { state, saveState, repairLegacyData } from './state.js';
+import { state, saveState, repairLegacyData, buildTripPayload, setPendingCloudSync } from './state.js';
 import { CATEGORIES } from './config.js';
-import { updateCurrencySelectors } from './currency.js';
+import { updateCurrencySelectors, warmCurrencyRatesCache } from './currency.js';
+
+let isSyncingOffline = false;
 
 // Get clean dependencies from UI dynamically to avoid circular import issues
 let uiModule = null;
@@ -17,7 +19,10 @@ state.triggerCloudSync = (skipAutoSync = false) => {
         const el = document.getElementById('cloud-status');
         if (el) el.innerText = "⏳ Syncing...";
         clearTimeout(state.cloudSyncTimeout);
-        state.cloudSyncTimeout = setTimeout(silentCloudSave, 1500);
+        state.cloudSyncTimeout = setTimeout(() => {
+            state.cloudSyncTimeout = null;
+            silentCloudSave();
+        }, 1500);
     }
 };
 
@@ -155,11 +160,18 @@ export function updateOfflineUI() {
     }
 }
 
-export async function toggleOfflineMode(forceVal = null) {
+export async function toggleOfflineMode(forceVal = null, options = {}) {
+    const { skipPendingSync = false } = options;
     const newMode = (forceVal !== null) ? !!forceVal : !state.isOfflineMode;
     state.isOfflineMode = newMode;
     if (typeof localStorage !== 'undefined') {
         localStorage.setItem('tripSplitter_isOfflineMode', newMode ? 'true' : 'false');
+    }
+
+    if (state.isOfflineMode && state.cloudSyncTimeout) {
+        clearTimeout(state.cloudSyncTimeout);
+        state.cloudSyncTimeout = null;
+        setPendingCloudSync(true);
     }
 
     updateOfflineUI();
@@ -167,99 +179,136 @@ export async function toggleOfflineMode(forceVal = null) {
 
     if (state.isOfflineMode) {
         clearTimeout(state.cloudSyncTimeout);
+        state.cloudSyncTimeout = null;
         if (UI && typeof UI.showToast === 'function') {
             UI.showToast('✈️ Offline Mode enabled. All changes saved locally.', 'save');
         }
     } else {
         // Switched to Online!
-        if (state.hasPendingCloudSync) {
-            if (UI && typeof UI.showToast === 'function') {
-                UI.showToast('📶 Reconnected! Syncing offline changes to cloud...', 'save');
+        warmCurrencyRatesCache(true).catch(() => {});
+        if (!skipPendingSync) {
+            if (state.hasPendingCloudSync) {
+                if (UI && typeof UI.showToast === 'function') {
+                    UI.showToast('📶 Reconnected! Syncing offline changes to cloud...', 'save');
+                }
+                await syncPendingOfflineChanges();
+                await fetchCloudTripNames({ skipPendingSyncCheck: true });
+            } else {
+                if (UI && typeof UI.showToast === 'function') {
+                    UI.showToast('📶 Online mode active. Real-time auto-sync resumed.', 'save');
+                }
+                fetchCloudTripNames();
             }
-            await syncPendingOfflineChanges();
-        } else {
-            if (UI && typeof UI.showToast === 'function') {
-                UI.showToast('📶 Online mode active. Real-time auto-sync resumed.', 'save');
-            }
-            fetchCloudTripNames();
         }
     }
 }
 
 export async function syncPendingOfflineChanges() {
-    if (state.isOfflineMode) return;
+    if (state.isOfflineMode || !state.hasPendingCloudSync || isSyncingOffline) return false;
     const key = await getValidCloudKey(true);
     if (!key) {
         const statusEl = document.getElementById('cloud-status');
         if (statusEl) statusEl.innerHTML = `<span style="color: var(--danger); font-weight: 700;">🔒 Unlock cloud to sync offline changes</span>`;
-        return;
+        return false;
     }
     const client = getSupabaseClient();
-    if (!client) return;
+    if (!client) return false;
 
     const statusEl = document.getElementById('cloud-status');
     if (statusEl) statusEl.innerText = "⏳ Syncing offline changes...";
 
-    const payloadStr = JSON.stringify({ 
-        tripName: state.tripName, 
-        tripComment: state.tripComment, 
-        participants: state.participants, 
-        participantGroups: state.participantGroups, 
-        expenses: state.expenses, 
-        secondaryCurrency: state.secondaryCurrency, 
-        currentExchangeRate: state.currentExchangeRate, 
-        currentSort: state.currentSort, 
-        tripDays: state.tripDays, 
-        showPerDay: state.showPerDay, 
-        tripNotes: state.tripNotes, 
-        tripNotesDelta: state.tripNotesDelta, 
-        autoColorNotes: state.autoColorNotes, 
-        isHeaderCollapsed: state.isHeaderCollapsed, 
-        recentCurrencies: state.recentCurrencies,
-        defaultTags: state.defaultTags,
-        historyEnabled: state.historyEnabled,
-        lastModified: state.localLastModified 
-    });
-
+    isSyncingOffline = true;
     try {
+        // Pre-upload conflict check on auto_trip to prevent blind overwrites
+        const checkTimeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Offline sync conflict check timed out')), 8000)
+        );
+        const { data: remoteRow, error: checkError } = await Promise.race([
+            client.from('trip_sync').select('trip_data').eq('id', 'auto_trip').maybeSingle(),
+            checkTimeoutPromise
+        ]);
+        if (checkError) throw checkError;
+
+        if (remoteRow && remoteRow.trip_data) {
+            let remoteParsed = typeof remoteRow.trip_data === 'string' ? JSON.parse(remoteRow.trip_data) : remoteRow.trip_data;
+            if (remoteParsed && remoteParsed.ciphertext) {
+                const decryptedRemote = await decryptData(key, remoteParsed);
+                remoteParsed = decryptedRemote ? JSON.parse(decryptedRemote) : null;
+            }
+            if (remoteParsed && remoteParsed.tripName) {
+                const remoteTs = remoteParsed.lastModified || 0;
+                if (remoteParsed.tripName !== state.tripName) {
+                    const shouldOverwrite = confirm(`⚠️ Cloud Auto-Sync currently holds a different trip ("${remoteParsed.tripName}").\n\nOverwrite Cloud Auto-Sync with your offline changes for "${state.tripName}"?`);
+                    if (!shouldOverwrite) {
+                        if (statusEl) statusEl.innerHTML = `<span style="color: #d97706; font-weight: 700;">⚠️ Sync paused (Trip mismatch)</span>`;
+                        return false;
+                    }
+                } else if (remoteTs > state.localLastModified) {
+                    const shouldOverwrite = confirm(`⚠️ Cloud Auto-Sync has a newer version of "${state.tripName}".\n\nClick OK to overwrite cloud with your local offline edits, or Cancel to keep the cloud version intact.`);
+                    if (!shouldOverwrite) {
+                        state.cloudTripNames['auto_trip'] = remoteParsed.tripName;
+                        state.cloudTimestamps['auto_trip'] = remoteTs;
+                        compareVersions();
+                        if (statusEl) statusEl.innerHTML = `<span style="color: #d97706; font-weight: 700;">⚠️ Cloud has newer version</span>`;
+                        return false;
+                    }
+                }
+            }
+        }
+
+        const payloadStr = JSON.stringify(buildTripPayload(true));
         const encryptedData = await encryptData(key, payloadStr);
         const accessHash = await generateAccessHash(key);
-        
-        const { error } = await client.rpc('save_secure_trip', {
-            p_id: 'auto_trip',
-            p_hash: accessHash,
-            p_data: encryptedData
-        });
 
-        if (error) {
-            if (statusEl) statusEl.innerText = "❌ Auto-Sync Failed (Will retry)";
-        } else {
-            state.hasPendingCloudSync = false;
-            if (typeof localStorage !== 'undefined') {
-                localStorage.setItem('tripSplitter_hasPendingCloudSync', 'false');
-            }
-            state.cloudTripNames['auto_trip'] = state.tripName;
-            state.cloudTimestamps['auto_trip'] = state.localLastModified;
-            const autoEl = document.getElementById('auto-cloud-name');
-            if (autoEl) autoEl.innerText = state.tripName;
-            compareVersions();
-            if (statusEl) {
-                const now = new Date();
-                statusEl.innerHTML = `✅ Secured <span class="tabular-nums">${now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>`;
-                statusEl.style.color = "var(--green)";
-                setTimeout(() => { statusEl.style.color = "var(--secondary)"; }, 5000);
-            }
-            const UI = await getUI();
-            if (UI && typeof UI.showToast === 'function') {
-                UI.showToast('✅ All offline changes synced to Auto-Sync cloud slot!', 'save');
-            }
-            if (!state.cloudTripNames['manual_trip']) {
-                fetchCloudTripNames();
-            }
-            saveHistoryToCloud('auto_trip');
+        const saveTimeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Offline sync timed out')), 8000)
+        );
+        const { error } = await Promise.race([
+            client.rpc('save_secure_trip', {
+                p_id: 'auto_trip',
+                p_hash: accessHash,
+                p_data: encryptedData
+            }),
+            saveTimeoutPromise
+        ]);
+
+        if (error) throw error;
+
+        setPendingCloudSync(false);
+        state.cloudTripNames['auto_trip'] = state.tripName;
+        state.cloudTimestamps['auto_trip'] = state.localLastModified;
+        const autoEl = document.getElementById('auto-cloud-name');
+        if (autoEl) autoEl.innerText = state.tripName;
+        compareVersions();
+        if (statusEl) {
+            const now = new Date();
+            statusEl.innerHTML = `✅ Secured <span class="tabular-nums">${now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>`;
+            statusEl.style.color = "var(--green)";
+            setTimeout(() => { statusEl.style.color = "var(--secondary)"; }, 5000);
         }
+        const UI = await getUI();
+        if (UI && typeof UI.showToast === 'function') {
+            UI.showToast('✅ All offline changes synced to Auto-Sync cloud slot!', 'save');
+        }
+        if (!state.cloudTripNames['manual_trip']) {
+            fetchCloudTripNames({ skipPendingSyncCheck: true });
+        }
+        saveHistoryToCloud('auto_trip');
+        return true;
     } catch (err) {
         console.error("Sync pending offline changes failed:", err);
+        setPendingCloudSync(true);
+        if (statusEl) {
+            statusEl.innerText = "❌ Offline Sync Failed (Will retry)";
+            statusEl.style.color = "var(--danger)";
+        }
+        const UI = await getUI();
+        if (UI && typeof UI.showToast === 'function') {
+            UI.showToast('❌ Offline sync failed. Changes remain saved locally.', 'delete');
+        }
+        return false;
+    } finally {
+        isSyncingOffline = false;
     }
 }
 
@@ -621,13 +670,14 @@ export function compareVersions() {
     checkSlot('auto_trip', 'cloud-load-auto-btn', 'Load Last');
 }
 
-export async function fetchCloudTripNames() {
+export async function fetchCloudTripNames(options = {}) {
+    const { skipPendingSyncCheck = false } = options;
     if (state.isOfflineMode) {
         updateOfflineUI();
         return;
     }
-    if (state.hasPendingCloudSync) {
-        syncPendingOfflineChanges();
+    if (!skipPendingSyncCheck && state.hasPendingCloudSync) {
+        await syncPendingOfflineChanges();
     }
     const client = getSupabaseClient(); 
     if (!client) return; 
@@ -702,7 +752,8 @@ export async function fetchCloudTripNames() {
     compareVersions();
 
     // Offline reconciliation: if local lastModified is newer than cloud auto_trip, trigger sync up to cloud
-    if (state.cloudTripNames['auto_trip'] !== "🔒 Locked (Wrong PIN?)" && 
+    if (!state.isOfflineMode && !isSyncingOffline &&
+        state.cloudTripNames['auto_trip'] !== "🔒 Locked (Wrong PIN?)" && 
         state.cloudTripNames['auto_trip'] !== "🔒 Locked" &&
         state.cloudTripNames['auto_trip'] === state.tripName && 
         state.localLastModified > (state.cloudTimestamps['auto_trip'] || 0)) {
@@ -729,26 +780,7 @@ export async function saveToSupabase(targetId) {
     const client = getSupabaseClient(); 
     if (!client) return;
 
-    const payloadStr = JSON.stringify({ 
-        tripName: state.tripName, 
-        tripComment: state.tripComment, 
-        participants: state.participants, 
-        participantGroups: state.participantGroups, 
-        expenses: state.expenses, 
-        secondaryCurrency: state.secondaryCurrency, 
-        currentExchangeRate: state.currentExchangeRate, 
-        currentSort: state.currentSort, 
-        tripDays: state.tripDays, 
-        showPerDay: state.showPerDay, 
-        tripNotes: state.tripNotes, 
-        tripNotesDelta: state.tripNotesDelta, 
-        autoColorNotes: state.autoColorNotes, 
-        isHeaderCollapsed: state.isHeaderCollapsed, 
-        recentCurrencies: state.recentCurrencies,
-        defaultTags: state.defaultTags,
-        historyEnabled: state.historyEnabled,
-        lastModified: state.localLastModified 
-    });
+    const payloadStr = JSON.stringify(buildTripPayload(true));
     
     const btnId = targetId === 'manual_trip' ? 'cloud-save-btn-1' : (targetId === 'manual_trip_2' ? 'cloud-save-btn-2' : 'cloud-save-btn-3');
     const btn = document.getElementById(btnId); 
@@ -781,32 +813,14 @@ export async function saveToSupabase(targetId) {
 }
 
 export async function silentCloudSave() {
+    state.cloudSyncTimeout = null;
     if (state.isOfflineMode) return;
     const key = await getValidCloudKey(true); 
     if (!key) return;
     const client = getSupabaseClient(); 
     if (!client) return;
     
-    const payloadStr = JSON.stringify({ 
-        tripName: state.tripName, 
-        tripComment: state.tripComment, 
-        participants: state.participants, 
-        participantGroups: state.participantGroups, 
-        expenses: state.expenses, 
-        secondaryCurrency: state.secondaryCurrency, 
-        currentExchangeRate: state.currentExchangeRate, 
-        currentSort: state.currentSort, 
-        tripDays: state.tripDays, 
-        showPerDay: state.showPerDay, 
-        tripNotes: state.tripNotes, 
-        tripNotesDelta: state.tripNotesDelta, 
-        autoColorNotes: state.autoColorNotes, 
-        isHeaderCollapsed: state.isHeaderCollapsed, 
-        recentCurrencies: state.recentCurrencies,
-        defaultTags: state.defaultTags,
-        historyEnabled: state.historyEnabled,
-        lastModified: state.localLastModified 
-    });
+    const payloadStr = JSON.stringify(buildTripPayload(true));
     const statusEl = document.getElementById('cloud-status');
     
     try {
@@ -826,13 +840,13 @@ export async function silentCloudSave() {
         ]).catch(err => ({ error: err }));
         
         if (error) { 
-            state.hasPendingCloudSync = true;
-            localStorage.setItem('tripSplitter_pendingSync', 'true');
+            setPendingCloudSync(true);
             if(statusEl) {
                 statusEl.innerText = "⚠️ Offline (Saved Locally)";
                 statusEl.style.color = "var(--warning)";
             }
         } else { 
+            setPendingCloudSync(false);
             state.cloudTripNames['auto_trip'] = state.tripName;
             state.cloudTimestamps['auto_trip'] = state.localLastModified;
             const autoEl = document.getElementById('auto-cloud-name');
@@ -852,8 +866,11 @@ export async function silentCloudSave() {
 
 export async function loadFromSupabase(targetId) {
     if (state.isOfflineMode) {
-        if (confirm("Offline Mode is currently active. Switch to Online Mode to load from the cloud?")) {
-            await toggleOfflineMode(false);
+        const msg = state.hasPendingCloudSync
+            ? "Offline Mode is active with unsynced local changes. Switch Online and load from cloud? (Your local unsynced changes will be replaced and will NOT overwrite Auto-Sync.)"
+            : "Offline Mode is currently active. Switch to Online Mode to load from the cloud?";
+        if (confirm(msg)) {
+            await toggleOfflineMode(false, { skipPendingSync: true });
         } else {
             return;
         }
@@ -901,7 +918,12 @@ export async function loadFromSupabase(targetId) {
             state.participantGroups = parsedData.participantGroups || {};
             state.expenses = parsedData.expenses || []; 
             state.secondaryCurrency = parsedData.secondaryCurrency || "";
-            state.currentExchangeRate = parsedData.currentExchangeRate || 1; 
+            state.currentExchangeRate = (parsedData.currentExchangeRate !== undefined && parsedData.currentExchangeRate !== null && !isNaN(parsedData.currentExchangeRate))
+                ? Number(parsedData.currentExchangeRate)
+                : (state.secondaryCurrency ? 0 : 1);
+            state.currencyRates = (parsedData.currencyRates && typeof parsedData.currencyRates === 'object' && !Array.isArray(parsedData.currencyRates))
+                ? parsedData.currencyRates
+                : {};
             state.currentSort = parsedData.currentSort || 'date-desc';
             state.tripDays = parsedData.tripDays || 1; 
             state.showPerDay = parsedData.showPerDay || false;
@@ -925,8 +947,9 @@ export async function loadFromSupabase(targetId) {
             // Sync database data back to UI elements
             UI.syncStateToDOM();
             
+            setPendingCloudSync(false);
             saveState(true); 
-            updateCurrencySelectors(); 
+            updateCurrencySelectors({ selectSecondary: true }); 
             UI.updateUI();  
             UI.cancelEdit();
             compareVersions();
@@ -954,7 +977,7 @@ function historySlotId(id) {
 }
 
 export async function saveHistoryToCloud(slotId = 'auto_trip') {
-    if (!state.historyEnabled) return;
+    if (!state.historyEnabled || state.isOfflineMode) return;
     const key = await getValidCloudKey(true); 
     if (!key) return;
     const client = getSupabaseClient();
@@ -980,7 +1003,7 @@ export async function saveHistoryToCloud(slotId = 'auto_trip') {
 }
 
 export async function loadHistoryFromCloud(slotId) {
-    if (!state.historyEnabled) return;
+    if (!state.historyEnabled || state.isOfflineMode) return;
     const key = await getValidCloudKey(true);
     if (!key) return;
     const client = getSupabaseClient();
@@ -1062,26 +1085,7 @@ export async function saveFileUniversal(content, fileName, mimeType, fileHandle 
 }
 
 export function exportTrip() {
-    const payload = JSON.stringify({ 
-        tripName: state.tripName, 
-        tripComment: state.tripComment, 
-        participants: state.participants, 
-        participantGroups: state.participantGroups, 
-        expenses: state.expenses, 
-        secondaryCurrency: state.secondaryCurrency, 
-        currentExchangeRate: state.currentExchangeRate, 
-        currentSort: state.currentSort, 
-        tripDays: state.tripDays, 
-        showPerDay: state.showPerDay, 
-        tripNotes: state.tripNotes, 
-        tripNotesDelta: state.tripNotesDelta, 
-        autoColorNotes: state.autoColorNotes, 
-        isHeaderCollapsed: state.isHeaderCollapsed, 
-        recentCurrencies: state.recentCurrencies,
-        defaultTags: state.defaultTags,
-        historyEnabled: state.historyEnabled,
-        lastModified: state.localLastModified 
-    });
+    const payload = JSON.stringify(buildTripPayload(true));
     const fileName = state.tripName.replace(/\s+/g, '_') + ".json";
     saveFileUniversal(payload, fileName, 'application/json');
 }
@@ -1104,26 +1108,7 @@ export async function exportSecureTrip() {
     const password = prompt("⚠️ Secure Save ⚠️\nEnter a password to encrypt this trip file.\n\nWARNING: If you forget this password, your data cannot be recovered.");
     if (!password) return; 
     
-    const payload = JSON.stringify({ 
-        tripName: state.tripName, 
-        tripComment: state.tripComment, 
-        participants: state.participants, 
-        participantGroups: state.participantGroups, 
-        expenses: state.expenses, 
-        secondaryCurrency: state.secondaryCurrency, 
-        currentExchangeRate: state.currentExchangeRate, 
-        currentSort: state.currentSort, 
-        tripDays: state.tripDays, 
-        showPerDay: state.showPerDay, 
-        tripNotes: state.tripNotes, 
-        tripNotesDelta: state.tripNotesDelta, 
-        autoColorNotes: state.autoColorNotes, 
-        isHeaderCollapsed: state.isHeaderCollapsed, 
-        recentCurrencies: state.recentCurrencies,
-        defaultTags: state.defaultTags,
-        historyEnabled: state.historyEnabled,
-        lastModified: state.localLastModified 
-    });
+    const payload = JSON.stringify(buildTripPayload(true));
     
     try {
         const encryptedData = await encryptData(password, payload);
@@ -1158,7 +1143,12 @@ export async function importTrip(e) {
             state.participantGroups = parsedData.participantGroups || {};
             state.expenses = parsedData.expenses || []; 
             state.secondaryCurrency = parsedData.secondaryCurrency || "";
-            state.currentExchangeRate = parsedData.currentExchangeRate || 1; 
+            state.currentExchangeRate = (parsedData.currentExchangeRate !== undefined && parsedData.currentExchangeRate !== null && !isNaN(parsedData.currentExchangeRate))
+                ? Number(parsedData.currentExchangeRate)
+                : (state.secondaryCurrency ? 0 : 1);
+            state.currencyRates = (parsedData.currencyRates && typeof parsedData.currencyRates === 'object' && !Array.isArray(parsedData.currencyRates))
+                ? parsedData.currencyRates
+                : {};
             state.currentSort = parsedData.currentSort || 'date-desc';
             state.tripDays = parsedData.tripDays || 1; 
             state.showPerDay = parsedData.showPerDay || false;
@@ -1182,7 +1172,7 @@ export async function importTrip(e) {
             UI.syncStateToDOM();
             
             saveState(true); 
-            updateCurrencySelectors(); 
+            updateCurrencySelectors({ selectSecondary: true }); 
             UI.updateUI(); 
             UI.cancelEdit();
             

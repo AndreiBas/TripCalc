@@ -1,28 +1,9 @@
-import { state, saveState, repairLegacyData } from './state.js';
+import { state, saveState, repairLegacyData, buildTripPayload } from './state.js';
+import { updateCurrencySelectors } from './currency.js';
 
 function formatLabel(date) {
     return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ', ' + 
            date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-}
-
-function buildPayload() {
-    return {
-        tripName: state.tripName,
-        tripComment: state.tripComment,
-        participants: state.participants,
-        participantGroups: state.participantGroups,
-        expenses: state.expenses,
-        secondaryCurrency: state.secondaryCurrency,
-        currentExchangeRate: state.currentExchangeRate,
-        currentSort: state.currentSort,
-        tripDays: state.tripDays,
-        showPerDay: state.showPerDay,
-        tripNotes: state.tripNotes,
-        tripNotesDelta: state.tripNotesDelta,
-        autoColorNotes: state.autoColorNotes,
-        isHeaderCollapsed: state.isHeaderCollapsed,
-        defaultTags: state.defaultTags
-    };
 }
 
 // Track which cloud slot is currently active so history saves to the right place
@@ -36,9 +17,12 @@ let isApplyingSnapshot = false;
 
 let historyCloudSyncTimeout = null;
 function scheduleHistoryCloudSync() {
+    if (state.isOfflineMode) return;
     clearTimeout(historyCloudSyncTimeout);
     historyCloudSyncTimeout = setTimeout(() => {
-        import('./db.js').then(DB => DB.saveHistoryToCloud(currentSlotId));
+        if (!state.isOfflineMode) {
+            import('./db.js').then(DB => DB.saveHistoryToCloud(currentSlotId));
+        }
     }, 1500);
 }
 
@@ -54,7 +38,7 @@ export function pushHistorySnapshot() {
     if (isApplyingSnapshot) return;  // Guard: don't snapshot during a restore
     const savedAt = Date.now();
     
-    const currentPayload = structuredClone(buildPayload());
+    const currentPayload = structuredClone(buildTripPayload(false));
     if (state.historyStack.length > 0) {
         const lastPayload = state.historyStack[state.historyStack.length - 1].payload;
         if (JSON.stringify(lastPayload) === JSON.stringify(currentPayload)) return;
@@ -80,7 +64,13 @@ export async function restoreHistoryState(index) {
     state.participantGroups = payload.participantGroups || {};
     state.expenses = payload.expenses || [];
     state.secondaryCurrency = payload.secondaryCurrency || "";
-    state.currentExchangeRate = payload.currentExchangeRate || 1;
+    state.currentExchangeRate = (payload.currentExchangeRate !== undefined && payload.currentExchangeRate !== null)
+        ? payload.currentExchangeRate
+        : (state.secondaryCurrency ? 0 : 1);
+    state.recentCurrencies = payload.recentCurrencies || [];
+    state.currencyRates = (payload.currencyRates && typeof payload.currencyRates === 'object' && !Array.isArray(payload.currencyRates))
+        ? payload.currencyRates
+        : {};
     state.currentSort = payload.currentSort || 'date-desc';
     state.tripDays = payload.tripDays || 1;
     state.showPerDay = payload.showPerDay || false;
@@ -93,12 +83,13 @@ export async function restoreHistoryState(index) {
     repairLegacyData();
     
     isApplyingSnapshot = true;  // Prevent recursive snapshot
-    saveState(true, true); 
+    saveState(false, true); 
     isApplyingSnapshot = false;
     
     const UI = await import('./ui.js');
     UI.applyHeaderState();
     UI.syncStateToDOM(); 
+    updateCurrencySelectors({ selectSecondary: true });
     UI.updateUI(); 
     UI.cancelEdit();
     UI.renderHistoryUI();
