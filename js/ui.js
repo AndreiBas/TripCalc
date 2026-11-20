@@ -1,6 +1,6 @@
 import { state, saveState, loadState, getLocalDateString, generateTripId, setPendingCloudSync, setUnsyncedLocalData, setLastSyncedHash } from './state.js';
 import { CATEGORIES, COLORS, TAG_COLORS, CURRENCY_SYMBOLS } from './config.js';
-import { formatMoney, getPerDayText, getPerDayTextSmall, fetchExchangeRate, fetchRateOnly, updateCurrencySelectors, getCachedRate, ensureCurrencyOption, recordRecentCurrency, resolveCurrencyCode } from './currency.js';
+import { formatMoney, getPerDayText, getPerDayTextSmall, fetchExchangeRate, fetchRateOnly, updateCurrencySelectors, getCachedRate, ensureCurrencyOption, recordRecentCurrency } from './currency.js';
 
 // --- HELPERS ---
 export function escapeHTML(str) {
@@ -1255,9 +1255,7 @@ export function saveExpense() {
     const notes = document.getElementById('exp-notes').value.trim();
     const date = document.getElementById('exp-date').value;
     const localAmount = parseFloat(document.getElementById('exp-amount').value);
-    const rawCurrencyInput = document.getElementById('exp-currency').value;
-    const resolvedCur = resolveCurrencyCode(rawCurrencyInput);
-    const localCurrency = resolvedCur || rawCurrencyInput.trim().toUpperCase();
+    const localCurrency = (document.getElementById('exp-currency')?.value || 'USD').trim().toUpperCase();
     const payer = document.getElementById('exp-payer').value;
     const splitType = document.getElementById('exp-split-type').value;
     
@@ -1327,11 +1325,6 @@ export function saveExpense() {
     if (!localCurrency || localCurrency === 'FX' || (localCurrency !== 'USD' && !/^[A-Z0-9]{3}$/.test(localCurrency))) {
         alert("Please select a valid currency (e.g., USD or a 3-letter currency code like EUR) before saving.");
         return;
-    }
-    const expCurInput = document.getElementById('exp-currency');
-    if (expCurInput) {
-        expCurInput.value = localCurrency;
-        if (expCurInput.dataset) expCurInput.dataset.committedCurrency = localCurrency;
     }
 
     let rateToUse = 1;
@@ -1406,6 +1399,7 @@ export function saveExpense() {
         }
         calculateRemainingPercentage();
         updateFormColor();
+        updateCurrencySelectors({ selectSecondary: false });
         updateFormCurrencyUI({ forceRefreshRate: true });
         showToast("Activity added!", 'create');
     }
@@ -1435,7 +1429,6 @@ export function editExpense(id) {
     const expCurEl = document.getElementById('exp-currency');
     ensureCurrencyOption(expCurEl, targetCur);
     expCurEl.value = targetCur;
-    if (expCurEl && expCurEl.dataset) expCurEl.dataset.committedCurrency = targetCur;
     const rateInput = document.getElementById('exp-exchange-rate');
     if (targetCur !== 'USD') {
         const expRate = (isFinite(exp.exchangeRate) && exp.exchangeRate > 0) ? exp.exchangeRate : getCachedRate(targetCur);

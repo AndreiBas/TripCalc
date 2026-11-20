@@ -81,6 +81,15 @@ export function recordRecentCurrency(code) {
     state.recentCurrencies = next.slice(0, MAX_RECENT_CURRENCIES);
 }
 
+export function getActivityCurrencies() {
+    const recents = getRecentCurrencies();
+    const sec = String(state.secondaryCurrency || '').trim().toUpperCase();
+    if (sec && sec !== 'USD' && sec !== 'FX' && !recents.includes(sec)) {
+        return [sec, ...recents].slice(0, MAX_RECENT_CURRENCIES);
+    }
+    return recents;
+}
+
 export function resolveCurrencyCode(rawVal) {
     const inputVal = String(rawVal || '').trim().toUpperCase();
     if (inputVal === '') return '';
@@ -315,14 +324,18 @@ export function updateCurrencySelectors(options = {}) {
 
     const currExpVal = expSelector.value;
     const currViewVal = viewSelector.value;
+    const latestCurrencies = getActivityCurrencies();
     let expHtml = `<option value="USD">USD</option>`;
+    latestCurrencies.forEach(code => {
+        const safeCode = escapePickerHtml(code);
+        expHtml += `<option value="${safeCode}">${safeCode}</option>`;
+    });
     let viewHtml = `<option value="USD">🇺🇸 USD ($)</option>`;
     
     if (state.secondaryCurrency) {
         const sym = CURRENCY_SYMBOLS[state.secondaryCurrency] || state.secondaryCurrency;
         const currInfo = ALL_CURRENCIES.find(c => c.code === state.secondaryCurrency);
         const flag = currInfo ? currInfo.flag : '🌍';
-        expHtml += `<option value="${state.secondaryCurrency}">${state.secondaryCurrency}</option>`;
         viewHtml += `<option value="${state.secondaryCurrency}">${flag} ${state.secondaryCurrency} (${sym})</option>`;
         viewContainer.style.display = 'flex';
         
@@ -358,8 +371,9 @@ export function updateCurrencySelectors(options = {}) {
     if (state.editingExpenseId) {
         const editingExp = (state.expenses || []).find(e => e.id === state.editingExpenseId);
         preserveCur = normalizedCurrExp || editingExp?.localCurrency || 'USD';
-        if (preserveCur && preserveCur !== 'USD' && preserveCur !== state.secondaryCurrency) {
-            expHtml += `<option value="${preserveCur}">${preserveCur}</option>`;
+        if (preserveCur && preserveCur !== 'USD' && !latestCurrencies.includes(preserveCur)) {
+            const safePreserve = escapePickerHtml(preserveCur);
+            expHtml += `<option value="${safePreserve}">${safePreserve}</option>`;
         }
     }
 
@@ -368,20 +382,19 @@ export function updateCurrencySelectors(options = {}) {
         nextExpCur = preserveCur;
     } else if (selectSecondary) {
         nextExpCur = state.secondaryCurrency || 'USD';
-    } else if (/^[A-Z0-9]{3}$/.test(normalizedCurrExp) && normalizedCurrExp !== 'FX') {
+    } else if (normalizedCurrExp === 'USD' || latestCurrencies.includes(normalizedCurrExp)) {
         nextExpCur = normalizedCurrExp;
+    } else {
+        nextExpCur = state.secondaryCurrency || 'USD';
     }
 
-    if (expSelector.tagName === 'SELECT') {
-        expSelector.innerHTML = expHtml;
+    expSelector.innerHTML = expHtml;
+    if (state.editingExpenseId) {
         ensureCurrencyOption(expSelector, nextExpCur);
     }
     viewSelector.innerHTML = viewHtml;
 
     expSelector.value = nextExpCur;
-    if (expSelector.dataset) {
-        expSelector.dataset.committedCurrency = expSelector.value;
-    }
 
     if (state.secondaryCurrency && currViewVal === state.secondaryCurrency) viewSelector.value = state.secondaryCurrency;
     
@@ -453,14 +466,6 @@ export function quickConvertNotes(source) {
 // --- Currency Picker Logic ---
 let pickerEl = null;
 let pickerListenersAttached = false;
-let activePickerTarget = 'global'; // 'global' | 'expense'
-
-function getActivePickerInput() {
-    if (activePickerTarget === 'expense') {
-        return document.getElementById('exp-currency');
-    }
-    return document.getElementById('global-currency');
-}
 
 function escapePickerHtml(str) {
     return String(str ?? '')
@@ -484,18 +489,12 @@ function ensureCurrencyPicker() {
         pickerListenersAttached = true;
         const handleOutside = (e) => {
             if (!pickerEl || !pickerEl.classList.contains('show')) return;
-            const activeInput = getActivePickerInput();
-            if (pickerEl.contains(e.target) || e.target === activeInput) return;
+            const globalInput = document.getElementById('global-currency');
+            if (pickerEl.contains(e.target) || e.target === globalInput) return;
 
-            const prevTarget = activePickerTarget;
             hideCurrencyPicker();
-            if (prevTarget === 'global') {
-                const globalInput = document.getElementById('global-currency');
-                if (globalInput && globalInput.value.trim().toUpperCase() !== (state.secondaryCurrency || "")) {
-                    handleCurrencyChange();
-                }
-            } else if (prevTarget === 'expense') {
-                commitExpCurrencyInput();
+            if (globalInput && globalInput.value.trim().toUpperCase() !== (state.secondaryCurrency || "")) {
+                handleCurrencyChange();
             }
         };
         if (typeof window !== 'undefined' && window.PointerEvent) {
@@ -512,7 +511,7 @@ function ensureCurrencyPicker() {
 
 export function positionCurrencyPicker() {
     if (!pickerEl || !pickerEl.classList.contains('show')) return;
-    const inputEl = getActivePickerInput();
+    const inputEl = document.getElementById('global-currency');
     if (!inputEl) return;
 
     const rect = inputEl.getBoundingClientRect();
@@ -544,26 +543,9 @@ export function showCurrencyPicker() {
     const inputEl = document.getElementById('global-currency');
     if (!inputEl) return;
 
-    activePickerTarget = 'global';
     ensureCurrencyPicker();
     inputEl.select();
     renderCurrencyPicker(inputEl.value === state.secondaryCurrency ? '' : inputEl.value);
-    pickerEl.classList.add('show');
-    positionCurrencyPicker();
-}
-
-export function showExpCurrencyPicker() {
-    const inputEl = document.getElementById('exp-currency');
-    if (!inputEl) return;
-
-    activePickerTarget = 'expense';
-    ensureCurrencyPicker();
-    const currNormalized = inputEl.value.trim().toUpperCase();
-    if (inputEl.dataset && !inputEl.dataset.committedCurrency) {
-        inputEl.dataset.committedCurrency = currNormalized || state.secondaryCurrency || 'USD';
-    }
-    inputEl.select();
-    renderCurrencyPicker('');
     pickerEl.classList.add('show');
     positionCurrencyPicker();
 }
@@ -658,54 +640,8 @@ export function renderCurrencyPicker(filterText = '') {
     pickerEl.innerHTML = html;
 }
 
-export async function commitExpCurrencyInput() {
-    const inputEl = document.getElementById('exp-currency');
-    if (!inputEl) return;
-
-    const prevCommitted = inputEl.dataset?.committedCurrency || state.secondaryCurrency || 'USD';
-    const resolved = resolveCurrencyCode(inputEl.value);
-    if (!resolved || resolved === 'FX') {
-        inputEl.value = prevCommitted;
-        if (inputEl.dataset) inputEl.dataset.committedCurrency = prevCommitted;
-        return;
-    }
-
-    inputEl.value = resolved;
-    if (inputEl.dataset) inputEl.dataset.committedCurrency = resolved;
-    if (resolved !== 'USD') {
-        recordRecentCurrency(resolved);
-    }
-
-    const rateInput = document.getElementById('exp-exchange-rate');
-    if (resolved !== prevCommitted || (resolved !== 'USD' && (!rateInput || !rateInput.value))) {
-        const UI = await import('./ui.js');
-        await UI.handleFormCurrencyChange();
-    }
-}
-
 export async function applyCurrencyFromPicker(code) {
-    const target = activePickerTarget;
     hideCurrencyPicker();
-
-    if (target === 'expense') {
-        const expEl = document.getElementById('exp-currency');
-        if (!expEl) return;
-        const normalized = String(code || '').trim().toUpperCase() || 'USD';
-        const prevCommitted = expEl.dataset?.committedCurrency || '';
-        expEl.value = normalized;
-        if (expEl.dataset) expEl.dataset.committedCurrency = normalized;
-        if (normalized !== 'USD') {
-            recordRecentCurrency(normalized);
-        }
-        if (typeof expEl.blur === 'function') expEl.blur();
-        const rateInput = document.getElementById('exp-exchange-rate');
-        if (normalized !== prevCommitted || (normalized !== 'USD' && (!rateInput || !rateInput.value))) {
-            const UI = await import('./ui.js');
-            await UI.handleFormCurrencyChange();
-        }
-        return;
-    }
-
     const inputEl = document.getElementById('global-currency');
     if (inputEl) {
         inputEl.value = code;
@@ -716,7 +652,6 @@ export async function applyCurrencyFromPicker(code) {
 export function handleCurrencyInput() {
     const inputEl = document.getElementById('global-currency');
     if (inputEl) {
-        activePickerTarget = 'global';
         ensureCurrencyPicker();
         renderCurrencyPicker(inputEl.value);
         if (pickerEl) {
@@ -738,42 +673,12 @@ export function handleCurrencyKeyDown(e) {
     }
 }
 
-export function handleExpCurrencyInput() {
-    const inputEl = document.getElementById('exp-currency');
-    if (inputEl) {
-        activePickerTarget = 'expense';
-        ensureCurrencyPicker();
-        renderCurrencyPicker(inputEl.value);
-        if (pickerEl) {
-            pickerEl.classList.add('show');
-            positionCurrencyPicker();
-        }
-    }
-}
-
-export function handleExpCurrencyKeyDown(e) {
-    if (e.key === 'Escape') {
-        hideCurrencyPicker();
-        const inputEl = document.getElementById('exp-currency');
-        if (inputEl) {
-            inputEl.value = inputEl.dataset?.committedCurrency || state.secondaryCurrency || 'USD';
-        }
-    } else if (e.key === 'Enter') {
-        hideCurrencyPicker();
-        commitExpCurrencyInput();
-        e.target.blur();
-    }
-}
-
 // Bind to window for HTML event handlers compatibility
 window.handleCurrencyChange = handleCurrencyChange;
 window.quickConvert = quickConvert;
 window.quickConvertNotes = quickConvertNotes;
 window.showCurrencyPicker = showCurrencyPicker;
-window.showExpCurrencyPicker = showExpCurrencyPicker;
 window.hideCurrencyPicker = hideCurrencyPicker;
 window.applyCurrencyFromPicker = applyCurrencyFromPicker;
 window.handleCurrencyInput = handleCurrencyInput;
 window.handleCurrencyKeyDown = handleCurrencyKeyDown;
-window.handleExpCurrencyInput = handleExpCurrencyInput;
-window.handleExpCurrencyKeyDown = handleExpCurrencyKeyDown;

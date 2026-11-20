@@ -35,15 +35,25 @@ function isSameTrip(remoteTripId, remoteTripName) {
     return Boolean(remoteTripName && remoteTripName === state.tripName);
 }
 
+export function compareVersionMeta(aTs, aRev, bTs, bRev) {
+    const tsA = Number.isFinite(Number(aTs)) ? Number(aTs) : 0;
+    const tsB = Number.isFinite(Number(bTs)) ? Number(bTs) : 0;
+    if (tsA !== tsB) return tsA > tsB ? 1 : -1;
+    const revA = Number.isFinite(Number(aRev)) ? Number(aRev) : 0;
+    const revB = Number.isFinite(Number(bRev)) ? Number(bRev) : 0;
+    if (revA !== revB) return revA > revB ? 1 : -1;
+    return 0;
+}
+
 function isSlotUpdateAvailable(slotId, localHash) {
     const name = state.cloudTripNames[slotId];
     if (!name || name === 'Empty' || name.includes('Locked')) return false;
     if (!isSameTrip(state.cloudTripIds?.[slotId], name)) return false;
     const remoteHash = state.cloudHashes?.[slotId];
     if (remoteHash && remoteHash === localHash) return false;
-    if (!state.hasUnsyncedLocalData) return true;
-    return ((state.cloudRevisions?.[slotId] || 0) > (state.dataRevision || 0)) ||
-           ((state.cloudTimestamps?.[slotId] || 0) > (state.localLastModified || 0));
+    const remoteTs = state.cloudTimestamps?.[slotId] || 0;
+    const remoteRev = state.cloudRevisions?.[slotId] || 0;
+    return compareVersionMeta(remoteTs, remoteRev, state.localLastModified || 0, state.dataRevision || 0) > 0;
 }
 
 // Get clean dependencies from UI dynamically to avoid circular import issues
@@ -292,8 +302,7 @@ export async function syncPendingOfflineChanges() {
                     }
                 } else if (remoteHash !== localHash && (
                     (state.lastSyncedHash && remoteHash !== state.lastSyncedHash) ||
-                    remoteRev > (state.dataRevision || 0) ||
-                    remoteTs > state.localLastModified
+                    compareVersionMeta(remoteTs, remoteRev, state.localLastModified || 0, state.dataRevision || 0) > 0
                 )) {
                     const shouldOverwrite = confirm(`⚠️ Cloud Auto-Sync has a newer version of "${remoteParsed.tripName}".\n\nClick OK to overwrite cloud with your local offline edits, or Cancel to keep the cloud version intact.`);
                     if (!shouldOverwrite) {
@@ -312,6 +321,7 @@ export async function syncPendingOfflineChanges() {
 
         if (!state.tripId) {
             state.tripId = generateTripId();
+            saveState(true, true, true);
         }
         const localPayloadObj = buildTripPayload(true);
         const localHash = computeTripContentHash(localPayloadObj);
@@ -762,8 +772,9 @@ export function compareVersions() {
         const hasUpdate = isSlotUpdateAvailable(id, localHash);
         if (hasUpdate) {
             const ts = state.cloudTimestamps[id] || 0;
-            if (!bestUpdate || ts > bestUpdate.ts) {
-                bestUpdate = { id, label, ts };
+            const rev = state.cloudRevisions?.[id] || 0;
+            if (!bestUpdate || compareVersionMeta(ts, rev, bestUpdate.ts, bestUpdate.rev) > 0) {
+                bestUpdate = { id, label, ts, rev };
             }
         }
         if (!btn) return;
@@ -898,7 +909,8 @@ export async function fetchCloudTripNames(options = {}) {
 
             if (!state.isOfflineMode && !isSyncingOffline && !isSilentSaving &&
                 (state.hasUnsyncedLocalData || state.hasPendingCloudSync) &&
-                !autoLocked && sameAutoTrip && cloudAutoHash !== localHash && cloudUnchangedSinceSync) {
+                !autoLocked && sameAutoTrip && cloudAutoHash !== localHash &&
+                cloudUnchangedSinceSync && !isSlotUpdateAvailable('auto_trip', localHash)) {
                 console.log("Unsynced local edits detected. Syncing up to the cloud...");
                 silentCloudSave();
             }
@@ -931,6 +943,7 @@ export async function saveToSupabase(targetId) {
 
     if (!state.tripId) {
         state.tripId = generateTripId();
+        saveState(true, true, true);
     }
     const payloadObj = buildTripPayload(true);
     const savedHash = computeTripContentHash(payloadObj);
@@ -982,6 +995,7 @@ export async function silentCloudSave() {
     
     if (!state.tripId) {
         state.tripId = generateTripId();
+        saveState(true, true, true);
     }
     const localPayloadObj = buildTripPayload(true);
     const localHash = computeTripContentHash(localPayloadObj);

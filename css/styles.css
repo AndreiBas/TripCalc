@@ -502,7 +502,7 @@ input:focus, select:focus {
     flex: 1; 
     min-width: 0;
 }
-.amount-currency-group select, .amount-currency-group .exp-currency-input { 
+.amount-currency-group select { cursor: pointer; 
     border-radius: 0 var(--radius-sm) var(--radius-sm) 0; 
     border-left: none; 
     background: #f1f5f9; 
@@ -1318,15 +1318,6 @@ details.indiv-details[open] summary::after {
 
 .currency-picker-item.base-usd:hover {
     background: #dbeafe;
-}
-
-.amount-currency-group .exp-currency-input {
-    width: 66px;
-    text-align: center;
-    color: var(--primary);
-    padding: 0 6px;
-    cursor: pointer;
-    height: auto;
 }
 
 .currency-picker-flag {
