@@ -1,11 +1,24 @@
 import { state, saveState, repairLegacyData, buildTripPayload, setPendingCloudSync, computeTripContentHash, setUnsyncedLocalData, setLastSyncedHash, generateTripId } from './state.js';
 import { CATEGORIES } from './config.js';
 import { updateCurrencySelectors, warmCurrencyRatesCache } from './currency.js';
+import {
+    escapeHTML,
+    sanitizeFileName,
+    validateHttpsUrl,
+    validateAndSanitizeTripPayload,
+    validateHistoryStack,
+    MAX_IMPORT_FILE_BYTES
+} from './security.js';
 
 let isSyncingOffline = false;
 let isSilentSaving = false;
 let fetchCloudPromise = null;
 let lastCloudFetchFinishedAt = 0;
+let filePasswordPromiseResolve = null;
+let idleLockTimer = null;
+let lastUserActivityAt = Date.now();
+let idleListenersAttached = false;
+const SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
 
 function persistPinFailedAttempts(count) {
     state.pinFailedAttempts = count;
@@ -105,29 +118,92 @@ async function getKeyMaterial(password) {
     return window.crypto.subtle.importKey("raw", enc.encode(password), { name: "PBKDF2" }, false, ["deriveBits", "deriveKey"]);
 }
 
-async function getKey(keyMaterial, salt) {
+async function getKey(keyMaterial, salt, iterations = 100000) {
     return window.crypto.subtle.deriveKey(
-        { name: "PBKDF2", salt: salt, iterations: 100000, hash: "SHA-256" },
-        keyMaterial, { name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]
+        { name: "PBKDF2", salt: salt, iterations: iterations, hash: "SHA-256" },
+        keyMaterial, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]
     );
 }
 
-export async function encryptData(password, plainText) {
+export function isEncryptedEnvelope(obj) {
+    return Boolean(
+        obj &&
+        typeof obj === 'object' &&
+        !Array.isArray(obj) &&
+        typeof obj.ciphertext === 'string' &&
+        typeof obj.salt === 'string' &&
+        typeof obj.iv === 'string' &&
+        obj.ciphertext.length > 0 &&
+        obj.salt.length > 0 &&
+        obj.iv.length > 0
+    );
+}
+
+export async function encryptData(password, plainText, options = {}) {
+    const version = options?.version === 2 ? 2 : 1;
     const keyMaterial = await getKeyMaterial(password);
     const salt = window.crypto.getRandomValues(new Uint8Array(16));
-    const key = await getKey(keyMaterial, salt);
     const iv = window.crypto.getRandomValues(new Uint8Array(12));
+
+    if (version === 2) {
+        const iterations = 600000;
+        const key = await getKey(keyMaterial, salt, iterations);
+        const aadLabel = options?.slotId ? `v2:${String(options.slotId)}` : 'v2:file';
+        const encryptedContent = await window.crypto.subtle.encrypt(
+            { name: "AES-GCM", iv: iv, additionalData: enc.encode(aadLabel) },
+            key,
+            enc.encode(plainText)
+        );
+        return {
+            v: 2,
+            kdf: 'PBKDF2-SHA256',
+            iter: iterations,
+            aad: aadLabel,
+            salt: bufferToBase64(salt),
+            iv: bufferToBase64(iv),
+            ciphertext: bufferToBase64(encryptedContent)
+        };
+    }
+
+    const key = await getKey(keyMaterial, salt, 100000);
     const encryptedContent = await window.crypto.subtle.encrypt({ name: "AES-GCM", iv: iv }, key, enc.encode(plainText));
     return { salt: bufferToBase64(salt), iv: bufferToBase64(iv), ciphertext: bufferToBase64(encryptedContent) };
 }
 
-export async function decryptData(password, encryptedObj) {
+export async function decryptData(password, encryptedObj, expectedSlotId = null) {
     try {
-        const keyMaterial = await getKeyMaterial(password);
+        if (!isEncryptedEnvelope(encryptedObj)) {
+            return null;
+        }
+        const version = encryptedObj.v === undefined ? 1 : Number(encryptedObj.v);
+        if (version !== 1 && version !== 2) {
+            return null;
+        }
+
         const salt = new Uint8Array(base64ToBuffer(encryptedObj.salt));
         const iv = new Uint8Array(base64ToBuffer(encryptedObj.iv));
+        if (salt.byteLength !== 16 || iv.byteLength !== 12) {
+            return null;
+        }
         const ciphertext = new Uint8Array(base64ToBuffer(encryptedObj.ciphertext));
-        const key = await getKey(keyMaterial, salt);
+        const keyMaterial = await getKeyMaterial(password);
+
+        if (version === 2) {
+            const rawIter = Number(encryptedObj.iter);
+            const iterations = (Number.isInteger(rawIter) && rawIter >= 100000 && rawIter <= 2000000) ? rawIter : 600000;
+            const key = await getKey(keyMaterial, salt, iterations);
+            const aadLabel = expectedSlotId
+                ? `v2:${String(expectedSlotId)}`
+                : (typeof encryptedObj.aad === 'string' && encryptedObj.aad ? encryptedObj.aad : 'v2:file');
+            const decryptedContent = await window.crypto.subtle.decrypt(
+                { name: "AES-GCM", iv: iv, additionalData: enc.encode(aadLabel) },
+                key,
+                ciphertext
+            );
+            return dec.decode(decryptedContent);
+        }
+
+        const key = await getKey(keyMaterial, salt, 100000);
         const decryptedContent = await window.crypto.subtle.decrypt({ name: "AES-GCM", iv: iv }, key, ciphertext);
         return dec.decode(decryptedContent);
     } catch (e) {
@@ -151,8 +227,12 @@ export function getSupabaseClient() {
     if (!access) return null;
     try {
         const decodedConfig = window.atob(access);
-        const [url, key] = decodedConfig.split('|');
-        state.supabaseClient = supabase.createClient(url, key);
+        const parts = decodedConfig.split('|');
+        if (parts.length !== 2) return null;
+        const validUrl = validateHttpsUrl(parts[0]);
+        const apiKey = (parts[1] || '').trim();
+        if (!validUrl || !apiKey) return null;
+        state.supabaseClient = supabase.createClient(validUrl, apiKey);
         return state.supabaseClient;
     } catch(e) { 
         return null; 
@@ -282,38 +362,44 @@ export async function syncPendingOfflineChanges() {
         if (checkError) throw checkError;
 
         if (remoteRow && remoteRow.trip_data) {
-            let remoteParsed = typeof remoteRow.trip_data === 'string' ? JSON.parse(remoteRow.trip_data) : remoteRow.trip_data;
-            if (remoteParsed && remoteParsed.ciphertext) {
-                const decryptedRemote = await decryptData(key, remoteParsed);
-                remoteParsed = decryptedRemote ? JSON.parse(decryptedRemote) : null;
-            }
-            if (remoteParsed && remoteParsed.tripName) {
-                const remoteTs = remoteParsed.lastModified || 0;
-                const remoteRev = Number(remoteParsed.dataRevision) || 0;
-                const remoteHash = computeTripContentHash(remoteParsed);
-                const localHash = computeTripContentHash(buildTripPayload(false));
-                const same = isSameTrip(remoteParsed.tripId || "", remoteParsed.tripName);
+            let remoteRaw = typeof remoteRow.trip_data === 'string' ? JSON.parse(remoteRow.trip_data) : remoteRow.trip_data;
+            if (!isEncryptedEnvelope(remoteRaw)) {
+                const shouldOverwrite = confirm(`⚠️ Security warning: Cloud Auto-Sync contains unexpected unencrypted data.\n\nOverwrite Cloud Auto-Sync with your encrypted local changes for "${state.tripName}"?`);
+                if (!shouldOverwrite) {
+                    if (statusEl) statusEl.innerHTML = `<span style="color: var(--danger); font-weight: 700;">⚠️ Unencrypted cloud data blocked</span>`;
+                    return false;
+                }
+            } else {
+                const decryptedRemote = await decryptData(key, remoteRaw, 'auto_trip');
+                const remoteParsed = decryptedRemote ? validateAndSanitizeTripPayload(JSON.parse(decryptedRemote), { defaultTripName: 'Imported Trip' }) : null;
+                if (remoteParsed && remoteParsed.tripName) {
+                    const remoteTs = remoteParsed.lastModified || 0;
+                    const remoteRev = Number(remoteParsed.dataRevision) || 0;
+                    const remoteHash = computeTripContentHash(remoteParsed);
+                    const localHash = computeTripContentHash(buildTripPayload(false));
+                    const same = isSameTrip(remoteParsed.tripId || "", remoteParsed.tripName);
 
-                if (!same) {
-                    const shouldOverwrite = confirm(`⚠️ Cloud Auto-Sync currently holds a different trip ("${remoteParsed.tripName}").\n\nOverwrite Cloud Auto-Sync with your offline changes for "${state.tripName}"?`);
-                    if (!shouldOverwrite) {
-                        if (statusEl) statusEl.innerHTML = `<span style="color: #d97706; font-weight: 700;">⚠️ Sync paused (Trip mismatch)</span>`;
-                        return false;
-                    }
-                } else if (remoteHash !== localHash && (
-                    (state.lastSyncedHash && remoteHash !== state.lastSyncedHash) ||
-                    compareVersionMeta(remoteTs, remoteRev, state.localLastModified || 0, state.dataRevision || 0) > 0
-                )) {
-                    const shouldOverwrite = confirm(`⚠️ Cloud Auto-Sync has a newer version of "${remoteParsed.tripName}".\n\nClick OK to overwrite cloud with your local offline edits, or Cancel to keep the cloud version intact.`);
-                    if (!shouldOverwrite) {
-                        state.cloudTripNames['auto_trip'] = remoteParsed.tripName;
-                        if (state.cloudTripIds) state.cloudTripIds['auto_trip'] = remoteParsed.tripId || "";
-                        state.cloudTimestamps['auto_trip'] = remoteTs;
-                        if (state.cloudRevisions) state.cloudRevisions['auto_trip'] = remoteRev;
-                        if (state.cloudHashes) state.cloudHashes['auto_trip'] = remoteHash;
-                        compareVersions();
-                        if (statusEl) statusEl.innerHTML = `<span style="color: #d97706; font-weight: 700;">⚠️ Cloud has newer version</span>`;
-                        return false;
+                    if (!same) {
+                        const shouldOverwrite = confirm(`⚠️ Cloud Auto-Sync currently holds a different trip ("${remoteParsed.tripName}").\n\nOverwrite Cloud Auto-Sync with your offline changes for "${state.tripName}"?`);
+                        if (!shouldOverwrite) {
+                            if (statusEl) statusEl.innerHTML = `<span style="color: #d97706; font-weight: 700;">⚠️ Sync paused (Trip mismatch)</span>`;
+                            return false;
+                        }
+                    } else if (remoteHash !== localHash && (
+                        (state.lastSyncedHash && remoteHash !== state.lastSyncedHash) ||
+                        compareVersionMeta(remoteTs, remoteRev, state.localLastModified || 0, state.dataRevision || 0) > 0
+                    )) {
+                        const shouldOverwrite = confirm(`⚠️ Cloud Auto-Sync has a newer version of "${remoteParsed.tripName}".\n\nClick OK to overwrite cloud with your local offline edits, or Cancel to keep the cloud version intact.`);
+                        if (!shouldOverwrite) {
+                            state.cloudTripNames['auto_trip'] = remoteParsed.tripName;
+                            if (state.cloudTripIds) state.cloudTripIds['auto_trip'] = remoteParsed.tripId || "";
+                            state.cloudTimestamps['auto_trip'] = remoteTs;
+                            if (state.cloudRevisions) state.cloudRevisions['auto_trip'] = remoteRev;
+                            if (state.cloudHashes) state.cloudHashes['auto_trip'] = remoteHash;
+                            compareVersions();
+                            if (statusEl) statusEl.innerHTML = `<span style="color: #d97706; font-weight: 700;">⚠️ Cloud has newer version</span>`;
+                            return false;
+                        }
                     }
                 }
             }
@@ -387,7 +473,86 @@ export async function syncPendingOfflineChanges() {
 }
 
 export function openCloudSettingsModal() {
+    const lockBtn = document.getElementById('lock-session-btn');
+    if (lockBtn) {
+        const canLock = localStorage.getItem('tripSplitter_hasPin') === 'true' && Boolean(state.sessionPin);
+        lockBtn.style.display = canLock ? 'block' : 'none';
+    }
     document.getElementById('cloud-settings-overlay').classList.add('active');
+}
+
+export async function lockCloudSession(reason = 'manual') {
+    const hasPin = typeof localStorage !== 'undefined' && localStorage.getItem('tripSplitter_hasPin') === 'true';
+    if (!hasPin || !state.sessionPin) return false;
+
+    if (state.cloudSyncTimeout) {
+        clearTimeout(state.cloudSyncTimeout);
+        state.cloudSyncTimeout = null;
+        setPendingCloudSync(true);
+    }
+
+    state.sessionPin = "";
+    clearTimeout(idleLockTimer);
+    idleLockTimer = null;
+    resetCloudMetadata();
+    ['manual-cloud-name-1', 'manual-cloud-name-2', 'manual-cloud-name-3', 'auto-cloud-name'].forEach(elId => {
+        const el = document.getElementById(elId);
+        if (el && el.innerText && el.innerText !== 'Empty' && el.innerText !== '...') {
+            el.innerText = '🔒 Locked';
+        }
+    });
+    compareVersions();
+    updateSyncBtnState();
+
+    const settingsOverlay = document.getElementById('cloud-settings-overlay');
+    if (settingsOverlay) settingsOverlay.classList.remove('active');
+
+    const UI = await getUI();
+    if (UI && typeof UI.showToast === 'function') {
+        UI.showToast(
+            reason === 'idle' ? '🔒 Cloud session locked due to inactivity.' : '🔒 Cloud session locked.',
+            'warning'
+        );
+    }
+    return true;
+}
+
+let configuredIdleTimeoutMs = SESSION_IDLE_TIMEOUT_MS;
+
+export function touchSessionActivity(force = false) {
+    if (!idleListenersAttached) return;
+    const now = Date.now();
+    if (!force && (now - lastUserActivityAt < 1000) && idleLockTimer) return;
+    lastUserActivityAt = now;
+    clearTimeout(idleLockTimer);
+    idleLockTimer = null;
+    if (typeof localStorage !== 'undefined' && localStorage.getItem('tripSplitter_hasPin') === 'true' && state.sessionPin) {
+        idleLockTimer = setTimeout(() => {
+            lockCloudSession('idle');
+        }, configuredIdleTimeoutMs);
+    }
+}
+
+export function initSessionIdleLock(timeoutMs = SESSION_IDLE_TIMEOUT_MS) {
+    if (idleListenersAttached || typeof document === 'undefined') return;
+    idleListenersAttached = true;
+    configuredIdleTimeoutMs = timeoutMs;
+    lastUserActivityAt = Date.now();
+
+    const resetTimer = () => touchSessionActivity(false);
+
+    document.addEventListener('pointerdown', resetTimer, { passive: true });
+    document.addEventListener('keydown', resetTimer, { passive: true });
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            if (localStorage.getItem('tripSplitter_hasPin') === 'true' && state.sessionPin && (Date.now() - lastUserActivityAt) >= configuredIdleTimeoutMs) {
+                lockCloudSession('idle');
+            } else {
+                touchSessionActivity(true);
+            }
+        }
+    });
+    touchSessionActivity(true);
 }
 
 export function disconnectLocalSync() {
@@ -440,15 +605,17 @@ export async function submitChangePin() {
 
         if (data && data.length > 0) {
             for (const row of data) {
+                if (!row.trip_data) continue;
                 let parsed = typeof row.trip_data === 'string' ? JSON.parse(row.trip_data) : row.trip_data;
-                if (parsed && parsed.ciphertext) {
-                    const decrypted = await decryptData(oldFullKey, parsed);
-                    if (!decrypted) {
-                        throw new Error(`Failed to decrypt cloud slot "${row.id}" with current PIN. Aborting without modifying cloud data.`);
-                    }
-                    const reEncrypted = await encryptData(newFullKey, decrypted);
-                    preparedRows.push({ id: row.id, data: reEncrypted });
+                if (!isEncryptedEnvelope(parsed)) {
+                    throw new Error(`Cloud slot "${row.id}" contains unencrypted or invalid data. Aborting without modifying cloud data.`);
                 }
+                const decrypted = await decryptData(oldFullKey, parsed, row.id);
+                if (!decrypted) {
+                    throw new Error(`Failed to decrypt cloud slot "${row.id}" with current PIN. Aborting without modifying cloud data.`);
+                }
+                const reEncrypted = await encryptData(newFullKey, decrypted);
+                preparedRows.push({ id: row.id, data: reEncrypted });
             }
         }
 
@@ -577,44 +744,83 @@ export async function submitCloudSetup() {
     try {
         const decoded = window.atob(access);
         const parts = decoded.split('|');
-        if (parts.length !== 2 || !parts[0].startsWith('http')) throw new Error();
-        tempClient = supabase.createClient(parts[0], parts[1]);
+        const validUrl = parts.length === 2 ? validateHttpsUrl(parts[0]) : null;
+        const apiKey = parts.length === 2 ? (parts[1] || '').trim() : '';
+        if (!validUrl || !apiKey) throw new Error('Invalid Access Code');
+        tempClient = supabase.createClient(validUrl, apiKey);
     } catch(e) { 
-        alert("Invalid Access Code format. Ensure it is Base64 encoded."); 
+        alert("Invalid Access Code format. Ensure it is Base64 encoded with an https:// URL."); 
         return; 
     }
 
-    const btn = document.querySelector('#cloud-setup-overlay button:last-child');
-    const origText = btn.innerText; 
-    btn.innerText = "Verifying..."; 
-    btn.disabled = true;
+    const btn = document.getElementById('submit-cloud-setup-btn');
+    const origText = btn ? btn.innerText : "Connect & Secure"; 
+    if (btn) {
+        btn.innerText = "Verifying..."; 
+        btn.disabled = true;
+    }
 
-    let isValid = true;
+    let isValid = false;
+    let hasUnencryptedOnly = false;
+    let verifyTimeoutId = null;
     try {
-        const { data } = await tempClient.from('trip_sync').select('trip_data').in('id', ['manual_trip', 'manual_trip_2', 'manual_trip_3', 'auto_trip']);
-        if (data && data.length > 0) {
+        const timeoutPromise = new Promise((_, reject) => {
+            verifyTimeoutId = setTimeout(() => reject(new Error('Verification timed out')), 10000);
+        });
+        const { data, error } = await Promise.race([
+            tempClient.from('trip_sync').select('id, trip_data').in('id', ['manual_trip', 'manual_trip_2', 'manual_trip_3', 'auto_trip']),
+            timeoutPromise
+        ]);
+        if (error) throw error;
+
+        if (!data || data.length === 0 || data.every(row => !row.trip_data)) {
+            isValid = true;
+        } else {
             let hasEncryptedData = false;
+            let hasUnencryptedData = false;
             let decryptionSucceeded = false;
-            
+
             for (const row of data) {
+                if (!row.trip_data) continue;
                 let parsed = typeof row.trip_data === 'string' ? JSON.parse(row.trip_data) : row.trip_data;
-                if (parsed && parsed.ciphertext) {
+                if (isEncryptedEnvelope(parsed)) {
                     hasEncryptedData = true;
-                    const decrypted = await decryptData(devKey + pin, parsed);
-                    if (decrypted) decryptionSucceeded = true; 
+                    const decrypted = await decryptData(devKey + pin, parsed, row.id);
+                    if (decrypted) decryptionSucceeded = true;
+                } else {
+                    hasUnencryptedData = true;
                 }
             }
-            
-            if (hasEncryptedData && !decryptionSucceeded) {
-                isValid = false;
+
+            if (hasEncryptedData) {
+                isValid = decryptionSucceeded;
+            } else if (hasUnencryptedData) {
+                hasUnencryptedOnly = true;
+            } else {
+                isValid = true;
             }
         }
     } catch (e) { 
-        console.error("Verification check failed.", e); 
+        console.error("Verification check failed.", e);
+        if (btn) {
+            btn.innerText = origText;
+            btn.disabled = false;
+        }
+        alert("❌ Unable to reach Supabase to verify your credentials. Please check your Access Code and internet connection.");
+        return;
+    } finally {
+        clearTimeout(verifyTimeoutId);
     }
 
-    btn.innerText = origText; 
-    btn.disabled = false;
+    if (btn) {
+        btn.innerText = origText; 
+        btn.disabled = false;
+    }
+
+    if (hasUnencryptedOnly) {
+        alert("❌ Security error: Target database contains unencrypted data. Refusing to attach.");
+        return;
+    }
 
     if (!isValid) { 
         alert("❌ Incorrect Device Key or Session PIN for this database.\n\nDecryption failed. If you are trying to attach to an existing database, ensure your passwords are correct."); 
@@ -626,6 +832,7 @@ export async function submitCloudSetup() {
     localStorage.setItem('tripSplitter_hasPin', pin ? 'true' : 'false');
     state.sessionPin = pin; 
     state.supabaseClient = tempClient;
+    touchSessionActivity(true);
     
     document.getElementById('cloud-setup-overlay').classList.remove('active');
     updateSyncBtnState(); 
@@ -639,41 +846,81 @@ export async function submitPinUnlock() {
     const pin = document.getElementById('unlock-session-pin').value.trim();
     if (!pin) return; 
 
-    const btn = document.querySelector('#cloud-pin-overlay button:last-child');
-    const origText = btn.innerText; 
-    btn.innerText = "Verifying..."; 
-    btn.disabled = true;
-
     const client = getSupabaseClient();
     const devKey = localStorage.getItem('tripSplitter_deviceKey');
-    let isValid = true;
-    
-    if (client && devKey) {
-        try {
-            const { data } = await client.from('trip_sync').select('trip_data').in('id', ['manual_trip', 'manual_trip_2', 'manual_trip_3', 'auto_trip']);
-            if (data && data.length > 0) {
-                let hasEncryptedData = false;
-                let decryptionSucceeded = false;
-                
-                for (const row of data) {
-                    let parsed = typeof row.trip_data === 'string' ? JSON.parse(row.trip_data) : row.trip_data;
-                    if (parsed && parsed.ciphertext) {
-                        hasEncryptedData = true;
-                        const decrypted = await decryptData(devKey + pin, parsed);
-                        if (decrypted) decryptionSucceeded = true; 
-                    }
-                }
-                if (hasEncryptedData && !decryptionSucceeded) {
-                    isValid = false;
-                }
-            }
-        } catch (e) { 
-            console.error("PIN check failed.", e); 
-        }
+    if (!client || !devKey) {
+        alert("❌ Cloud configuration missing or invalid. Please reconnect cloud sync.");
+        return;
     }
 
-    btn.innerText = origText; 
-    btn.disabled = false;
+    const btn = document.getElementById('submit-pin-unlock-btn');
+    const origText = btn ? btn.innerText : "Unlock"; 
+    if (btn) {
+        btn.innerText = "Verifying..."; 
+        btn.disabled = true;
+    }
+
+    let isValid = false;
+    let hasUnencryptedOnly = false;
+    let pinTimeoutId = null;
+    try {
+        const timeoutPromise = new Promise((_, reject) => {
+            pinTimeoutId = setTimeout(() => reject(new Error('PIN check timed out')), 10000);
+        });
+        const { data, error } = await Promise.race([
+            client.from('trip_sync').select('id, trip_data').in('id', ['manual_trip', 'manual_trip_2', 'manual_trip_3', 'auto_trip']),
+            timeoutPromise
+        ]);
+        if (error) throw error;
+
+        if (!data || data.length === 0 || data.every(row => !row.trip_data)) {
+            isValid = true;
+        } else {
+            let hasEncryptedData = false;
+            let hasUnencryptedData = false;
+            let decryptionSucceeded = false;
+
+            for (const row of data) {
+                if (!row.trip_data) continue;
+                let parsed = typeof row.trip_data === 'string' ? JSON.parse(row.trip_data) : row.trip_data;
+                if (isEncryptedEnvelope(parsed)) {
+                    hasEncryptedData = true;
+                    const decrypted = await decryptData(devKey + pin, parsed, row.id);
+                    if (decrypted) decryptionSucceeded = true;
+                } else {
+                    hasUnencryptedData = true;
+                }
+            }
+
+            if (hasEncryptedData) {
+                isValid = decryptionSucceeded;
+            } else if (hasUnencryptedData) {
+                hasUnencryptedOnly = true;
+            } else {
+                isValid = true;
+            }
+        }
+    } catch (e) { 
+        console.error("PIN check failed.", e);
+        if (btn) {
+            btn.innerText = origText;
+            btn.disabled = false;
+        }
+        alert("❌ Could not verify Session PIN (network/database error). Please try again when online.");
+        return;
+    } finally {
+        clearTimeout(pinTimeoutId);
+    }
+
+    if (btn) {
+        btn.innerText = origText; 
+        btn.disabled = false;
+    }
+
+    if (hasUnencryptedOnly) {
+        alert("❌ Security error: Cloud database contains unencrypted data and cannot be trusted.");
+        return;
+    }
 
     if (!isValid) { 
         const attempts = (state.pinFailedAttempts || 0) + 1;
@@ -696,6 +943,7 @@ export async function submitPinUnlock() {
 
     persistPinFailedAttempts(0);
     state.sessionPin = pin;
+    touchSessionActivity(true);
     document.getElementById('cloud-pin-overlay').classList.remove('active');
     updateSyncBtnState(); 
     fetchCloudTripNames({ force: true });
@@ -712,7 +960,7 @@ export async function getValidCloudKey(isAutoSave = false) {
     if (!access || !devKey) {
         if (isAutoSave) {
             const el = document.getElementById('cloud-status');
-            if (el) el.innerHTML = '<span style="cursor:pointer;" onclick="manageCloudSync()">🔒 Setup Sync</span>';
+            if (el) el.innerHTML = '<span class="cloud-status-action" data-action="manage-cloud-sync" style="cursor:pointer;">🔒 Setup Sync</span>';
             return null;
         }
         return await openCloudSetupModal() ? localStorage.getItem('tripSplitter_deviceKey') + (state.sessionPin || "") : null;
@@ -721,7 +969,7 @@ export async function getValidCloudKey(isAutoSave = false) {
     if (hasPin && !state.sessionPin) {
         if (isAutoSave) {
             const el = document.getElementById('cloud-status');
-            if (el) el.innerHTML = '<span style="cursor:pointer; color: var(--danger); font-weight: 800;" onclick="manageCloudSync()">🔒 Sync Paused - Click to Unlock</span>';
+            if (el) el.innerHTML = '<span class="cloud-status-action" data-action="manage-cloud-sync" style="cursor:pointer; color: var(--danger); font-weight: 800;">🔒 Sync Paused - Click to Unlock</span>';
             return null;
         }
         return await openPinModal() ? devKey + state.sessionPin : null;
@@ -792,7 +1040,7 @@ export function compareVersions() {
     const banner = typeof document !== 'undefined' ? document.getElementById('cloud-update-banner') : null;
     if (banner) {
         if (bestUpdate) {
-            banner.innerHTML = `<span>🔄 Newer version available in <strong>${bestUpdate.label}</strong></span><button class="small" onclick="loadFromSupabase('${bestUpdate.id}')">Load Update</button>`;
+            banner.innerHTML = `<span>🔄 Newer version available in <strong>${escapeHTML(bestUpdate.label)}</strong></span><button class="small" data-action="load-cloud-slot" data-slot="${escapeHTML(bestUpdate.id)}">Load Update</button>`;
             banner.style.display = 'flex';
         } else {
             banner.innerHTML = '';
@@ -859,20 +1107,23 @@ export async function fetchCloudTripNames(options = {}) {
             if (data) {
                 for (const row of data) {
                     try {
+                        if (!row.trip_data) continue;
                         let parsed = typeof row.trip_data === 'string' ? JSON.parse(row.trip_data) : row.trip_data;
-                        if (parsed && parsed.ciphertext) {
-                            const hasPin = localStorage.getItem('tripSplitter_hasPin') === 'true';
-                            if (!hasPin || state.sessionPin) {
-                                const fullKey = localStorage.getItem('tripSplitter_deviceKey') + (state.sessionPin || "");
-                                const decrypted = await decryptData(fullKey, parsed);
-                                if (decrypted) { 
-                                    parsed = JSON.parse(decrypted); 
-                                } else { 
-                                    parsed = { tripName: "🔒 Locked (Wrong PIN?)" }; 
-                                }
+                        if (!isEncryptedEnvelope(parsed)) {
+                            names[row.id] = "⚠️ Unencrypted (Blocked)";
+                            continue;
+                        }
+                        const hasPin = localStorage.getItem('tripSplitter_hasPin') === 'true';
+                        if (!hasPin || state.sessionPin) {
+                            const fullKey = localStorage.getItem('tripSplitter_deviceKey') + (state.sessionPin || "");
+                            const decrypted = await decryptData(fullKey, parsed, row.id);
+                            if (decrypted) { 
+                                parsed = validateAndSanitizeTripPayload(JSON.parse(decrypted), { defaultTripName: 'Imported Trip' }); 
                             } else { 
-                                parsed = { tripName: "🔒 Locked" }; 
+                                parsed = { tripName: "🔒 Locked (Wrong PIN?)" }; 
                             }
+                        } else { 
+                            parsed = { tripName: "🔒 Locked" }; 
                         }
                         if (parsed && parsed.tripName) {
                             state.cloudTripNames[row.id] = parsed.tripName;
@@ -1023,31 +1274,37 @@ export async function silentCloudSave() {
         }
 
         if (remoteRow && remoteRow.trip_data) {
-            let remoteParsed = typeof remoteRow.trip_data === 'string' ? JSON.parse(remoteRow.trip_data) : remoteRow.trip_data;
-            if (remoteParsed && remoteParsed.ciphertext) {
-                const decryptedRemote = await decryptData(key, remoteParsed);
-                remoteParsed = decryptedRemote ? JSON.parse(decryptedRemote) : null;
-            }
-            if (remoteParsed && remoteParsed.tripName) {
-                const remoteHash = computeTripContentHash(remoteParsed);
-                const same = isSameTrip(remoteParsed.tripId || "", remoteParsed.tripName);
-                if (!same) {
-                    const shouldOverwrite = confirm(`⚠️ Cloud Auto-Sync currently holds a different trip ("${remoteParsed.tripName}").\n\nOverwrite Auto-Sync with "${state.tripName}"?`);
-                    if (!shouldOverwrite) {
-                        if (statusEl) statusEl.innerHTML = `<span style="color: #d97706; font-weight: 700;">⚠️ Sync paused (Trip mismatch)</span>`;
-                        return;
-                    }
-                } else if (remoteHash !== localHash && state.lastSyncedHash && remoteHash !== state.lastSyncedHash) {
-                    const shouldOverwrite = confirm(`⚠️ Another device updated "${remoteParsed.tripName}" in Cloud Auto-Sync since your last sync.\n\nClick OK to overwrite Cloud Auto-Sync with your edits here, or Cancel to keep the cloud version intact.`);
-                    if (!shouldOverwrite) {
-                        state.cloudTripNames['auto_trip'] = remoteParsed.tripName;
-                        if (state.cloudTripIds) state.cloudTripIds['auto_trip'] = remoteParsed.tripId || "";
-                        state.cloudTimestamps['auto_trip'] = Number(remoteParsed.lastModified) || 0;
-                        if (state.cloudRevisions) state.cloudRevisions['auto_trip'] = Number(remoteParsed.dataRevision) || 0;
-                        if (state.cloudHashes) state.cloudHashes['auto_trip'] = remoteHash;
-                        compareVersions();
-                        if (statusEl) statusEl.innerHTML = `<span style="color: #d97706; font-weight: 700;">⚠️ Newer version in cloud</span>`;
-                        return;
+            let remoteRaw = typeof remoteRow.trip_data === 'string' ? JSON.parse(remoteRow.trip_data) : remoteRow.trip_data;
+            if (!isEncryptedEnvelope(remoteRaw)) {
+                const shouldOverwrite = confirm(`⚠️ Security warning: Cloud Auto-Sync contains unexpected unencrypted data.\n\nOverwrite Auto-Sync with your encrypted local trip "${state.tripName}"?`);
+                if (!shouldOverwrite) {
+                    if (statusEl) statusEl.innerHTML = `<span style="color: var(--danger); font-weight: 700;">⚠️ Unencrypted cloud data blocked</span>`;
+                    return;
+                }
+            } else {
+                const decryptedRemote = await decryptData(key, remoteRaw, 'auto_trip');
+                const remoteParsed = decryptedRemote ? validateAndSanitizeTripPayload(JSON.parse(decryptedRemote), { defaultTripName: 'Imported Trip' }) : null;
+                if (remoteParsed && remoteParsed.tripName) {
+                    const remoteHash = computeTripContentHash(remoteParsed);
+                    const same = isSameTrip(remoteParsed.tripId || "", remoteParsed.tripName);
+                    if (!same) {
+                        const shouldOverwrite = confirm(`⚠️ Cloud Auto-Sync currently holds a different trip ("${remoteParsed.tripName}").\n\nOverwrite Auto-Sync with "${state.tripName}"?`);
+                        if (!shouldOverwrite) {
+                            if (statusEl) statusEl.innerHTML = `<span style="color: #d97706; font-weight: 700;">⚠️ Sync paused (Trip mismatch)</span>`;
+                            return;
+                        }
+                    } else if (remoteHash !== localHash && state.lastSyncedHash && remoteHash !== state.lastSyncedHash) {
+                        const shouldOverwrite = confirm(`⚠️ Another device updated "${remoteParsed.tripName}" in Cloud Auto-Sync since your last sync.\n\nClick OK to overwrite Cloud Auto-Sync with your edits here, or Cancel to keep the cloud version intact.`);
+                        if (!shouldOverwrite) {
+                            state.cloudTripNames['auto_trip'] = remoteParsed.tripName;
+                            if (state.cloudTripIds) state.cloudTripIds['auto_trip'] = remoteParsed.tripId || "";
+                            state.cloudTimestamps['auto_trip'] = Number(remoteParsed.lastModified) || 0;
+                            if (state.cloudRevisions) state.cloudRevisions['auto_trip'] = Number(remoteParsed.dataRevision) || 0;
+                            if (state.cloudHashes) state.cloudHashes['auto_trip'] = remoteHash;
+                            compareVersions();
+                            if (statusEl) statusEl.innerHTML = `<span style="color: #d97706; font-weight: 700;">⚠️ Newer version in cloud</span>`;
+                            return;
+                        }
                     }
                 }
             }
@@ -1147,45 +1404,46 @@ export async function loadFromSupabase(targetId) {
             alert("Error loading from cloud: " + error.message); 
         } else if (data && data.trip_data) {
             try {
-                let parsedData = typeof data.trip_data === 'string' ? JSON.parse(data.trip_data) : data.trip_data;
-                
-                if (parsedData.ciphertext) {
-                    const decryptedStr = await decryptData(key, parsedData);
-                    if (!decryptedStr) {
-                        alert("❌ Decryption failed! Incorrect Session PIN or corrupted data.");
-                        state.sessionPin = ""; 
-                        updateSyncBtnState(); 
-                        fetchCloudTripNames({ force: true }); 
-                        return;
-                    }
-                    parsedData = JSON.parse(decryptedStr);
+                let rawEnvelope = typeof data.trip_data === 'string' ? JSON.parse(data.trip_data) : data.trip_data;
+                if (!isEncryptedEnvelope(rawEnvelope)) {
+                    alert("❌ Security error: Cloud slot contains unencrypted or tampered data and was blocked.");
+                    return;
+                }
+                const decryptedStr = await decryptData(key, rawEnvelope, targetId);
+                if (!decryptedStr) {
+                    alert("❌ Decryption failed! Incorrect Session PIN or corrupted data.");
+                    state.sessionPin = ""; 
+                    updateSyncBtnState(); 
+                    fetchCloudTripNames({ force: true }); 
+                    return;
+                }
+                const parsedData = validateAndSanitizeTripPayload(JSON.parse(decryptedStr), { defaultTripName: 'Imported Trip' });
+                if (!parsedData) {
+                    alert("❌ Cloud data failed integrity validation.");
+                    return;
                 }
                 
-                state.tripId = parsedData.tripId || "";
-                state.tripName = parsedData.tripName || "Imported Trip"; 
-                state.tripComment = parsedData.tripComment || ""; 
-                state.participants = parsedData.participants || []; 
-                state.participantGroups = parsedData.participantGroups || {};
-                state.expenses = parsedData.expenses || []; 
-                state.secondaryCurrency = parsedData.secondaryCurrency || "";
-                state.currentExchangeRate = (parsedData.currentExchangeRate !== undefined && parsedData.currentExchangeRate !== null && !isNaN(parsedData.currentExchangeRate))
-                    ? Number(parsedData.currentExchangeRate)
-                    : (state.secondaryCurrency ? 0 : 1);
-                state.currencyRates = (parsedData.currencyRates && typeof parsedData.currencyRates === 'object' && !Array.isArray(parsedData.currencyRates))
-                    ? parsedData.currencyRates
-                    : {};
-                state.currentSort = parsedData.currentSort || 'date-desc';
-                state.tripDays = parsedData.tripDays || 1; 
-                state.showPerDay = parsedData.showPerDay || false;
-                state.tripNotes = parsedData.tripNotes || ""; 
-                state.tripNotesDelta = parsedData.tripNotesDelta || null; 
-                state.autoColorNotes = parsedData.autoColorNotes || false;
-                state.isHeaderCollapsed = parsedData.isHeaderCollapsed || false;
-                state.recentCurrencies = parsedData.recentCurrencies || [];
-                state.defaultTags = parsedData.defaultTags || ['car', 'gas', 'flight', 'stay', 'grocery', 'restaurant'];
-                state.historyEnabled = parsedData.historyEnabled || false;
-                state.localLastModified = Number.isFinite(Number(parsedData.lastModified)) ? Number(parsedData.lastModified) : 0;
-                state.dataRevision = Number.isFinite(Number(parsedData.dataRevision)) ? Number(parsedData.dataRevision) : 0;
+                state.tripId = parsedData.tripId;
+                state.tripName = parsedData.tripName; 
+                state.tripComment = parsedData.tripComment; 
+                state.participants = parsedData.participants; 
+                state.participantGroups = parsedData.participantGroups;
+                state.expenses = parsedData.expenses; 
+                state.secondaryCurrency = parsedData.secondaryCurrency;
+                state.currentExchangeRate = parsedData.currentExchangeRate;
+                state.currencyRates = parsedData.currencyRates;
+                state.currentSort = parsedData.currentSort;
+                state.tripDays = parsedData.tripDays; 
+                state.showPerDay = parsedData.showPerDay;
+                state.tripNotes = parsedData.tripNotes; 
+                state.tripNotesDelta = parsedData.tripNotesDelta; 
+                state.autoColorNotes = parsedData.autoColorNotes;
+                state.isHeaderCollapsed = parsedData.isHeaderCollapsed;
+                state.recentCurrencies = parsedData.recentCurrencies;
+                state.defaultTags = parsedData.defaultTags;
+                state.historyEnabled = parsedData.historyEnabled;
+                state.localLastModified = parsedData.lastModified;
+                state.dataRevision = parsedData.dataRevision;
                 state.insightFilter = null;
                 state.searchText = '';
                 state.selectedCalendarDates = new Set();
@@ -1294,12 +1552,13 @@ export async function loadHistoryFromCloud(slotId) {
     try {
         const parsed = typeof data.trip_data === 'string'
             ? JSON.parse(data.trip_data) : data.trip_data;
-        const decryptedStr = await decryptData(key, parsed);
+        if (!isEncryptedEnvelope(parsed)) return;
+        const decryptedStr = await decryptData(key, parsed, historySlotId(slotId));
         if (!decryptedStr) return;
         const histData = JSON.parse(decryptedStr);
 
-        if (histData.tripName === state.tripName) {
-            state.historyStack = histData.historyStack || [];
+        if (histData && histData.tripName === state.tripName) {
+            state.historyStack = validateHistoryStack(histData.historyStack);
         } else {
             state.historyStack = [];
         }
@@ -1359,14 +1618,109 @@ export async function saveFileUniversal(content, fileName, mimeType, fileHandle 
     } catch (err) { alert("File save failed entirely."); }
 }
 
+export function requestFilePassword({ mode = 'encrypt' } = {}) {
+    const overlay = document.getElementById('file-password-overlay');
+    const titleEl = document.getElementById('file-password-title');
+    const descEl = document.getElementById('file-password-desc');
+    const inputEl = document.getElementById('file-password-input');
+    const confirmGroup = document.getElementById('file-password-confirm-group');
+    const confirmEl = document.getElementById('file-password-confirm');
+    const errorEl = document.getElementById('file-password-error');
+    const submitBtn = document.getElementById('submit-file-password-btn');
+
+    if (!overlay || !inputEl) return Promise.resolve(null);
+
+    if (filePasswordPromiseResolve) {
+        filePasswordPromiseResolve(null);
+        filePasswordPromiseResolve = null;
+    }
+
+    overlay.dataset.mode = mode;
+    inputEl.value = '';
+    if (confirmEl) confirmEl.value = '';
+    if (errorEl) {
+        errorEl.innerText = '';
+        errorEl.style.display = 'none';
+    }
+
+    if (mode === 'encrypt') {
+        if (titleEl) titleEl.innerText = '🔐 Secure Save';
+        if (descEl) descEl.innerText = 'Enter a password to encrypt this trip file. WARNING: If you forget this password, your data cannot be recovered.';
+        if (confirmGroup) confirmGroup.style.display = 'flex';
+        if (submitBtn) submitBtn.innerText = 'Encrypt & Save';
+    } else {
+        if (titleEl) titleEl.innerText = '🔐 Unlock Trip File';
+        if (descEl) descEl.innerText = 'This trip file is encrypted. Enter its password to decrypt and load:';
+        if (confirmGroup) confirmGroup.style.display = 'none';
+        if (submitBtn) submitBtn.innerText = 'Decrypt & Load';
+    }
+
+    overlay.classList.add('active');
+    setTimeout(() => inputEl.focus(), 60);
+    return new Promise(resolve => {
+        filePasswordPromiseResolve = resolve;
+    });
+}
+
+export function submitFilePassword() {
+    const overlay = document.getElementById('file-password-overlay');
+    const inputEl = document.getElementById('file-password-input');
+    const confirmEl = document.getElementById('file-password-confirm');
+    const errorEl = document.getElementById('file-password-error');
+    if (!overlay || !inputEl) return;
+
+    const mode = overlay.dataset.mode || 'decrypt';
+    const password = inputEl.value;
+    if (!password) {
+        if (errorEl) {
+            errorEl.innerText = 'Please enter a password.';
+            errorEl.style.display = 'block';
+        }
+        inputEl.focus();
+        return;
+    }
+    if (mode === 'encrypt' && confirmEl && password !== confirmEl.value) {
+        if (errorEl) {
+            errorEl.innerText = 'Passwords do not match. Please try again.';
+            errorEl.style.display = 'block';
+        }
+        confirmEl.value = '';
+        confirmEl.focus();
+        return;
+    }
+
+    overlay.classList.remove('active');
+    inputEl.value = '';
+    if (confirmEl) confirmEl.value = '';
+    if (filePasswordPromiseResolve) {
+        const resolve = filePasswordPromiseResolve;
+        filePasswordPromiseResolve = null;
+        resolve(password);
+    }
+}
+
+export function cancelFilePassword() {
+    const overlay = document.getElementById('file-password-overlay');
+    const inputEl = document.getElementById('file-password-input');
+    const confirmEl = document.getElementById('file-password-confirm');
+    if (overlay) overlay.classList.remove('active');
+    if (inputEl) inputEl.value = '';
+    if (confirmEl) confirmEl.value = '';
+    if (filePasswordPromiseResolve) {
+        const resolve = filePasswordPromiseResolve;
+        filePasswordPromiseResolve = null;
+        resolve(null);
+    }
+}
+
 export function exportTrip() {
     const payload = JSON.stringify(buildTripPayload(true));
-    const fileName = state.tripName.replace(/\s+/g, '_') + ".json";
+    const fileName = sanitizeFileName(state.tripName, 'Trip') + ".json";
     saveFileUniversal(payload, fileName, 'application/json');
 }
 
 export async function exportSecureTrip() {
-    const fileName = state.tripName.replace(/\s+/g, '_') + ".tsplit";
+    const fileName = sanitizeFileName(state.tripName, 'Trip') + ".tsplit";
     let fileHandle = null;
 
     if (window.showSaveFilePicker) {
@@ -1380,7 +1734,7 @@ export async function exportSecureTrip() {
         }
     }
 
-    const password = prompt("⚠️ Secure Save ⚠️\nEnter a password to encrypt this trip file.\n\nWARNING: If you forget this password, your data cannot be recovered.");
+    const password = await requestFilePassword({ mode: 'encrypt' });
     if (!password) return; 
     
     const payload = JSON.stringify(buildTripPayload(true));
@@ -1396,54 +1750,63 @@ export async function exportSecureTrip() {
 }
 
 export async function importTrip(e) {
+    const fileInput = document.getElementById('file-import');
     const file = e.target.files[0]; if (!file) return;
+    if (file.size > MAX_IMPORT_FILE_BYTES) {
+        alert("❌ File is too large (maximum supported size is 5 MB).");
+        if (fileInput) fileInput.value = "";
+        return;
+    }
     const reader = new FileReader();
     reader.onload = async (event) => {
         let parsedData = null;
         try {
             const rawJson = JSON.parse(event.target.result);
-            if (rawJson.ciphertext && rawJson.salt && rawJson.iv) {
-                const password = prompt("🔐 This trip file is locked.\n\nEnter password to decrypt:");
-                if (!password) { document.getElementById('file-import').value = ""; return; }
+            if (isEncryptedEnvelope(rawJson)) {
+                const password = await requestFilePassword({ mode: 'decrypt' });
+                if (!password) { if (fileInput) fileInput.value = ""; return; }
                 const decryptedText = await decryptData(password, rawJson);
-                if (!decryptedText) { alert("❌ Incorrect password or corrupted file."); document.getElementById('file-import').value = ""; return; }
+                if (!decryptedText) { alert("❌ Incorrect password or corrupted file."); if (fileInput) fileInput.value = ""; return; }
                 parsedData = JSON.parse(decryptedText);
             } else { parsedData = rawJson; }
-        } catch (err) { alert("Invalid file format."); document.getElementById('file-import').value = ""; return; }
+        } catch (err) { alert("Invalid file format."); if (fileInput) fileInput.value = ""; return; }
 
-        if (parsedData) {
+        const cleanData = validateAndSanitizeTripPayload(parsedData, { defaultTripName: 'Imported Trip' });
+        if (!cleanData) {
+            alert("Invalid or corrupted trip file.");
+            if (fileInput) fileInput.value = "";
+            return;
+        }
+
+        if (cleanData) {
             if (state.cloudSyncTimeout) {
                 clearTimeout(state.cloudSyncTimeout);
                 state.cloudSyncTimeout = null;
             }
-            state.tripId = parsedData.tripId || "";
-            state.tripName = parsedData.tripName || "Imported Trip"; 
-            state.tripComment = parsedData.tripComment || ""; 
-            state.participants = parsedData.participants || []; 
-            state.participantGroups = parsedData.participantGroups || {};
-            state.expenses = parsedData.expenses || []; 
-            state.secondaryCurrency = parsedData.secondaryCurrency || "";
-            state.currentExchangeRate = (parsedData.currentExchangeRate !== undefined && parsedData.currentExchangeRate !== null && !isNaN(parsedData.currentExchangeRate))
-                ? Number(parsedData.currentExchangeRate)
-                : (state.secondaryCurrency ? 0 : 1);
-            state.currencyRates = (parsedData.currencyRates && typeof parsedData.currencyRates === 'object' && !Array.isArray(parsedData.currencyRates))
-                ? parsedData.currencyRates
-                : {};
-            state.currentSort = parsedData.currentSort || 'date-desc';
-            state.tripDays = parsedData.tripDays || 1; 
-            state.showPerDay = parsedData.showPerDay || false;
-            state.tripNotes = parsedData.tripNotes || ""; 
-            state.tripNotesDelta = parsedData.tripNotesDelta || null; 
-            state.autoColorNotes = parsedData.autoColorNotes || false;
-            state.isHeaderCollapsed = parsedData.isHeaderCollapsed || false;
-            state.recentCurrencies = parsedData.recentCurrencies || [];
-            state.defaultTags = parsedData.defaultTags || ['car', 'gas', 'flight', 'stay', 'grocery', 'restaurant'];
-            state.historyEnabled = parsedData.historyEnabled || false;
+            state.tripId = cleanData.tripId;
+            state.tripName = cleanData.tripName; 
+            state.tripComment = cleanData.tripComment; 
+            state.participants = cleanData.participants; 
+            state.participantGroups = cleanData.participantGroups;
+            state.expenses = cleanData.expenses; 
+            state.secondaryCurrency = cleanData.secondaryCurrency;
+            state.currentExchangeRate = cleanData.currentExchangeRate;
+            state.currencyRates = cleanData.currencyRates;
+            state.currentSort = cleanData.currentSort;
+            state.tripDays = cleanData.tripDays; 
+            state.showPerDay = cleanData.showPerDay;
+            state.tripNotes = cleanData.tripNotes; 
+            state.tripNotesDelta = cleanData.tripNotesDelta; 
+            state.autoColorNotes = cleanData.autoColorNotes;
+            state.isHeaderCollapsed = cleanData.isHeaderCollapsed;
+            state.recentCurrencies = cleanData.recentCurrencies;
+            state.defaultTags = cleanData.defaultTags;
+            state.historyEnabled = cleanData.historyEnabled;
             state.insightFilter = null;
             state.searchText = '';
             state.selectedCalendarDates = new Set();
-            state.localLastModified = Number.isFinite(Number(parsedData.lastModified)) ? Number(parsedData.lastModified) : 0;
-            state.dataRevision = Number.isFinite(Number(parsedData.dataRevision)) ? Number(parsedData.dataRevision) : 0;
+            state.localLastModified = cleanData.lastModified;
+            state.dataRevision = cleanData.dataRevision;
             
             const UI = await getUI();
             UI.applyHeaderState();
@@ -1472,26 +1835,7 @@ export async function importTrip(e) {
             });
             if (UI.renderHistoryUI) UI.renderHistoryUI();
         }
-        document.getElementById('file-import').value = "";
+        if (fileInput) fileInput.value = "";
     };
     reader.readAsText(file);
 }
-
-// Bind to window for HTML event handlers compatibility
-window.openCloudSettingsModal = openCloudSettingsModal;
-window.manageCloudSync = manageCloudSync;
-window.saveToSupabase = saveToSupabase;
-window.loadFromSupabase = loadFromSupabase;
-window.openNuclearResetModal = openNuclearResetModal;
-window.submitNuclearReset = submitNuclearReset;
-window.openChangePinModal = openChangePinModal;
-window.submitChangePin = submitChangePin;
-window.disconnectLocalSync = disconnectLocalSync;
-window.cancelCloudAuth = cancelCloudAuth;
-window.submitCloudSetup = submitCloudSetup;
-window.submitPinUnlock = submitPinUnlock;
-window.exportTrip = exportTrip;
-window.exportSecureTrip = exportSecureTrip;
-window.importTrip = importTrip;
-window.toggleOfflineMode = toggleOfflineMode;
-window.updateOfflineUI = updateOfflineUI;

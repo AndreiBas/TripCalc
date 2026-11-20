@@ -2,6 +2,7 @@ import { state } from './state.js';
 import { CATEGORIES } from './config.js';
 import { formatMoney } from './currency.js';
 import { saveFileUniversal } from './db.js';
+import { escapeHTML, safeHasOwn, sanitizeFileName } from './security.js';
 
 // Import UI utilities dynamically to avoid load-time circular dependencies
 let uiModule = null;
@@ -29,12 +30,13 @@ export async function exportHTMLReport() {
                     const total = state.currentStats.categoryTotals[cat]; 
                     const acts = state.currentStats.categoryActivityCounts[cat]; 
                     const avgPerPerson = total / (state.currentStats.categoryParticipations[cat] || 1);
+                    const catIcon = safeHasOwn(CATEGORIES, cat) ? CATEGORIES[cat].icon : '📝';
                     categoryBreakdownRows += `
                     <tr>
-                        <td><span class="cat-icon">${CATEGORIES[cat]?.icon || '📝'}</span> ${UI.escapeHTML(cat)}</td>
+                        <td><span class="cat-icon">${catIcon}</span> ${UI.escapeHTML(cat)}</td>
                         <td style="text-align: center;">${acts}</td>
-                        <td style="text-align: right; font-weight: 700;">${formatMoney(total)}</td>
-                        <td style="text-align: right;">${formatMoney(avgPerPerson)}</td>
+                        <td style="text-align: right; font-weight: 700;">${escapeHTML(formatMoney(total))}</td>
+                        <td style="text-align: right;">${escapeHTML(formatMoney(avgPerPerson))}</td>
                     </tr>`;
                 }
             });
@@ -60,9 +62,9 @@ export async function exportHTMLReport() {
                         <strong style="color: ${gColor};">${UI.escapeHTML(UI.shortName(gName))}</strong>
                         ${badgeHtml}
                     </td>
-                    <td style="text-align: right; font-weight: bold;">${formatMoney(stats.paid)}</td>
-                    <td style="text-align: right; font-weight: bold;">${formatMoney(stats.owed)}</td>
-                    <td style="text-align: right; font-weight: bold;" class="${diffClass}">${diffText}</td>
+                    <td style="text-align: right; font-weight: bold;">${escapeHTML(formatMoney(stats.paid))}</td>
+                    <td style="text-align: right; font-weight: bold;">${escapeHTML(formatMoney(stats.owed))}</td>
+                    <td style="text-align: right; font-weight: bold;" class="${diffClass}">${escapeHTML(diffText)}</td>
                 </tr>`;
 
                 // Individual Breakdown for groups
@@ -79,9 +81,9 @@ export async function exportHTMLReport() {
                             <td style="padding-left: 24px; color: #64748b;">
                                 <span style="color: #cbd5e1; margin-right: 4px;">└─</span> <strong style="color: ${mColor}; font-weight: 600;">${UI.escapeHTML(UI.shortName(m))}</strong>
                             </td>
-                            <td style="text-align: right; color: #64748b;">${formatMoney(mStats.paid)}</td>
-                            <td style="text-align: right; color: #64748b;">${formatMoney(mStats.owed)}</td>
-                            <td style="text-align: right;" class="${mDiffClass}">${mDiffText}</td>
+                            <td style="text-align: right; color: #64748b;">${escapeHTML(formatMoney(mStats.paid))}</td>
+                            <td style="text-align: right; color: #64748b;">${escapeHTML(formatMoney(mStats.owed))}</td>
+                            <td style="text-align: right;" class="${mDiffClass}">${escapeHTML(mDiffText)}</td>
                         </tr>`;
                     });
                 }
@@ -99,7 +101,7 @@ export async function exportHTMLReport() {
                         <span class="payer" style="color: ${s.from.color};">${UI.escapeHTML(s.from.name)}</span> 
                         <span class="arrow">➔</span> 
                         <span class="payee" style="color: ${s.to.color};">${UI.escapeHTML(s.to.name)}</span>: 
-                        <strong class="amount">${formatMoney(s.amount)}</strong>
+                        <strong class="amount">${escapeHTML(formatMoney(s.amount))}</strong>
                     </div>`; 
                 });
             }
@@ -122,12 +124,9 @@ export async function exportHTMLReport() {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${UI.escapeHTML(state.tripName || 'Trip Report')} - Trip Report</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         body {
-            font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background-color: #f8fafc;
             color: #0f172a;
             margin: 0;
@@ -135,7 +134,7 @@ export async function exportHTMLReport() {
             line-height: 1.5;
         }
         h1, h2, h3, .stat-value, th {
-            font-family: 'Outfit', sans-serif;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }
         .container {
             max-width: 900px;
@@ -355,23 +354,23 @@ export async function exportHTMLReport() {
             <div class="stats-grid">
                 <div class="stat-card">
                     <span class="stat-label">Filtered Trip Cost</span>
-                    <span class="stat-value">${formatMoney(state.currentStats.totalSpent)}</span>
-                    ${state.showPerDay && state.tripDays > 0 ? `<span class="stat-sub">(${formatMoney(state.currentStats.totalSpent / state.tripDays)}/day)</span>` : ''}
+                    <span class="stat-value">${escapeHTML(formatMoney(state.currentStats.totalSpent))}</span>
+                    ${state.showPerDay && state.tripDays > 0 ? `<span class="stat-sub">(${escapeHTML(formatMoney(state.currentStats.totalSpent / state.tripDays))}/day)</span>` : ''}
                 </div>
                 <div class="stat-card" style="background: #fff1f2; border-color: #fecdd3;">
                     <span class="stat-label" style="color: #be123c;">Biggest Splurge</span>
                     <span class="stat-value" style="color: #be123c; font-size: 1.15rem; word-break: break-word;">${UI.escapeHTML(state.currentStats.biggestSplurge.desc)}</span>
-                    <span class="stat-sub" style="color: #be123c; font-size: 0.95rem; font-weight: 700;">${formatMoney(state.currentStats.biggestSplurge.amount)}</span>
+                    <span class="stat-sub" style="color: #be123c; font-size: 0.95rem; font-weight: 700;">${escapeHTML(formatMoney(state.currentStats.biggestSplurge.amount))}</span>
                 </div>
                 <div class="stat-card">
                     <span class="stat-label">Most Exp. Day</span>
-                    <span class="stat-value" style="font-size: 1.1rem;">${state.currentStats.mostExpensiveDay.date ? UI.formatDateDisplay(state.currentStats.mostExpensiveDay.date) : 'N/A'}</span>
-                    <span class="stat-sub" style="font-weight: 700;">${formatMoney(state.currentStats.mostExpensiveDay.amount)}</span>
+                    <span class="stat-value" style="font-size: 1.1rem;">${state.currentStats.mostExpensiveDay.date ? UI.escapeHTML(UI.formatDateDisplay(state.currentStats.mostExpensiveDay.date)) : 'N/A'}</span>
+                    <span class="stat-sub" style="font-weight: 700;">${escapeHTML(formatMoney(state.currentStats.mostExpensiveDay.amount))}</span>
                 </div>
                 <div class="stat-card">
                     <span class="stat-label">Trip Banker</span>
                     <span class="stat-value">${UI.escapeHTML(UI.shortName(state.currentStats.tripBanker.name))}</span>
-                    <span class="stat-sub">Fronted ${formatMoney(state.currentStats.tripBanker.paid)}</span>
+                    <span class="stat-sub">Fronted ${escapeHTML(formatMoney(state.currentStats.tripBanker.paid))}</span>
                 </div>
             </div>
 
@@ -410,7 +409,7 @@ export async function exportHTMLReport() {
                 </div>
                 <div class="stat-card">
                     <span class="stat-label">Average per Activity</span>
-                    <span class="stat-value">${(state.currentStats?.validActiveCount || 0) > 0 ? formatMoney(state.currentStats.totalSpent / state.currentStats.validActiveCount) : formatMoney(0)}</span>
+                    <span class="stat-value">${(state.currentStats?.validActiveCount || 0) > 0 ? escapeHTML(formatMoney(state.currentStats.totalSpent / state.currentStats.validActiveCount)) : escapeHTML(formatMoney(0))}</span>
                 </div>
             </div>
             
@@ -433,7 +432,7 @@ export async function exportHTMLReport() {
 </body>
 </html>`;
 
-        const safeTripName = (state.tripName || 'Trip').replace(/[/\\?%*:|"<>]/g, '').trim().replace(/\s+/g, '_') || 'Trip';
+        const safeTripName = sanitizeFileName(state.tripName || 'Trip', 'Trip');
         await saveFileUniversal(reportHtml, `${safeTripName}_Report.html`, 'text/html;charset=utf-8');
 
     } catch (err) {
@@ -444,6 +443,3 @@ export async function exportHTMLReport() {
         btn.disabled = false;
     }
 }
-
-// Bind to window for HTML inline event handlers compatibility
-window.exportHTMLReport = exportHTMLReport;

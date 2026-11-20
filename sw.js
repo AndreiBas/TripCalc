@@ -1,6 +1,10 @@
 // Bump this version number every time you update your HTML/CSS/JS!
-const CACHE_NAME = 'trip-calc-cache-v57'; 
+const CACHE_NAME = 'trip-calc-cache-v58';
 const REPO_NAME = new URL(self.registration.scope).pathname.replace(/\/$/, '') || '';
+const ALLOWED_FONT_ORIGINS = new Set([
+  'https://fonts.googleapis.com',
+  'https://fonts.gstatic.com'
+]);
 
 // ONLY put guaranteed local files here. Do NOT put external CDNs here.
 const localUrlsToCache = [
@@ -10,7 +14,12 @@ const localUrlsToCache = [
   `${REPO_NAME}/icon-192.png`,
   `${REPO_NAME}/icon-512.png`,
   `${REPO_NAME}/css/styles.css`,
+  `${REPO_NAME}/vendor/quill.snow.css`,
+  `${REPO_NAME}/vendor/purify.min.js`,
+  `${REPO_NAME}/vendor/quill.js`,
+  `${REPO_NAME}/vendor/supabase.min.js`,
   `${REPO_NAME}/js/config.js`,
+  `${REPO_NAME}/js/security.js`,
   `${REPO_NAME}/js/state.js`,
   `${REPO_NAME}/js/history.js`,
   `${REPO_NAME}/js/db.js`,
@@ -56,10 +65,10 @@ self.addEventListener('activate', event => {
   self.clients.claim(); // Take control of all pages immediately.
 });
 
-// 3. Network-First (with fast timeout) for local app files; Stale-While-Revalidate for external CDNs
+// 3. Network-First (with fast timeout) for same-origin static files; Stale-While-Revalidate ONLY for allowlisted font origins.
+// All API calls (Supabase, custom-domain Supabase, live exchange rates, non-GET) bypass the cache completely.
 self.addEventListener('fetch', event => {
-  // Never try to cache Supabase database calls or live exchange rate API responses
-  if (event.request.url.includes('supabase.co') || event.request.url.includes('currency-api')) {
+  if (event.request.method !== 'GET') {
     return;
   }
 
@@ -70,22 +79,26 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  const isSameOriginGet = requestUrl.origin === self.location.origin && event.request.method === 'GET';
-  if (isSameOriginGet) {
+  if (requestUrl.protocol !== 'http:' && requestUrl.protocol !== 'https:') {
+    return;
+  }
+
+  const isSameOrigin = requestUrl.origin === self.location.origin;
+  if (isSameOrigin) {
     event.respondWith((async () => {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 2500);
       try {
         const networkResponse = await fetch(event.request, { signal: controller.signal });
         clearTimeout(timeoutId);
-        if (networkResponse && networkResponse.status === 200) {
+        if (networkResponse && networkResponse.ok && networkResponse.type === 'basic') {
           const cache = await caches.open(CACHE_NAME);
           cache.put(event.request, networkResponse.clone());
         }
         return networkResponse;
       } catch (err) {
         clearTimeout(timeoutId);
-        const cachedResponse = await caches.match(event.request, { ignoreSearch: true });
+        const cachedResponse = await caches.match(event.request);
         if (cachedResponse) {
           return cachedResponse;
         }
@@ -98,21 +111,14 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  event.respondWith(
-    caches.match(event.request, { ignoreSearch: true }).then(cachedResponse => {
-      if (cachedResponse) {
-        fetch(event.request).then(networkResponse => {
-          if (networkResponse && networkResponse.status === 200 && event.request.method === 'GET') {
-            caches.open(CACHE_NAME).then(cache => {
-              cache.put(event.request, networkResponse.clone());
-            });
-          }
-        }).catch(() => {});
-        return cachedResponse;
-      }
+  if (!ALLOWED_FONT_ORIGINS.has(requestUrl.origin)) {
+    return;
+  }
 
-      return fetch(event.request).then(networkResponse => {
-        if (networkResponse && networkResponse.status === 200 && event.request.method === 'GET') {
+  event.respondWith(
+    caches.match(event.request).then(cachedResponse => {
+      const fetchPromise = fetch(event.request).then(networkResponse => {
+        if (networkResponse && networkResponse.ok) {
           const responseToCache = networkResponse.clone();
           caches.open(CACHE_NAME).then(cache => {
             cache.put(event.request, responseToCache);
@@ -120,6 +126,11 @@ self.addEventListener('fetch', event => {
         }
         return networkResponse;
       });
+      if (cachedResponse) {
+        fetchPromise.catch(() => {});
+        return cachedResponse;
+      }
+      return fetchPromise;
     })
   );
 });

@@ -1,5 +1,6 @@
 import { state, saveState, repairLegacyData, buildTripPayload } from './state.js';
 import { updateCurrencySelectors } from './currency.js';
+import { validateHistoryStack, validateAndSanitizeTripPayload } from './security.js';
 
 function formatLabel(date) {
     return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ', ' + 
@@ -32,10 +33,14 @@ function scheduleHistoryCloudSync() {
 }
 
 function persistHistoryLocal() {
-    localStorage.setItem('tripSplitterHistory', JSON.stringify({
-        forTripName: state.tripName,
-        historyStack: state.historyStack
-    }));
+    try {
+        localStorage.setItem('tripSplitterHistory', JSON.stringify({
+            forTripName: state.tripName,
+            historyStack: state.historyStack
+        }));
+    } catch (err) {
+        console.warn('Failed to persist trip history to localStorage:', err);
+    }
 }
 
 export function pushHistorySnapshot() {
@@ -62,31 +67,28 @@ export function pushHistorySnapshot() {
 export async function restoreHistoryState(index) {
     if (index < 0 || index >= state.historyStack.length) return;
     
-    const { payload } = state.historyStack[index];
+    const payload = validateAndSanitizeTripPayload(state.historyStack[index]?.payload);
+    if (!payload) return;
     state.historyStack = state.historyStack.slice(0, index);
 
     if (payload.tripId) state.tripId = payload.tripId;
     state.tripName = payload.tripName; 
     state.tripComment = payload.tripComment;
-    state.participants = payload.participants || [];
-    state.participantGroups = payload.participantGroups || {};
-    state.expenses = payload.expenses || [];
-    state.secondaryCurrency = payload.secondaryCurrency || "";
-    state.currentExchangeRate = (payload.currentExchangeRate !== undefined && payload.currentExchangeRate !== null)
-        ? payload.currentExchangeRate
-        : (state.secondaryCurrency ? 0 : 1);
-    state.recentCurrencies = payload.recentCurrencies || [];
-    state.currencyRates = (payload.currencyRates && typeof payload.currencyRates === 'object' && !Array.isArray(payload.currencyRates))
-        ? payload.currencyRates
-        : {};
-    state.currentSort = payload.currentSort || 'date-desc';
-    state.tripDays = payload.tripDays || 1;
-    state.showPerDay = payload.showPerDay || false;
-    state.tripNotes = payload.tripNotes || "";
-    state.tripNotesDelta = payload.tripNotesDelta || null;
-    state.autoColorNotes = payload.autoColorNotes || false;
-    state.isHeaderCollapsed = payload.isHeaderCollapsed || false;
-    state.defaultTags = payload.defaultTags || ['car', 'gas', 'flight', 'stay', 'grocery', 'restaurant'];
+    state.participants = payload.participants;
+    state.participantGroups = payload.participantGroups;
+    state.expenses = payload.expenses;
+    state.secondaryCurrency = payload.secondaryCurrency;
+    state.currentExchangeRate = payload.currentExchangeRate;
+    state.recentCurrencies = payload.recentCurrencies;
+    state.currencyRates = payload.currencyRates;
+    state.currentSort = payload.currentSort;
+    state.tripDays = payload.tripDays;
+    state.showPerDay = payload.showPerDay;
+    state.tripNotes = payload.tripNotes;
+    state.tripNotesDelta = payload.tripNotesDelta;
+    state.autoColorNotes = payload.autoColorNotes;
+    state.isHeaderCollapsed = payload.isHeaderCollapsed;
+    state.defaultTags = payload.defaultTags;
 
     repairLegacyData();
     syncHistoryBaseline();
@@ -122,8 +124,8 @@ export function loadHistoryLocal() {
             return;
         }
         const data = JSON.parse(saved);
-        if (data.forTripName === state.tripName) {
-            state.historyStack = data.historyStack || [];
+        if (data && data.forTripName === state.tripName) {
+            state.historyStack = validateHistoryStack(data.historyStack);
         } else {
             state.historyStack = [];
         }

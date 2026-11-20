@@ -44,7 +44,7 @@ function createAdjacentDayButton(dayNum, dateStr, isSelected, hasActivity, onSel
         btn.appendChild(dot);
     }
 
-    btn.onclick = onSelect;
+    btn.addEventListener('click', onSelect);
     return btn;
 }
 
@@ -180,7 +180,7 @@ export function renderCalendar() {
                 dayBtn.appendChild(dot);
             }
 
-            dayBtn.onclick = () => selectCalendarDate(currentYear, currentMonth, day);
+            dayBtn.addEventListener('click', () => selectCalendarDate(currentYear, currentMonth, day));
             daysGrid.appendChild(dayBtn);
         } else {
             // Day from next month
@@ -341,11 +341,3 @@ export function initCalendarDraggable() {
         document.removeEventListener('touchmove', elementTouchDrag);
     }
 }
-
-// Bind to window for HTML event handlers compatibility
-window.toggleCalendar = toggleCalendar;
-window.prevMonth = prevMonth;
-window.nextMonth = nextMonth;
-window.calendarGoToToday = calendarGoToToday;
-window.calendarFilterLedger = calendarFilterLedger;
-window.calendarClearFilter = calendarClearFilter;

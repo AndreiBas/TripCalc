@@ -1,5 +1,6 @@
 import { state, saveState } from './state.js';
 import { CURRENCY_SYMBOLS, COMMON_CURRENCIES, ALL_CURRENCIES } from './config.js';
+import { escapeHTML, safeHasOwn, sanitizeCurrencyCode, validateRatesObject } from './security.js';
 
 const RATES_CACHE_KEY = 'tripSplitter_cachedRates';
 const RATES_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
@@ -8,9 +9,10 @@ let currencyChangeSeq = 0;
 export function saveRatesCache(ratesObj) {
     if (!ratesObj || typeof ratesObj !== 'object' || typeof localStorage === 'undefined') return;
     try {
+        const cleanRates = validateRatesObject(ratesObj, false);
         localStorage.setItem(RATES_CACHE_KEY, JSON.stringify({
             updatedAt: Date.now(),
-            rates: ratesObj
+            rates: cleanRates
         }));
     } catch (err) {
         console.warn('Failed to persist exchange rate cache:', err);
@@ -23,8 +25,11 @@ export function loadRatesCache() {
         const raw = localStorage.getItem(RATES_CACHE_KEY);
         if (!raw) return null;
         const parsed = JSON.parse(raw);
-        if (parsed && parsed.rates && typeof parsed.rates === 'object') {
-            return parsed;
+        if (parsed && parsed.rates && typeof parsed.rates === 'object' && !Array.isArray(parsed.rates)) {
+            return {
+                updatedAt: Number.isFinite(Number(parsed.updatedAt)) ? Number(parsed.updatedAt) : 0,
+                rates: validateRatesObject(parsed.rates, false)
+            };
         }
     } catch (err) {
         console.warn('Failed to read exchange rate cache:', err);
@@ -36,22 +41,23 @@ export function getCachedRate(targetCurrency) {
     const code = String(targetCurrency || '').trim().toUpperCase();
     if (!code || code === 'USD') return 1;
 
-    if (state.currencyRates && isFinite(state.currencyRates[code]) && state.currencyRates[code] > 0) {
+    if (safeHasOwn(state.currencyRates, code) && Number.isFinite(state.currencyRates[code]) && state.currencyRates[code] > 0) {
         return state.currencyRates[code];
     }
-    if (state.secondaryCurrency === code && isFinite(state.currentExchangeRate) && state.currentExchangeRate > 0) {
+    if (state.secondaryCurrency === code && Number.isFinite(state.currentExchangeRate) && state.currentExchangeRate > 0) {
         return state.currentExchangeRate;
     }
 
     const cache = loadRatesCache();
-    const cachedRate = cache?.rates?.[code.toLowerCase()];
-    if (isFinite(cachedRate) && cachedRate > 0) {
+    const lowerCode = code.toLowerCase();
+    const cachedRate = safeHasOwn(cache?.rates, lowerCode) ? cache.rates[lowerCode] : null;
+    if (Number.isFinite(cachedRate) && cachedRate > 0) {
         return cachedRate;
     }
 
     const sorted = [...(state.expenses || [])].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
     for (const e of sorted) {
-        if (e && e.localCurrency === code && isFinite(e.exchangeRate) && e.exchangeRate > 0) {
+        if (e && e.localCurrency === code && Number.isFinite(e.exchangeRate) && e.exchangeRate > 0) {
             return e.exchangeRate;
         }
     }
@@ -130,11 +136,13 @@ export async function fetchRateOnly(targetCurrency, isSilent = false) {
         clearTimeout(timeoutId);
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
-        if (data?.usd && typeof data.usd === 'object') {
-            saveRatesCache(data.usd);
+        const validRates = (data?.usd && typeof data.usd === 'object') ? validateRatesObject(data.usd, false) : {};
+        if (Object.keys(validRates).length > 0) {
+            saveRatesCache(validRates);
         }
-        const rate = data?.usd?.[code.toLowerCase()];
-        if (isFinite(rate) && rate > 0) {
+        const lowerCode = code.toLowerCase();
+        const rate = safeHasOwn(validRates, lowerCode) ? validRates[lowerCode] : null;
+        if (Number.isFinite(rate) && rate > 0) {
             if (!state.currencyRates) state.currencyRates = {};
             state.currencyRates[code] = rate;
             return rate;
@@ -199,12 +207,14 @@ export async function warmCurrencyRatesCache(forceRefresh = false) {
         clearTimeout(timeoutId);
         if (!res.ok) return false;
         const data = await res.json();
-        if (data?.usd && typeof data.usd === 'object') {
-            saveRatesCache(data.usd);
+        const validRates = (data?.usd && typeof data.usd === 'object') ? validateRatesObject(data.usd, false) : {};
+        if (Object.keys(validRates).length > 0) {
+            saveRatesCache(validRates);
         }
         if (state.secondaryCurrency) {
-            const liveRate = data?.usd?.[state.secondaryCurrency.toLowerCase()];
-            if (isFinite(liveRate) && liveRate > 0) {
+            const lowerSec = state.secondaryCurrency.toLowerCase();
+            const liveRate = safeHasOwn(validRates, lowerSec) ? validRates[lowerSec] : null;
+            if (Number.isFinite(liveRate) && liveRate > 0) {
                 state.currentExchangeRate = liveRate;
                 if (!state.currencyRates) state.currencyRates = {};
                 state.currencyRates[state.secondaryCurrency] = liveRate;
@@ -327,21 +337,26 @@ export function updateCurrencySelectors(options = {}) {
     const latestCurrencies = getActivityCurrencies();
     let expHtml = `<option value="USD">USD</option>`;
     latestCurrencies.forEach(code => {
-        const safeCode = escapePickerHtml(code);
+        const safeCode = escapeHTML(code);
         expHtml += `<option value="${safeCode}">${safeCode}</option>`;
     });
     let viewHtml = `<option value="USD">🇺🇸 USD ($)</option>`;
-    
-    if (state.secondaryCurrency) {
-        const sym = CURRENCY_SYMBOLS[state.secondaryCurrency] || state.secondaryCurrency;
-        const currInfo = ALL_CURRENCIES.find(c => c.code === state.secondaryCurrency);
+    const secCurrency = sanitizeCurrencyCode(state.secondaryCurrency, false);
+    if (secCurrency !== state.secondaryCurrency) {
+        state.secondaryCurrency = secCurrency;
+    }
+
+    if (secCurrency) {
+        const sym = safeHasOwn(CURRENCY_SYMBOLS, secCurrency) ? CURRENCY_SYMBOLS[secCurrency] : secCurrency;
+        const currInfo = ALL_CURRENCIES.find(c => c.code === secCurrency);
         const flag = currInfo ? currInfo.flag : '🌍';
-        viewHtml += `<option value="${state.secondaryCurrency}">${flag} ${state.secondaryCurrency} (${sym})</option>`;
+        const safeSec = escapeHTML(secCurrency);
+        viewHtml += `<option value="${safeSec}">${escapeHTML(flag)} ${safeSec} (${escapeHTML(sym)})</option>`;
         viewContainer.style.display = 'flex';
         
         if (qcContainer) {
             qcContainer.style.display = 'flex';
-            if (qcForeignLabel) qcForeignLabel.innerText = state.secondaryCurrency;
+            if (qcForeignLabel) qcForeignLabel.innerText = secCurrency;
             if (state.currentExchangeRate > 0) {
                 if (document.getElementById('qc-usd').value) quickConvert('usd');
             } else {
@@ -352,7 +367,7 @@ export function updateCurrencySelectors(options = {}) {
 
         if (qcNotesContainer) {
             qcNotesContainer.style.display = 'flex';
-            if (qcNotesForeignLabel) qcNotesForeignLabel.innerText = state.secondaryCurrency;
+            if (qcNotesForeignLabel) qcNotesForeignLabel.innerText = secCurrency;
             if (state.currentExchangeRate > 0) {
                 if (document.getElementById('qc-notes-usd').value) quickConvertNotes('usd');
             } else {
@@ -370,9 +385,9 @@ export function updateCurrencySelectors(options = {}) {
     let preserveCur = 'USD';
     if (state.editingExpenseId) {
         const editingExp = (state.expenses || []).find(e => e.id === state.editingExpenseId);
-        preserveCur = normalizedCurrExp || editingExp?.localCurrency || 'USD';
+        preserveCur = sanitizeCurrencyCode(normalizedCurrExp || editingExp?.localCurrency || 'USD', true) || 'USD';
         if (preserveCur && preserveCur !== 'USD' && !latestCurrencies.includes(preserveCur)) {
-            const safePreserve = escapePickerHtml(preserveCur);
+            const safePreserve = escapeHTML(preserveCur);
             expHtml += `<option value="${safePreserve}">${safePreserve}</option>`;
         }
     }
@@ -381,11 +396,11 @@ export function updateCurrencySelectors(options = {}) {
     if (state.editingExpenseId) {
         nextExpCur = preserveCur;
     } else if (selectSecondary) {
-        nextExpCur = state.secondaryCurrency || 'USD';
+        nextExpCur = secCurrency || 'USD';
     } else if (normalizedCurrExp === 'USD' || latestCurrencies.includes(normalizedCurrExp)) {
         nextExpCur = normalizedCurrExp;
     } else {
-        nextExpCur = state.secondaryCurrency || 'USD';
+        nextExpCur = secCurrency || 'USD';
     }
 
     expSelector.innerHTML = expHtml;
@@ -396,7 +411,7 @@ export function updateCurrencySelectors(options = {}) {
 
     expSelector.value = nextExpCur;
 
-    if (state.secondaryCurrency && currViewVal === state.secondaryCurrency) viewSelector.value = state.secondaryCurrency;
+    if (secCurrency && currViewVal === secCurrency) viewSelector.value = secCurrency;
     
     import('./ui.js').then(UI => {
         UI.updateFormCurrencyUI({
@@ -407,28 +422,30 @@ export function updateCurrencySelectors(options = {}) {
 }
 
 export function formatMoney(amountInUsd, displayCurOverride = null, rateOverride = null) {
-    const displayCur = displayCurOverride || (document.getElementById('view-currency')?.value || 'USD');
+    const safeAmt = Number.isFinite(Number(amountInUsd)) ? Number(amountInUsd) : 0;
+    const rawCur = displayCurOverride || (typeof document !== 'undefined' ? (document.getElementById('view-currency')?.value || 'USD') : 'USD');
+    const displayCur = sanitizeCurrencyCode(rawCur, true) || 'USD';
     if (displayCur === 'USD') { 
-        return `$${amountInUsd.toFixed(2)}`; 
+        return `$${safeAmt.toFixed(2)}`; 
     } else {
         const rate = (rateOverride !== null && rateOverride !== undefined) ? rateOverride : state.currentExchangeRate;
-        if (!isFinite(rate) || rate <= 0) {
-            return `$${amountInUsd.toFixed(2)} USD`;
+        if (!Number.isFinite(rate) || rate <= 0) {
+            return `$${safeAmt.toFixed(2)} USD`;
         }
-        const converted = amountInUsd * rate;
-        const sym = CURRENCY_SYMBOLS[displayCur] ? CURRENCY_SYMBOLS[displayCur] : displayCur + ' ';
+        const converted = safeAmt * rate;
+        const sym = safeHasOwn(CURRENCY_SYMBOLS, displayCur) ? CURRENCY_SYMBOLS[displayCur] : displayCur + ' ';
         return `${sym}${converted.toFixed(2)}`;
     }
 }
 
 export function getPerDayText(amount) {
     if (!state.showPerDay || state.tripDays <= 0) return '';
-    return ` <span style="font-size: 0.8rem; color: var(--primary); font-weight: 800; background: #eef2ff; padding: 2px 6px; border-radius: 6px; margin-left: 8px;">${formatMoney(amount / state.tripDays)}/d</span>`;
+    return ` <span style="font-size: 0.8rem; color: var(--primary); font-weight: 800; background: #eef2ff; padding: 2px 6px; border-radius: 6px; margin-left: 8px;">${escapeHTML(formatMoney(amount / state.tripDays))}/d</span>`;
 }
 
 export function getPerDayTextSmall(amount) {
     if (!state.showPerDay || state.tripDays <= 0) return '';
-    return ` <span class="tabular-nums" style="display: inline-block; font-size: 0.75rem; color: var(--primary); font-weight: 700; margin-left: 4px;">(${formatMoney(amount / state.tripDays)}/d)</span>`;
+    return ` <span class="tabular-nums" style="display: inline-block; font-size: 0.75rem; color: var(--primary); font-weight: 700; margin-left: 4px;">(${escapeHTML(formatMoney(amount / state.tripDays))}/d)</span>`;
 }
 
 export function quickConvert(source) {
@@ -467,19 +484,21 @@ export function quickConvertNotes(source) {
 let pickerEl = null;
 let pickerListenersAttached = false;
 
-function escapePickerHtml(str) {
-    return String(str ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-}
-
 function ensureCurrencyPicker() {
     if (!pickerEl) {
         pickerEl = document.createElement('div');
         pickerEl.className = 'currency-picker';
+        pickerEl.addEventListener('mousedown', (e) => {
+            if (e.target.closest('.currency-picker-item')) {
+                e.preventDefault();
+            }
+        });
+        pickerEl.addEventListener('click', (e) => {
+            const item = e.target.closest('.currency-picker-item');
+            if (item && item.dataset.currency) {
+                applyCurrencyFromPicker(item.dataset.currency);
+            }
+        });
     }
     if (typeof document.body?.contains === 'function' ? !document.body.contains(pickerEl) : !pickerEl.parentNode) {
         document.body.appendChild(pickerEl);
@@ -565,29 +584,29 @@ export function renderCurrencyPicker(filterText = '') {
         html += `<div class="currency-picker-section-label">${recents.length > 0 ? 'Recent' : 'Default'}</div>`;
         recents.forEach(code => {
             const currencyInfo = ALL_CURRENCIES.find(c => c.code === code) || { code, flag: '🌍', name: 'Custom' };
-            const safeCode = encodeURIComponent(code);
-            html += `<div class="currency-picker-item recent" onmousedown="event.preventDefault();" onclick="applyCurrencyFromPicker(decodeURIComponent('${safeCode}'))">
-                        <span class="currency-picker-flag">${escapePickerHtml(currencyInfo.flag)}</span>
-                        <span class="currency-picker-code">${escapePickerHtml(code)}</span>
-                        <span class="currency-picker-name">${escapePickerHtml(currencyInfo.name)}</span>
+            const safeCode = escapeHTML(code);
+            html += `<div class="currency-picker-item recent" data-currency="${safeCode}">
+                        <span class="currency-picker-flag">${escapeHTML(currencyInfo.flag)}</span>
+                        <span class="currency-picker-code">${safeCode}</span>
+                        <span class="currency-picker-name">${escapeHTML(currencyInfo.name)}</span>
                      </div>`;
         });
 
         const usdInfo = ALL_CURRENCIES.find(c => c.code === 'USD') || { code: 'USD', flag: '🇺🇸', name: 'US Dollar' };
-        html += `<div class="currency-picker-item base-usd" onmousedown="event.preventDefault();" onclick="applyCurrencyFromPicker('USD')">
-                    <span class="currency-picker-flag">${escapePickerHtml(usdInfo.flag)}</span>
+        html += `<div class="currency-picker-item base-usd" data-currency="USD">
+                    <span class="currency-picker-flag">${escapeHTML(usdInfo.flag)}</span>
                     <span class="currency-picker-code">USD</span>
-                    <span class="currency-picker-name">${escapePickerHtml(usdInfo.name)}</span>
+                    <span class="currency-picker-name">${escapeHTML(usdInfo.name)}</span>
                  </div>`;
 
         html += `<div class="currency-picker-section-label">Common</div>`;
         COMMON_CURRENCIES.forEach(c => {
             if (c.code === 'USD' || recents.includes(c.code)) return;
-            const safeCode = encodeURIComponent(c.code);
-            html += `<div class="currency-picker-item" onmousedown="event.preventDefault();" onclick="applyCurrencyFromPicker(decodeURIComponent('${safeCode}'))">
-                        <span class="currency-picker-flag">${escapePickerHtml(c.flag)}</span>
-                        <span class="currency-picker-code">${escapePickerHtml(c.code)}</span>
-                        <span class="currency-picker-name">${escapePickerHtml(c.name)}</span>
+            const safeCode = escapeHTML(c.code);
+            html += `<div class="currency-picker-item" data-currency="${safeCode}">
+                        <span class="currency-picker-flag">${escapeHTML(c.flag)}</span>
+                        <span class="currency-picker-code">${safeCode}</span>
+                        <span class="currency-picker-name">${escapeHTML(c.name)}</span>
                      </div>`;
         });
     } else {
@@ -614,20 +633,20 @@ export function renderCurrencyPicker(filterText = '') {
         if (matches.length > 0 || is3Letter) {
             html += `<div class="currency-picker-section-label">Matches</div>`;
             matches.slice(0, 40).forEach(c => {
-                const safeCode = encodeURIComponent(c.code);
-                html += `<div class="currency-picker-item" onmousedown="event.preventDefault();" onclick="applyCurrencyFromPicker(decodeURIComponent('${safeCode}'))">
-                            <span class="currency-picker-flag">${escapePickerHtml(c.flag)}</span>
-                            <span class="currency-picker-code">${escapePickerHtml(c.code)}</span>
-                            <span class="currency-picker-name">${escapePickerHtml(c.name)}</span>
+                const safeCode = escapeHTML(c.code);
+                html += `<div class="currency-picker-item" data-currency="${safeCode}">
+                            <span class="currency-picker-flag">${escapeHTML(c.flag)}</span>
+                            <span class="currency-picker-code">${safeCode}</span>
+                            <span class="currency-picker-name">${escapeHTML(c.name)}</span>
                          </div>`;
             });
 
             if (is3Letter && !hasExactMatch) {
-                const safeUpper = encodeURIComponent(upper);
-                html += `<div class="currency-picker-item" onmousedown="event.preventDefault();" onclick="applyCurrencyFromPicker(decodeURIComponent('${safeUpper}'))">
+                const safeUpper = escapeHTML(upper);
+                html += `<div class="currency-picker-item" data-currency="${safeUpper}">
                             <span class="currency-picker-flag">🌍</span>
-                            <span class="currency-picker-code">${escapePickerHtml(upper)}</span>
-                            <span class="currency-picker-name">Use "${escapePickerHtml(upper)}"</span>
+                            <span class="currency-picker-code">${safeUpper}</span>
+                            <span class="currency-picker-name">Use "${safeUpper}"</span>
                          </div>`;
             }
         }
@@ -672,13 +691,3 @@ export function handleCurrencyKeyDown(e) {
         e.target.blur();
     }
 }
-
-// Bind to window for HTML event handlers compatibility
-window.handleCurrencyChange = handleCurrencyChange;
-window.quickConvert = quickConvert;
-window.quickConvertNotes = quickConvertNotes;
-window.showCurrencyPicker = showCurrencyPicker;
-window.hideCurrencyPicker = hideCurrencyPicker;
-window.applyCurrencyFromPicker = applyCurrencyFromPicker;
-window.handleCurrencyInput = handleCurrencyInput;
-window.handleCurrencyKeyDown = handleCurrencyKeyDown;

@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TripCalc v5.39</title>
+    <meta name="referrer" content="no-referrer">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data:; connect-src 'self' https://*.supabase.co https://cdn.jsdelivr.net; object-src 'none'; base-uri 'none'; form-action 'none';">
+    <title>TripCalc v5.40</title>
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icon-192.png">
     <meta name="theme-color" content="#4f46e5">
@@ -11,12 +13,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     
-    <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
-    <script src="https://cdn.quilljs.com/1.3.6/quill.min.js"></script>
-    
-
-
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link href="vendor/quill.snow.css" rel="stylesheet">
+    <script src="vendor/purify.min.js"></script>
+    <script src="vendor/quill.js"></script>
+    <script src="vendor/supabase.min.js"></script>
     <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
@@ -24,54 +24,54 @@
     <div id="mini-calculator">
         <div id="mini-calc-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px; cursor: move; user-select: none;">
             <h3 style="margin: 0; font-size: 0.9rem; font-weight: 800;">🧮 Calculator</h3>
-            <span role="button" tabindex="0" aria-label="Close Calculator" style="cursor: pointer; font-size: 1.2rem; line-height: 1; color: var(--secondary);" onclick="toggleCalculator()">&times;</span>
+            <span id="calc-close-btn" role="button" tabindex="0" aria-label="Close Calculator" style="cursor: pointer; font-size: 1.2rem; line-height: 1; color: var(--secondary);">&times;</span>
         </div>
         <div id="calc-display" class="tabular-nums" style="background: #ffffff; border: 1px solid var(--primary); border-radius: var(--radius-sm); padding: 8px 12px; font-size: 1.2rem; font-weight: 900; text-align: right; margin-bottom: 12px; color: var(--primary); box-shadow: inset 0 2px 4px rgba(0,0,0,0.05); min-height: 24px; word-break: break-all;">0</div>
         
         <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;">
             <div style="display: flex; gap: 4px;">
-                <button class="danger small" onclick="calcClear()" style="flex: 1; padding: 4px 0;" title="Clear All">C</button>
-                <button class="warning small" onclick="calcDelete()" style="flex: 1; padding: 4px 0; background: #f97316; color: white;" title="Backspace">⌫</button>
+                <button id="calc-clear-btn" class="danger small" style="flex: 1; padding: 4px 0;" title="Clear All">C</button>
+                <button id="calc-delete-btn" class="warning small" style="flex: 1; padding: 4px 0; background: #f97316; color: white;" title="Backspace">⌫</button>
             </div>
-            <button class="outline small" onclick="calcInput('(')">(</button>
-            <button class="outline small" onclick="calcInput(')')">)</button>
-            <button class="secondary small" onclick="calcInput('%')">%</button>
+            <button class="outline small" data-calc-input="(">(</button>
+            <button class="outline small" data-calc-input=")">)</button>
+            <button class="secondary small" data-calc-input="%">%</button>
             
-            <button class="outline small" onclick="calcInput('7')">7</button>
-            <button class="outline small" onclick="calcInput('8')">8</button>
-            <button class="outline small" onclick="calcInput('9')">9</button>
-            <button class="secondary small" onclick="calcInput('/')">÷</button>
+            <button class="outline small" data-calc-input="7">7</button>
+            <button class="outline small" data-calc-input="8">8</button>
+            <button class="outline small" data-calc-input="9">9</button>
+            <button class="secondary small" data-calc-input="/">÷</button>
             
-            <button class="outline small" onclick="calcInput('4')">4</button>
-            <button class="outline small" onclick="calcInput('5')">5</button>
-            <button class="outline small" onclick="calcInput('6')">6</button>
-            <button class="secondary small" onclick="calcInput('*')">×</button>
+            <button class="outline small" data-calc-input="4">4</button>
+            <button class="outline small" data-calc-input="5">5</button>
+            <button class="outline small" data-calc-input="6">6</button>
+            <button class="secondary small" data-calc-input="*">×</button>
             
-            <button class="outline small" onclick="calcInput('1')">1</button>
-            <button class="outline small" onclick="calcInput('2')">2</button>
-            <button class="outline small" onclick="calcInput('3')">3</button>
-            <button class="secondary small" onclick="calcInput('-')">-</button>
+            <button class="outline small" data-calc-input="1">1</button>
+            <button class="outline small" data-calc-input="2">2</button>
+            <button class="outline small" data-calc-input="3">3</button>
+            <button class="secondary small" data-calc-input="-">-</button>
             
-            <button class="outline small" onclick="calcInput('0')" style="grid-column: span 2;">0</button>
-            <button class="outline small" onclick="calcInput('.')">.</button>
-            <button class="secondary small" onclick="calcInput('+')">+</button>
+            <button class="outline small" data-calc-input="0" style="grid-column: span 2;">0</button>
+            <button class="outline small" data-calc-input=".">.</button>
+            <button class="secondary small" data-calc-input="+">+</button>
         </div>
-        <button onclick="calcSolve()" style="width: 100%; margin-top: 6px; font-size: 1.1rem; padding: 6px;">=</button>
-        <button class="outline small" id="calc-copy-btn" onclick="calcCopy()" style="width: 100%; margin-top: 6px;">📋 Copy & Paste Result</button>
+        <button id="calc-solve-btn" style="width: 100%; margin-top: 6px; font-size: 1.1rem; padding: 6px;">=</button>
+        <button class="outline small" id="calc-copy-btn" style="width: 100%; margin-top: 6px;">📋 Copy & Paste Result</button>
     </div>
 
     <div id="mini-calendar">
         <div id="mini-calendar-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid var(--border); padding-bottom: 6px; cursor: move; user-select: none;">
             <div style="display: flex; align-items: center; gap: 8px;">
                 <h3 style="margin: 0; font-size: 0.9rem; font-weight: 800; color: #000000;">📅 Calendar</h3>
-                <button class="outline small" onclick="calendarGoToToday()" style="padding: 1px 6px; font-size: 0.7rem; cursor: pointer; border-radius: 4px;">Today</button>
+                <button id="calendar-today-btn" class="outline small" style="padding: 1px 6px; font-size: 0.7rem; cursor: pointer; border-radius: 4px;">Today</button>
             </div>
-            <span role="button" tabindex="0" aria-label="Close Calendar" style="cursor: pointer; font-size: 1.2rem; line-height: 1; color: var(--secondary);" onclick="toggleCalendar()">&times;</span>
+            <span id="calendar-close-btn" role="button" tabindex="0" aria-label="Close Calendar" style="cursor: pointer; font-size: 1.2rem; line-height: 1; color: var(--secondary);">&times;</span>
         </div>
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-            <button class="outline small" onclick="prevMonth()" style="padding: 2px 6px; cursor: pointer; border-radius: 4px;">◀</button>
+            <button id="calendar-prev-btn" class="outline small" style="padding: 2px 6px; cursor: pointer; border-radius: 4px;">◀</button>
             <span id="calendar-month-year" style="font-weight: 700; font-size: 0.85rem; color: #000000;">Month Year</span>
-            <button class="outline small" onclick="nextMonth()" style="padding: 2px 6px; cursor: pointer; border-radius: 4px;">▶</button>
+            <button id="calendar-next-btn" class="outline small" style="padding: 2px 6px; cursor: pointer; border-radius: 4px;">▶</button>
         </div>
         <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; font-size: 0.72rem; font-weight: 700; color: var(--secondary); margin-bottom: 4px;">
             <div>Mo</div><div>Tu</div><div>We</div><div>Th</div><div>Fr</div><div style="color: #ef4444;">Sa</div><div style="color: #ef4444;">Su</div>
@@ -80,8 +80,8 @@
             <!-- Days rendered dynamically -->
         </div>
         <div style="display: flex; gap: 6px; margin-top: 8px;">
-            <button class="primary small" onclick="calendarFilterLedger()" style="flex: 1; font-size: 0.8rem; padding: 4px; cursor: pointer; border-radius: 4px;">✓ Apply &amp; Close</button>
-            <button class="outline small" onclick="calendarClearFilter()" style="padding: 4px 8px; font-size: 0.8rem; cursor: pointer; border-radius: 4px;">Clear</button>
+            <button id="calendar-apply-btn" class="primary small" style="flex: 1; font-size: 0.8rem; padding: 4px; cursor: pointer; border-radius: 4px;">✓ Apply &amp; Close</button>
+            <button id="calendar-clear-btn" class="outline small" style="padding: 4px 8px; font-size: 0.8rem; cursor: pointer; border-radius: 4px;">Clear</button>
         </div>
     </div>
 
@@ -93,10 +93,10 @@
                 <!-- Left Column -->
                 <div style="display: flex; flex-direction: column; justify-content: center; gap: 2px; flex: 1; min-width: 250px;">
                     <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%;">
-                        <input type="text" id="trip-name" class="trip-name-input" value="My Trip" onchange="updateTripName()" style="flex: 1; text-align: left; padding: 2px 4px;">
-                        <span id="header-toggle-btn" role="button" tabindex="0" aria-label="Toggle Header Menu" onclick="toggleHeader()" title="Toggle Header Menu" style="margin-left: auto;">▼</span>
+                        <input type="text" id="trip-name" class="trip-name-input" value="My Trip" style="flex: 1; text-align: left; padding: 2px 4px;">
+                        <span id="header-toggle-btn" role="button" tabindex="0" aria-label="Toggle Header Menu" title="Toggle Header Menu" style="margin-left: auto;">▼</span>
                     </div>
-                    <input type="text" id="trip-comment" class="trip-comment-input header-collapsible-item" placeholder="Add a comment..." onchange="updateTripComment()" style="font-size: 0.8rem; padding: 2px 4px; max-width: 220px;">
+                    <input type="text" id="trip-comment" class="trip-comment-input header-collapsible-item" placeholder="Add a comment..." style="font-size: 0.8rem; padding: 2px 4px; max-width: 220px;">
                     <span id="cloud-status" class="header-collapsible-item" style="font-size: 0.7rem; color: var(--secondary); font-weight: 600; min-height: 14px; text-align: left; margin-left: 8px;"></span>
                 </div>
 
@@ -104,28 +104,28 @@
                 <div class="header-collapsible-item" style="display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1.2;">
                     <div id="next-payer-container" style="margin-bottom: -2px;"></div>
                     <div class="glass-toolbar" style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: center; padding: 4px 8px;">
-                        <button class="outline small" onclick="openNotesModal()" style="background: #f0fdf4; border-color: #bbf7d0; color: var(--green);">📝 Notes</button>
-                        <button id="master-sync-btn" class="outline small" onclick="manageCloudSync()" style="font-weight: 700;">☁️ Sync</button>
-                        <button id="offline-mode-btn" class="outline small" onclick="toggleOfflineMode()" style="font-weight: 700;" title="Toggle Offline / Airplane Mode">📶 Online</button>
-                        <button class="danger outline small" onclick="resetTrip()">New</button>
-                        <button class="secondary outline small" onclick="exportTrip()">Save</button>
-                        <button class="secondary outline small" onclick="document.getElementById('file-import').click()">Load</button>
-                        <input type="file" id="file-import" accept=".json, .tsplit" style="display:none;" onclick="this.value=null" onchange="importTrip(event)">
+                        <button id="open-notes-btn" class="outline small" style="background: #f0fdf4; border-color: #bbf7d0; color: var(--green);">📝 Notes</button>
+                        <button id="master-sync-btn" class="outline small" style="font-weight: 700;">☁️ Sync</button>
+                        <button id="offline-mode-btn" class="outline small" style="font-weight: 700;" title="Toggle Offline / Airplane Mode">📶 Online</button>
+                        <button id="reset-trip-btn" class="danger outline small">New</button>
+                        <button id="export-trip-btn" class="secondary outline small">Save</button>
+                        <button id="import-trip-btn" class="secondary outline small">Load</button>
+                        <input type="file" id="file-import" accept=".json, .tsplit" style="display:none;">
                         
                         <div id="currency-picker-wrapper" style="display: flex; align-items: center; gap: 4px; border-left: 1px solid var(--border); padding-left: 6px; margin-left: 4px; position: relative; z-index: 9999;">
                             <span style="font-size: 0.75rem; font-weight: 700; color: var(--secondary);" title="Leave blank for USD only">Cur:</span>
-                            <input type="text" id="global-currency" class="currency-selector" style="width: 48px; text-align: center; padding: 2px; font-size: 0.8rem; height: auto;" placeholder="..." maxlength="20" onfocus="showCurrencyPicker()" oninput="handleCurrencyInput()" onkeydown="handleCurrencyKeyDown(event)" autocomplete="off">
+                            <input type="text" id="global-currency" class="currency-selector" style="width: 48px; text-align: center; padding: 2px; font-size: 0.8rem; height: auto;" placeholder="..." maxlength="20" autocomplete="off">
                         </div>
 
                         <div id="quick-convert-container" style="display: none; align-items: center; gap: 4px; border-left: 1px solid var(--border); padding-left: 6px; margin-left: 4px;">
                             <div style="display: flex; align-items: center; gap: 4px; background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 2px 6px;">
                                 <span style="font-size: 0.7rem; font-weight: 800; color: var(--secondary);">USD</span>
-                                <input type="number" id="qc-usd" class="tabular-nums" placeholder="0.00" style="width: 65px; padding: 2px; font-size: 0.85rem; border: none; background: transparent; outline: none; text-align: right; box-shadow: none;" oninput="quickConvert('usd')">
+                                <input type="number" id="qc-usd" class="tabular-nums" placeholder="0.00" style="width: 65px; padding: 2px; font-size: 0.85rem; border: none; background: transparent; outline: none; text-align: right; box-shadow: none;">
                             </div>
                             <span style="font-size: 0.9rem; color: var(--secondary); font-weight: bold; line-height: 1;">⇌</span>
                             <div style="display: flex; align-items: center; gap: 4px; background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 2px 6px;">
                                 <span id="qc-foreign-label" style="font-size: 0.7rem; font-weight: 800; color: var(--primary);">FX</span>
-                                <input type="number" id="qc-foreign" class="tabular-nums" placeholder="0.00" style="width: 65px; padding: 2px; font-size: 0.85rem; border: none; background: transparent; outline: none; text-align: right; box-shadow: none;" oninput="quickConvert('foreign')">
+                                <input type="number" id="qc-foreign" class="tabular-nums" placeholder="0.00" style="width: 65px; padding: 2px; font-size: 0.85rem; border: none; background: transparent; outline: none; text-align: right; box-shadow: none;">
                             </div>
                         </div>
                     </div>
@@ -136,8 +136,8 @@
                     <div class="cloud-slot">
                         <span class="slot-label">Manual 1</span>
                         <div class="slot-btns">
-                            <button id="cloud-save-btn-1" class="cloud" onclick="saveToSupabase('manual_trip')">S</button>
-                            <button id="cloud-load-btn-1" class="cloud" onclick="loadFromSupabase('manual_trip')">L</button>
+                            <button id="cloud-save-btn-1" class="cloud" data-cloud-save="manual_trip">S</button>
+                            <button id="cloud-load-btn-1" class="cloud" data-cloud-load="manual_trip">L</button>
                         </div>
                         <span id="manual-cloud-name-1" class="slot-name">...</span>
                     </div>
@@ -145,8 +145,8 @@
                     <div class="cloud-slot">
                         <span class="slot-label">Manual 2</span>
                         <div class="slot-btns">
-                            <button id="cloud-save-btn-2" class="cloud" onclick="saveToSupabase('manual_trip_2')">S</button>
-                            <button id="cloud-load-btn-2" class="cloud" onclick="loadFromSupabase('manual_trip_2')">L</button>
+                            <button id="cloud-save-btn-2" class="cloud" data-cloud-save="manual_trip_2">S</button>
+                            <button id="cloud-load-btn-2" class="cloud" data-cloud-load="manual_trip_2">L</button>
                         </div>
                         <span id="manual-cloud-name-2" class="slot-name">...</span>
                     </div>
@@ -154,8 +154,8 @@
                     <div class="cloud-slot">
                         <span class="slot-label">Manual 3</span>
                         <div class="slot-btns">
-                            <button id="cloud-save-btn-3" class="cloud" onclick="saveToSupabase('manual_trip_3')">S</button>
-                            <button id="cloud-load-btn-3" class="cloud" onclick="loadFromSupabase('manual_trip_3')">L</button>
+                            <button id="cloud-save-btn-3" class="cloud" data-cloud-save="manual_trip_3">S</button>
+                            <button id="cloud-load-btn-3" class="cloud" data-cloud-load="manual_trip_3">L</button>
                         </div>
                         <span id="manual-cloud-name-3" class="slot-name">...</span>
                     </div>
@@ -163,7 +163,7 @@
                     <div class="cloud-slot auto-backup">
                         <span class="slot-label">Auto-Sync</span>
                         <div class="slot-btns">
-                            <button id="cloud-load-auto-btn" class="cloud" style="background-color: #0284c7; width: 100%;" onclick="loadFromSupabase('auto_trip')">Load Last</button>
+                            <button id="cloud-load-auto-btn" class="cloud" style="background-color: #0284c7; width: 100%;" data-cloud-load="auto_trip">Load Last</button>
                         </div>
                         <span id="auto-cloud-name" class="slot-name">...</span>
                     </div>
@@ -176,37 +176,37 @@
             <details class="participants-dropdown header-collapsible-item">
                 <summary>
                     <span>👥 Participants and settings</span>
-                    <span style="font-size: 0.7rem; color: var(--secondary); font-weight: 600; background: var(--bg); padding: 2px 6px; border-radius: 10px;">v5.39</span>
+                    <span style="font-size: 0.7rem; color: var(--secondary); font-weight: 600; background: var(--bg); padding: 2px 6px; border-radius: 10px;">v5.40</span>
                 </summary>
                 <div style="margin-top: 12px; border-top: 1px solid var(--border); padding-top: 12px;">
                     <div class="form-row">
-                        <input type="text" id="new-participant" placeholder="Name (Max 12)" maxlength="12" style="flex: 1;" onkeypress="handleParticipantKeyPress(event)">
-                        <input type="text" id="new-participant-group" placeholder="Family/Group Name (Optional)" style="flex: 2;" onkeypress="handleParticipantKeyPress(event)">
-                        <button onclick="addParticipant()" style="flex: none;">Add Person</button>
+                        <input type="text" id="new-participant" placeholder="Name (Max 12)" maxlength="12" style="flex: 1;">
+                        <input type="text" id="new-participant-group" placeholder="Family/Group Name (Optional)" style="flex: 2;">
+                        <button id="add-participant-btn" style="flex: none;">Add Person</button>
                     </div>
                     <div id="participant-list" style="margin-bottom: 8px;"></div>
                     
                     <div class="form-row" style="margin-top: 16px; border-top: 1px dashed var(--border); padding-top: 16px;">
-                        <input type="text" id="new-default-tag" placeholder="Tag (e.g. hotel)" maxlength="20" style="flex: 1;" onkeypress="handleDefaultTagKeyPress(event)">
-                        <button onclick="addDefaultTag()" style="flex: none;">Add Tag</button>
+                        <input type="text" id="new-default-tag" placeholder="Tag (e.g. hotel)" maxlength="20" style="flex: 1;">
+                        <button id="add-default-tag-btn" style="flex: none;">Add Tag</button>
                     </div>
                     <div id="default-tags-list" style="margin-bottom: 8px; display: flex; flex-wrap: wrap; gap: 6px;"></div>
                     
                     <div style="display:flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border);">
                         <div style="display:flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                             <span style="font-size: 0.8rem; color: var(--secondary); font-weight: 500;"><em>Click names to rename. Click 👥 to group.</em></span>
-                            <span style="font-size: 0.75rem; color: var(--primary); cursor: pointer; font-weight: 700; padding: 2px 6px; background: #e0e7ff; border-radius: 4px;" onclick="openCloudSettingsModal()">⚙️ Cloud Settings & Reset</span>
+                            <span id="open-cloud-settings-btn" style="font-size: 0.75rem; color: var(--primary); cursor: pointer; font-weight: 700; padding: 2px 6px; background: #e0e7ff; border-radius: 4px;">⚙️ Cloud Settings & Reset</span>
                         </div>
                         <div style="display:flex; gap: 6px; flex-wrap: wrap; align-items: center;">
                             <label style="font-weight:700; font-size:0.8rem; display:flex; align-items:center; gap:4px; cursor:pointer; margin-right: 4px;" title="Saves up to 3 restore points to cloud">
-                                <input type="checkbox" id="history-enabled-toggle" onchange="toggleHistoryEnabled()">
+                                <input type="checkbox" id="history-enabled-toggle">
                                 Trip History
                             </label>
-                            <button class="outline small" onclick="toggleHelpModal()" style="background: #fffbeb; border-color: #fde68a; color: #b45309; font-weight: 700;">❓ Help Guide</button>
-                            <button id="export-html-btn" class="outline small" onclick="exportHTMLReport()" style="background: #eff6ff; border-color: #bfdbfe; color: #1d4ed8;">📄 Export HTML</button>
-                            <button class="warning outline small" onclick="exportSecureTrip()">🔐 Secure Save</button>
-                            <button class="outline small" onclick="saveGroupTemplate()">Save Setup Memory</button>
-                            <button class="outline small" onclick="loadGroupTemplate()">Load Setup Memory</button>
+                            <button id="open-help-btn" class="outline small" style="background: #fffbeb; border-color: #fde68a; color: #b45309; font-weight: 700;">❓ Help Guide</button>
+                            <button id="export-html-btn" class="outline small" style="background: #eff6ff; border-color: #bfdbfe; color: #1d4ed8;">📄 Export HTML</button>
+                            <button id="export-secure-btn" class="warning outline small">🔐 Secure Save</button>
+                            <button id="save-group-template-btn" class="outline small">Save Setup Memory</button>
+                            <button id="load-group-template-btn" class="outline small">Load Setup Memory</button>
                         </div>
                     </div>
                     
@@ -216,21 +216,21 @@
             </details>
             
             <div class="mobile-quick-nav">
-                <button class="outline small" onclick="document.getElementById('activity-card').scrollIntoView({behavior: 'smooth', block: 'start'})">➕ Add</button>
-                <button class="outline small" onclick="document.getElementById('ledger-card-wrapper').scrollIntoView({behavior: 'smooth', block: 'start'})">📜 Ledger</button>
-                <button class="outline small" onclick="document.getElementById('analytics-section').scrollIntoView({behavior: 'smooth', block: 'start'})">📊 Analytics</button>
-                <button class="outline small" onclick="document.getElementById('settlement-section').scrollIntoView({behavior: 'smooth', block: 'start'})">💸 Settle</button>
+                <button class="outline small" data-scroll-target="activity-card">➕ Add</button>
+                <button class="outline small" data-scroll-target="ledger-card-wrapper">📜 Ledger</button>
+                <button class="outline small" data-scroll-target="analytics-section">📊 Analytics</button>
+                <button class="outline small" data-scroll-target="settlement-section">💸 Settle</button>
             </div>
             
         </div>
 
         <div class="col-left">
             <div class="card" id="activity-card">
-                <span id="activity-toggle-icon" class="corner-toggle" role="button" tabindex="0" aria-label="Toggle Activity Card" onclick="event.stopPropagation(); toggleActivityCard()">▼</span>
-                <h2 id="activity-header" style="cursor: pointer; user-select: none; display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px;" onclick="toggleActivityCard()">
+                <span id="activity-toggle-icon" class="corner-toggle" role="button" tabindex="0" aria-label="Toggle Activity Card">▼</span>
+                <h2 id="activity-header" style="cursor: pointer; user-select: none; display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">
                     <div style="display: flex; align-items: center; gap: 12px; margin-right: 28px;">
                         <span id="activity-title-text">➕ Add Activity</span>
-                        <button class="outline small" onclick="event.stopPropagation(); toggleCalculator()" style="padding: 2px 8px; font-size: 0.85rem; background: var(--bg);" title="Open Calculator">🧮 Calc</button>
+                        <button id="activity-calc-btn" class="outline small" style="padding: 2px 8px; font-size: 0.85rem; background: var(--bg);" title="Open Calculator">🧮 Calc</button>
                     </div>
                 </h2>
                 
@@ -238,7 +238,7 @@
                     <div class="activity-form-scrollable">
                         <div class="form-row">
                             <input type="date" id="exp-date" style="flex: 1;">
-                            <select id="exp-category" style="flex: 1;" onchange="handleCategoryChange()">
+                            <select id="exp-category" style="flex: 1;">
                                 <option value="Food">🍔 Food</option>
                                 <option value="Transport">🚕 Transport</option>
                                 <option value="Travel">✈️ Travel</option>
@@ -249,24 +249,24 @@
                         </div>
 
                         <div class="form-row">
-                            <input type="text" id="exp-desc" style="flex: 1;" placeholder="Description (e.g., Dinner)" list="desc-suggestions" oninput="this.value = this.value.charAt(0).toUpperCase() + this.value.slice(1);">
+                            <input type="text" id="exp-desc" style="flex: 1;" placeholder="Description (e.g., Dinner)" list="desc-suggestions">
                             <datalist id="desc-suggestions"></datalist>
                         </div>
                         
                         <!-- TAGS FIELD -->
                         <div class="form-row" style="position: relative;">
-                            <input type="text" id="exp-tags" placeholder="Tags (e.g. #restaurant #drinks)" oninput="handleFormTagInput(event)" onfocus="handleFormTagInput(event)" autocomplete="off">
+                            <input type="text" id="exp-tags" placeholder="Tags (e.g. #restaurant #drinks)" autocomplete="off">
                             <div id="form-tag-suggestions" class="suggestions-popup"></div>
                         </div>
                         
                         <div class="form-row">
                             <div class="amount-currency-group" style="flex: 1.2;">
-                                <input type="number" id="exp-amount" class="tabular-nums" placeholder="Amount" step="0.01" oninput="calculateRemainingPercentage()">
-                                <select id="exp-currency" onchange="handleFormCurrencyChange()" aria-label="Activity currency">
+                                <input type="number" id="exp-amount" class="tabular-nums" placeholder="Amount" step="0.01">
+                                <select id="exp-currency" aria-label="Activity currency">
                                     <option value="USD">USD</option>
                                 </select>
                             </div>
-                            <select id="exp-payer" style="flex: 1;" onchange="updatePayerColor()">
+                            <select id="exp-payer" style="flex: 1;">
                                 <option value="">Who paid?</option>
                             </select>
                         </div>
@@ -278,7 +278,7 @@
                                 <input type="number" id="exp-exchange-rate" class="tabular-nums" style="width: 100%; max-width: 120px; padding: 4px 8px; font-size: 0.9rem; margin: 0; background: #fff;" step="0.0001">
                                 <span id="exp-rate-currency-label" style="font-size: 0.8rem; font-weight: 800; color: var(--primary); white-space: nowrap;"></span>
                             </div>
-                            <button type="button" class="outline small" onclick="refreshFormRate()" style="width: 100%; margin: 0; padding: 6px 0;">🔄 Fetch Latest Rate</button>
+                            <button id="refresh-rate-btn" type="button" class="outline small" style="width: 100%; margin: 0; padding: 6px 0;">🔄 Fetch Latest Rate</button>
                         </div>
 
                         <div class="form-row">
@@ -288,12 +288,12 @@
                         <div class="participant-selector">
                             <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
                                 <label class="checkbox-item" style="flex: none; color: var(--primary);">
-                                    <input type="checkbox" id="master-participant-checkbox" checked onchange="toggleAllCheckboxes(this.checked)">
+                                    <input type="checkbox" id="master-participant-checkbox" checked>
                                     <strong id="participant-count-display" style="font-size: 0.9rem;">Who participates?</strong>
                                 </label>
                                 
                                 <div style="display:flex; gap: 6px; align-items: center;">
-                                    <select id="exp-split-type" class="split-type-select" onchange="updateSplitTypeUI()">
+                                    <select id="exp-split-type" class="split-type-select">
                                         <option value="equal">Equal / Shared</option>
                                         <option value="percentage">Percentage (%)</option>
                                     </select>
@@ -308,8 +308,8 @@
                         </div>
                     </div> 
                     <div class="sticky-action-buttons" style="display: flex; gap: 8px;">
-                        <button id="save-expense-btn" onclick="saveExpense()">Save Activity</button>
-                        <button id="cancel-edit-btn" class="secondary outline" style="display:none; flex: none;" onclick="cancelEdit()">Cancel Edit</button>
+                        <button id="save-expense-btn">Save Activity</button>
+                        <button id="cancel-edit-btn" class="secondary outline" style="display:none; flex: none;">Cancel Edit</button>
                     </div>
                 </div>
             </div>
@@ -318,32 +318,30 @@
         <div class="col-mid">
             <div class="card ledger-card" id="ledger-card-wrapper">
                 <div class="sticky-ledger-header">
-                    <span id="ledger-toggle-icon" class="corner-toggle" role="button" tabindex="0" aria-label="Toggle Ledger" onclick="toggleLedger()">▼</span>
+                    <span id="ledger-toggle-icon" class="corner-toggle" role="button" tabindex="0" aria-label="Toggle Ledger">▼</span>
                     <div style="display:flex; justify-content: flex-start; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 12px; margin-right: 28px;">
-                        <h2 style="margin: 0; border: none; padding: 0; cursor: pointer; display: flex; align-items: center; user-select: none;" onclick="toggleLedger()" title="Click to expand/collapse">
+                        <h2 id="ledger-header-title" style="margin: 0; border: none; padding: 0; cursor: pointer; display: flex; align-items: center; user-select: none;" title="Click to expand/collapse">
                             📜 Activity Ledger <span id="ledger-count" class="tabular-nums" style="font-size: 0.9rem; color: var(--secondary); margin-left: 8px; font-weight: 700;">(0)</span>
                         </h2>
                         <div style="display:flex; gap: 6px; align-items: center; flex-wrap: wrap;">
-                            <select id="ledger-sort" class="split-type-select" onchange="handleSortChange()">
+                            <select id="ledger-sort" class="split-type-select">
                                 <option value="date-desc">📅 Date (Newest)</option>
                                 <option value="date-asc">📅 Date (Oldest)</option>
                                 <option value="amt-desc">💰 Amt (High-Low)</option>
                                 <option value="amt-asc">💰 Amt (Low-High)</option>
                                 <option value="payer-asc">👤 Payer (A-Z)</option>
                             </select>
-                            <button id="toggle-all-btn" class="outline small" onclick="toggleAllExpenses()" title="Toggle Include/Ignore All">🚫 All</button>
-                            <button class="outline small" onclick="toggleCalendar()" title="Open Calendar" style="padding: 4px 6px;">📅</button>
+                            <button id="toggle-all-btn" class="outline small" title="Toggle Include/Ignore All">🚫 All</button>
+                            <button id="ledger-calendar-btn" class="outline small" title="Open Calendar" style="padding: 4px 6px;">📅</button>
                         </div>
                     </div>
                     
                     <div style="margin-bottom: 8px; position: relative; display: flex; align-items: center;">
                         <input type="text" id="search-filter" placeholder="🔍 Search activities, people, or #tags..." 
-                               oninput="handleSearchInput(event)" 
-                               onfocus="handleSearchInput(event)"
                                autocomplete="off"
                                style="width: 100%; background: #fff; padding: 8px 36px 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: inset 0 1px 2px rgba(0,0,0,0.02);">
                         <div id="search-tag-suggestions" class="suggestions-popup" style="top: 100%; left: 0; width: 100%;"></div>
-                        <button id="clear-search-btn" onclick="clearSearch()" style="position: absolute; right: 4px; background: transparent; border: none; color: var(--secondary); font-size: 1.2rem; cursor: pointer; display: none; padding: 4px 8px; box-shadow: none; width: auto; flex: none; min-width: auto; line-height: 1;" title="Clear search">&times;</button>
+                        <button id="clear-search-btn" style="position: absolute; right: 4px; background: transparent; border: none; color: var(--secondary); font-size: 1.2rem; cursor: pointer; display: none; padding: 4px 8px; box-shadow: none; width: auto; flex: none; min-width: auto; line-height: 1;" title="Clear search">&times;</button>
                     </div>
                     <div id="active-filters-bar" style="margin-bottom: 8px; flex-wrap: wrap; gap: 6px; display: none;"></div>
                     
@@ -360,9 +358,9 @@
                     <h2 style="margin: 0; border: none; padding: 0;">📊 Trip Analytics</h2>
                     <div style="display: flex; align-items: center; gap: 8px; background: #f8fafc; padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border);">
                         <label style="font-size: 0.85rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px; margin: 0; color: var(--secondary);">
-                            <input type="checkbox" id="per-day-toggle" onchange="togglePerDay()" style="margin: 0; accent-color: var(--primary);"> Per Day
+                            <input type="checkbox" id="per-day-toggle" style="margin: 0; accent-color: var(--primary);"> Per Day
                         </label>
-                        <input type="number" inputmode="numeric" id="trip-days-input" placeholder="Days" min="1" step="1" style="width: 70px; padding: 4px 8px; display: none; background: #fff; border: 1px solid #cbd5e1;" oninput="updateTripDays(false)" onchange="updateTripDays(true)" onblur="updateTripDays(true)">
+                        <input type="number" inputmode="numeric" id="trip-days-input" placeholder="Days" min="1" step="1" style="width: 70px; padding: 4px 8px; display: none; background: #fff; border: 1px solid #cbd5e1;">
                     </div>
                 </div>
                 <div id="ledger-stats"></div>
@@ -375,7 +373,7 @@
                 
                 <div class="display-toggle-container" id="dashboard-currency-toggle" style="display: none;">
                     <strong style="font-size: 0.9rem; color: var(--secondary);">View Dashboard In:</strong>
-                    <select id="view-currency" class="currency-selector" onchange="updateUI()">
+                    <select id="view-currency" class="currency-selector">
                         <option value="USD">🇺🇸 USD ($)</option>
                     </select>
                 </div>
@@ -385,21 +383,21 @@
         </div>
 
         <div class="mobile-quick-nav" style="margin-top: 16px; margin-bottom: 24px;">
-            <button class="outline small" onclick="document.getElementById('activity-card').scrollIntoView({behavior: 'smooth', block: 'start'})">➕ Add</button>
-            <button class="outline small" onclick="document.getElementById('ledger-card-wrapper').scrollIntoView({behavior: 'smooth', block: 'start'})">📜 Ledger</button>
-            <button class="outline small" onclick="document.getElementById('analytics-section').scrollIntoView({behavior: 'smooth', block: 'start'})">📊 Analytics</button>
-            <button class="outline small" onclick="document.getElementById('settlement-section').scrollIntoView({behavior: 'smooth', block: 'start'})">💸 Settle</button>
-            <button class="outline small" onclick="window.scrollTo({top: 0, behavior: 'smooth'})">⬆️ Top</button>
+            <button class="outline small" data-scroll-target="activity-card">➕ Add</button>
+            <button class="outline small" data-scroll-target="ledger-card-wrapper">📜 Ledger</button>
+            <button class="outline small" data-scroll-target="analytics-section">📊 Analytics</button>
+            <button class="outline small" data-scroll-target="settlement-section">💸 Settle</button>
+            <button class="outline small" data-scroll-top="true">⬆️ Top</button>
         </div>
 
     </div>
 
     <!-- HELP GUIDE MODAL -->
-    <div class="modal-overlay" id="help-overlay" onclick="closeHelpModalOnOverlay(event)">
+    <div class="modal-overlay" id="help-overlay">
         <div class="notes-modal" style="max-width: 800px; height: 80vh; padding: 24px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 12px;">
                 <h2 style="margin: 0; border: none; padding: 0; display: flex; align-items: center; gap: 8px; color: var(--primary);">❓ TripCalc Complete Guide</h2>
-                <span style="cursor: pointer; font-size: 1.6rem; line-height: 1; color: var(--secondary);" onclick="toggleHelpModal()">&times;</span>
+                <span id="help-close-x" style="cursor: pointer; font-size: 1.6rem; line-height: 1; color: var(--secondary);">&times;</span>
             </div>
             
             <div style="flex: 1; overflow-y: auto; padding-right: 12px; font-size: 0.9rem; line-height: 1.6; color: var(--text);">
@@ -526,7 +524,7 @@
             </div>
             
             <div style="display: flex; justify-content: flex-end; margin-top: 16px; border-top: 1px solid var(--border); padding-top: 12px;">
-                <button class="outline" onclick="toggleHelpModal()" style="padding: 6px 20px;">Close Guide</button>
+                <button id="help-close-btn" class="outline" style="padding: 6px 20px;">Close Guide</button>
             </div>
         </div>
     </div>
@@ -537,8 +535,8 @@
                 <div style="display:flex; align-items:center; gap: 12px; flex-wrap: wrap;">
                     <h2 style="margin:0; border:none; padding:0; display:flex; align-items:center; gap:8px; color: var(--primary);">📝 Trip Notes</h2>
                     <div style="display:flex; align-items: center; gap: 6px; background: #fff; padding: 2px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border); position: relative;">
-                        <input type="text" id="notes-search" placeholder="🔍 Search..." oninput="searchNotes()" onfocus="showNotesToC()" style="border: none; background: transparent; padding: 4px; width: 120px; font-size: 0.85rem; outline: none; padding-right: 16px;">
-                        <span id="clear-notes-search-btn" onclick="clearNotesSearchField()" style="position: absolute; right: 35px; color: var(--secondary); font-size: 1.2rem; cursor: pointer; display: none; line-height: 1;">&times;</span>
+                        <input type="text" id="notes-search" placeholder="🔍 Search..." style="border: none; background: transparent; padding: 4px; width: 120px; font-size: 0.85rem; outline: none; padding-right: 16px;">
+                        <span id="clear-notes-search-btn" style="position: absolute; right: 35px; color: var(--secondary); font-size: 1.2rem; cursor: pointer; display: none; line-height: 1;">&times;</span>
                         <span id="notes-search-count" style="font-size: 0.75rem; color: var(--secondary); font-weight: 700; min-width: 15px; text-align: right;"></span>
                         
                         <div id="notes-toc-popup"></div>
@@ -547,23 +545,23 @@
                     <div id="notes-quick-convert-container" style="display: none; align-items: center; gap: 6px; border-left: 1px solid var(--border); padding-left: 8px; margin-left: 4px;">
                         <div style="display: flex; align-items: center; gap: 4px; background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 2px 6px;">
                             <span style="font-size: 0.7rem; font-weight: 800; color: var(--secondary);">USD</span>
-                            <input type="number" id="qc-notes-usd" class="tabular-nums" placeholder="0.00" style="width: 80px; padding: 2px; font-size: 0.85rem; border: none; background: transparent; outline: none; text-align: right; box-shadow: none;" oninput="quickConvertNotes('usd')">
+                            <input type="number" id="qc-notes-usd" class="tabular-nums" placeholder="0.00" style="width: 80px; padding: 2px; font-size: 0.85rem; border: none; background: transparent; outline: none; text-align: right; box-shadow: none;">
                         </div>
                         <span style="font-size: 0.9rem; color: var(--secondary); font-weight: bold; line-height: 1;">⇌</span>
                         <div style="display: flex; align-items: center; gap: 4px; background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 2px 6px;">
                             <span id="qc-notes-foreign-label" style="font-size: 0.7rem; font-weight: 800; color: var(--primary);">FX</span>
-                            <input type="number" id="qc-notes-foreign" class="tabular-nums" placeholder="0.00" style="width: 80px; padding: 2px; font-size: 0.85rem; border: none; background: transparent; outline: none; text-align: right; box-shadow: none;" oninput="quickConvertNotes('foreign')">
+                            <input type="number" id="qc-notes-foreign" class="tabular-nums" placeholder="0.00" style="width: 80px; padding: 2px; font-size: 0.85rem; border: none; background: transparent; outline: none; text-align: right; box-shadow: none;">
                         </div>
                     </div>
                 </div>
                 <div style="display:flex; gap: 12px; align-items: center; flex-wrap: wrap;">
-                    <button id="copy-notes-btn" class="outline small" onclick="copyTripNotes()" title="Copy entire note to clipboard">📋 Copy All</button>
-                    <button class="outline small" onclick="toggleCalculator()" title="Open Calculator">🧮 Calc</button>
-                    <button class="outline small" onclick="toggleCalendar()" title="Open Calendar">📅 Calendar</button>
+                    <button id="copy-notes-btn" class="outline small" title="Copy entire note to clipboard">📋 Copy All</button>
+                    <button id="notes-calc-btn" class="outline small" title="Open Calculator">🧮 Calc</button>
+                    <button id="notes-calendar-btn" class="outline small" title="Open Calendar">📅 Calendar</button>
                     <label style="font-size: 0.85rem; font-weight: 700; display:flex; align-items:center; gap:6px; cursor: pointer; color: var(--secondary);">
-                        <input type="checkbox" id="auto-color-toggle" onchange="toggleAutoColor()" style="width: 16px; height: 16px; accent-color: var(--primary);"> Auto-Color
+                        <input type="checkbox" id="auto-color-toggle" style="width: 16px; height: 16px; accent-color: var(--primary);"> Auto-Color
                     </label>
-                    <button class="primary small" onclick="closeNotesModal()" style="padding: 6px 16px;">Done</button>
+                    <button id="close-notes-btn" class="primary small" style="padding: 6px 16px;">Done</button>
                 </div>
             </div>
             <div class="notes-body">
@@ -585,14 +583,15 @@
                         <div style="font-size: 0.75rem; color: var(--secondary);">Work locally; auto-sync to cloud when you reconnect</div>
                     </div>
                     <label style="cursor: pointer; display: flex; align-items: center; margin: 0;">
-                        <input type="checkbox" id="modal-offline-toggle" onchange="toggleOfflineMode(this.checked)" style="width: 20px; height: 20px; accent-color: #d97706; cursor: pointer;">
+                        <input type="checkbox" id="modal-offline-toggle" style="width: 20px; height: 20px; accent-color: #d97706; cursor: pointer;">
                     </label>
                 </div>
-                <button class="outline" onclick="openChangePinModal()">🔑 Change Session PIN</button>
-                <button class="warning outline" onclick="disconnectLocalSync()">🔌 Disconnect Device Only</button>
-                <button class="danger outline" onclick="openNuclearResetModal()">☢️ Nuclear Reset (Wipe Cloud Database)</button>
+                <button id="lock-session-btn" class="outline" style="display: none;">🔒 Lock Session Now</button>
+                <button id="open-change-pin-btn" class="outline">🔑 Change Session PIN</button>
+                <button id="disconnect-local-sync-btn" class="warning outline">🔌 Disconnect Device Only</button>
+                <button id="open-nuclear-reset-btn" class="danger outline">☢️ Nuclear Reset (Wipe Cloud Database)</button>
                 <div style="display: flex; justify-content: flex-end; margin-top: 10px;">
-                    <button class="secondary outline" onclick="document.getElementById('cloud-settings-overlay').classList.remove('active')">Close</button>
+                    <button id="close-cloud-settings-btn" class="secondary outline">Close</button>
                 </div>
             </div>
         </div>
@@ -607,11 +606,11 @@
                 <p style="font-size: 0.85rem; color: var(--secondary); margin: 0;">Enter your new Session PIN. This will re-encrypt all your data in the cloud with the new key.</p>
                 <div style="display: flex; flex-direction: column; gap: 10px;">
                     <input type="password" id="current-session-pin" autocomplete="new-password" placeholder="Current PIN" style="font-size: 1.2rem; text-align: center; letter-spacing: 0.2em;">
-                    <input type="password" id="new-session-pin" autocomplete="new-password" placeholder="New PIN" style="font-size: 1.2rem; text-align: center; letter-spacing: 0.2em;" onkeypress="if(event.key === 'Enter') submitChangePin()">
+                    <input type="password" id="new-session-pin" autocomplete="new-password" placeholder="New PIN" style="font-size: 1.2rem; text-align: center; letter-spacing: 0.2em;">
                 </div>
                 <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
-                    <button class="secondary outline" onclick="document.getElementById('change-pin-overlay').classList.remove('active')">Cancel</button>
-                    <button id="submit-change-pin-btn" onclick="submitChangePin()">Save New PIN</button>
+                    <button id="cancel-change-pin-btn" class="secondary outline">Cancel</button>
+                    <button id="submit-change-pin-btn">Save New PIN</button>
                 </div>
             </div>
         </div>
@@ -627,11 +626,11 @@
                 <p style="font-size: 0.85rem; color: var(--secondary); margin: 0;">This will permanently delete all trip slots (Manual 1-3, Auto-Sync) from the Supabase database and clear your local connection settings.</p>
                 <div>
                     <label style="font-size: 0.8rem; font-weight: 700; color: var(--text);">Enter your Supabase Access Code to confirm</label>
-                    <input type="text" id="nuclear-reset-confirm" placeholder="http://...|eyJh..." style="font-size: 0.85rem; text-align: center;">
+                    <input type="text" id="nuclear-reset-confirm" placeholder="https://...|eyJh..." style="font-size: 0.85rem; text-align: center;">
                 </div>
                 <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
-                    <button class="secondary outline" onclick="document.getElementById('nuclear-reset-overlay').classList.remove('active')">Cancel</button>
-                    <button id="submit-nuclear-btn" class="danger" onclick="submitNuclearReset()">Delete Everything</button>
+                    <button id="cancel-nuclear-btn" class="secondary outline">Cancel</button>
+                    <button id="submit-nuclear-btn" class="danger">Delete Everything</button>
                 </div>
             </div>
         </div>
@@ -647,7 +646,7 @@
                 
                 <div>
                     <label style="font-size: 0.8rem; font-weight: 700; color: var(--text);">Supabase Access Code (Base64)</label>
-                    <input type="text" id="setup-access-code" placeholder="http://...|eyJh...">
+                    <input type="text" id="setup-access-code" placeholder="https://...|eyJh...">
                 </div>
                 <div>
                     <label style="font-size: 0.8rem; font-weight: 700; color: var(--text);">Device Key (Long Password)</label>
@@ -656,13 +655,13 @@
                 </div>
                 <div>
                     <label style="font-size: 0.8rem; font-weight: 700; color: var(--text);">Session PIN (Short Code)</label>
-                    <input type="password" id="setup-session-pin" autocomplete="new-password" placeholder="e.g. 2025" onkeypress="if(event.key === 'Enter') submitCloudSetup()">
+                    <input type="password" id="setup-session-pin" autocomplete="new-password" placeholder="e.g. 2025">
                     <span style="font-size: 0.7rem; color: var(--secondary);">Optional. Required once every time you open the app if set.</span>
                 </div>
                 
                 <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
-                    <button class="secondary outline" onclick="cancelCloudAuth()">Cancel</button>
-                    <button onclick="submitCloudSetup()">Connect & Secure</button>
+                    <button id="cancel-cloud-setup-btn" class="secondary outline">Cancel</button>
+                    <button id="submit-cloud-setup-btn">Connect & Secure</button>
                 </div>
             </div>
         </div>
@@ -677,12 +676,34 @@
                 <p style="font-size: 0.85rem; color: var(--secondary); margin: 0;">Enter your Session PIN to encrypt and decrypt cloud data for this session.</p>
                 
                 <div>
-                    <input type="password" id="unlock-session-pin" autocomplete="new-password" placeholder="Session PIN" style="font-size: 1.2rem; text-align: center; letter-spacing: 0.2em;" onkeypress="if(event.key === 'Enter') submitPinUnlock()">
+                    <input type="password" id="unlock-session-pin" autocomplete="new-password" placeholder="Session PIN" style="font-size: 1.2rem; text-align: center; letter-spacing: 0.2em;">
                 </div>
                 
                 <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
-                    <button class="secondary outline" onclick="cancelCloudAuth()">Cancel</button>
-                    <button onclick="submitPinUnlock()">Unlock</button>
+                    <button id="cancel-pin-unlock-btn" class="secondary outline">Cancel</button>
+                    <button id="submit-pin-unlock-btn">Unlock</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="file-password-overlay">
+        <div class="notes-modal" style="max-width: 380px; height: auto;">
+            <div class="notes-header">
+                <h2 id="file-password-title" style="margin:0; color: var(--primary);">🔐 Trip File Password</h2>
+            </div>
+            <div style="padding: 20px; display: flex; flex-direction: column; gap: 12px;">
+                <p id="file-password-desc" style="font-size: 0.85rem; color: var(--secondary); margin: 0;"></p>
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    <input type="password" id="file-password-input" autocomplete="new-password" placeholder="Password" style="font-size: 1rem;">
+                    <div id="file-password-confirm-group" style="display: none; flex-direction: column; gap: 6px;">
+                        <input type="password" id="file-password-confirm" autocomplete="new-password" placeholder="Confirm Password" style="font-size: 1rem;">
+                    </div>
+                </div>
+                <div id="file-password-error" style="display: none; font-size: 0.8rem; color: var(--danger); font-weight: 700;"></div>
+                <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 6px;">
+                    <button id="cancel-file-password-btn" class="secondary outline">Cancel</button>
+                    <button id="submit-file-password-btn">Confirm</button>
                 </div>
             </div>
         </div>
@@ -704,16 +725,16 @@
                 <div style="position: relative;">
                     <label style="font-weight: 700; font-size: 0.85rem; display: block; margin-bottom: 6px; color: var(--text);">Add Tags (enter a tag name):</label>
                     <div class="form-row">
-                        <input type="text" id="bulk-new-tag" placeholder="Tag Name (e.g. tokyo)" maxlength="20" style="flex: 1;" onkeypress="handleBulkNewTagKeyPress(event)" oninput="handleBulkTagAutocomplete(event)" onfocus="handleBulkTagAutocomplete(event)" autocomplete="off">
-                        <button class="outline" onclick="addTagToBulkList()" style="flex: none;">Add</button>
+                        <input type="text" id="bulk-new-tag" placeholder="Tag Name (e.g. tokyo)" maxlength="20" style="flex: 1;" autocomplete="off">
+                        <button id="add-bulk-tag-btn" class="outline" style="flex: none;">Add</button>
                     </div>
                     <div id="bulk-tag-suggestions" class="suggestions-popup" style="top: 100%; left: 0; width: 100%;"></div>
                     <div id="bulk-added-tags" style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;"></div>
                 </div>
                 
                 <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
-                    <button class="secondary outline" onclick="closeBulkEditTagsModal()">Cancel</button>
-                    <button onclick="applyBulkEditTags()" id="apply-bulk-tags-btn">Apply Changes</button>
+                    <button id="cancel-bulk-tags-btn" class="secondary outline">Cancel</button>
+                    <button id="apply-bulk-tags-btn">Apply Changes</button>
                 </div>
             </div>
         </div>

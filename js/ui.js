@@ -1,16 +1,18 @@
 import { state, saveState, loadState, getLocalDateString, generateTripId, setPendingCloudSync, setUnsyncedLocalData, setLastSyncedHash } from './state.js';
 import { CATEGORIES, COLORS, TAG_COLORS, CURRENCY_SYMBOLS } from './config.js';
 import { formatMoney, getPerDayText, getPerDayTextSmall, fetchExchangeRate, fetchRateOnly, updateCurrencySelectors, getCachedRate, ensureCurrencyOption, recordRecentCurrency } from './currency.js';
+import {
+    escapeHTML,
+    safeHasOwn,
+    isForbiddenKey,
+    createNullMap,
+    generateSecureId,
+    sanitizeTag,
+    sanitizeSafeUrl
+} from './security.js';
 
 // --- HELPERS ---
-export function escapeHTML(str) {
-    return String(str ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-}
+export { escapeHTML };
 
 export function getColor(name) {
     const index = state.participants.indexOf(name);
@@ -29,9 +31,11 @@ export function getGroupColor(groupName) {
 
 export function formatDateDisplay(dateStr) {
     if (!dateStr) return '';
-    const [year, month, day] = dateStr.split('-');
-    if (!year || !month || !day) return dateStr;
-    const dateObj = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    const str = String(dateStr);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+    const [year, month, day] = str.split('-');
+    const dateObj = new Date(parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10));
+    if (isNaN(dateObj.getTime())) return str;
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     return `${year} ${months[dateObj.getMonth()]} ${day} ${days[dateObj.getDay()]}`;
@@ -63,9 +67,9 @@ export function getAllUniqueTags() {
 }
 
 export function getTagsFromShownExpenses(cleanSearchText) {
-    const groupsMap = {};
+    const groupsMap = createNullMap();
     state.participants.forEach(p => {
-        const gName = state.participantGroups[p] || p;
+        const gName = safeHasOwn(state.participantGroups, p) ? state.participantGroups[p] : p;
         if (!groupsMap[gName]) groupsMap[gName] = [];
         groupsMap[gName].push(p);
     });
@@ -149,7 +153,7 @@ export function showToast(message, type = 'success') {
 
 // --- FILTER MATCHING ---
 export function doesExpenseMatchFilters(e, groupsMap, overrideSearchText) {
-    const cat = CATEGORIES[e.category] ? e.category : 'Other';
+    const cat = safeHasOwn(CATEGORIES, e.category) ? e.category : 'Other';
     
     // Calendar Date Filter
     if (state.selectedCalendarDates && state.selectedCalendarDates.size > 0) {
@@ -158,7 +162,7 @@ export function doesExpenseMatchFilters(e, groupsMap, overrideSearchText) {
 
     if (state.insightFilter) {
         if (cat !== state.insightFilter.cat) return false;
-        const groupMembers = groupsMap[state.insightFilter.name] || [state.insightFilter.name];
+        const groupMembers = safeHasOwn(groupsMap, state.insightFilter.name) ? groupsMap[state.insightFilter.name] : [state.insightFilter.name];
         const involvesTarget = groupMembers.includes(e.payer) || (e.involved || []).some(p => groupMembers.includes(p));
         if (!involvesTarget) return false;
     } else {
@@ -206,6 +210,10 @@ export function handleParticipantKeyPress(event) {
 export function addParticipant() {
     const val = document.getElementById('new-participant').value.trim().toUpperCase();
     let groupVal = document.getElementById('new-participant-group').value.trim();
+    if (val && (isForbiddenKey(val) || (groupVal && isForbiddenKey(groupVal)))) {
+        alert("That name is reserved and cannot be used.");
+        return;
+    }
     if (val && !state.participants.includes(val)) {
         state.participants.push(val); 
         state.participantGroups[val] = groupVal || val;
@@ -223,6 +231,10 @@ export function renameParticipant(oldName) {
     if (!newNameInput) return;
     const newName = newNameInput.trim().toUpperCase();
     if (newName === oldName || newName === "") return;
+    if (isForbiddenKey(newName)) {
+        alert("That name is reserved and cannot be used.");
+        return;
+    }
     if (newName.length > 12) { 
         alert("Name is too long! Please keep it to 12 characters or less."); 
         return; 
@@ -235,11 +247,14 @@ export function renameParticipant(oldName) {
     const idx = state.participants.indexOf(oldName);
     if (idx === -1) return;
     state.participants[idx] = newName;
-    state.participantGroups[newName] = state.participantGroups[oldName] === oldName ? newName : state.participantGroups[oldName];
+    const oldGroup = safeHasOwn(state.participantGroups, oldName) ? state.participantGroups[oldName] : oldName;
+    state.participantGroups[newName] = oldGroup === oldName ? newName : oldGroup;
     delete state.participantGroups[oldName];
     
     Object.keys(state.participantGroups).forEach(p => {
-        if (state.participantGroups[p] === oldName) state.participantGroups[p] = newName;
+        if (safeHasOwn(state.participantGroups, p) && state.participantGroups[p] === oldName) {
+            state.participantGroups[p] = newName;
+        }
     });
     
     if (state.insightFilter?.name === oldName) state.insightFilter.name = newName;
@@ -248,15 +263,15 @@ export function renameParticipant(oldName) {
         if (e.payer === oldName) e.payer = newName;
         const involvedIdx = e.involved.indexOf(oldName);
         if (involvedIdx > -1) e.involved[involvedIdx] = newName;
-        if (e.personalExpenses && e.personalExpenses[oldName]) {
+        if (safeHasOwn(e.personalExpenses, oldName)) {
             e.personalExpenses[newName] = e.personalExpenses[oldName]; 
             delete e.personalExpenses[oldName];
         }
-        if (e.fixedShares && e.fixedShares[oldName] !== undefined) {
+        if (safeHasOwn(e.fixedShares, oldName)) {
             e.fixedShares[newName] = e.fixedShares[oldName]; 
             delete e.fixedShares[oldName];
         }
-        if (e.percentageShares && e.percentageShares[oldName]) {
+        if (safeHasOwn(e.percentageShares, oldName)) {
             e.percentageShares[newName] = e.percentageShares[oldName]; 
             delete e.percentageShares[oldName];
         }
@@ -273,10 +288,15 @@ export function renameParticipant(oldName) {
 }
 
 export function changeGroup(name) {
-    const currentGroup = state.participantGroups[name] === name ? "" : state.participantGroups[name];
+    const currentGroup = (!safeHasOwn(state.participantGroups, name) || state.participantGroups[name] === name) ? "" : state.participantGroups[name];
     let newGroup = prompt(`Assign ${name} to a Family/Group:\n(Leave blank to keep them separate)`, currentGroup);
     if (newGroup === null) return; 
-    state.participantGroups[name] = newGroup.trim() || name;
+    const trimmed = newGroup.trim();
+    if (trimmed && isForbiddenKey(trimmed)) {
+        alert("That group name is reserved and cannot be used.");
+        return;
+    }
+    state.participantGroups[name] = trimmed || name;
     saveState(); 
     updateUI();
 }
@@ -318,10 +338,15 @@ export function loadGroupTemplate() {
             const savedGroups = Array.isArray(data) ? {} : (data?.participantGroups || {});
             
             let addedPeople = 0;
-            savedParticipants.forEach(p => { 
+            savedParticipants.forEach(rawP => { 
+                if (typeof rawP !== 'string') return;
+                const p = rawP.trim().slice(0, 40);
+                if (!p || isForbiddenKey(p)) return;
                 if (!state.participants.includes(p)) { 
                     state.participants.push(p); 
-                    state.participantGroups[p] = savedGroups[p] || p; 
+                    const rawG = safeHasOwn(savedGroups, rawP) ? savedGroups[rawP] : (safeHasOwn(savedGroups, p) ? savedGroups[p] : null);
+                    const safeG = (typeof rawG === 'string' && rawG.trim() && !isForbiddenKey(rawG.trim())) ? rawG.trim().slice(0, 60) : p;
+                    state.participantGroups[p] = safeG; 
                     addedPeople++; 
                 } 
             });
@@ -329,8 +354,9 @@ export function loadGroupTemplate() {
             let addedTags = 0;
             if (data && data.defaultTags && Array.isArray(data.defaultTags)) {
                 if (!state.defaultTags) state.defaultTags = [];
-                data.defaultTags.forEach(t => {
-                    if (!state.defaultTags.includes(t)) {
+                data.defaultTags.forEach(rawT => {
+                    const t = sanitizeTag(rawT);
+                    if (t && !state.defaultTags.includes(t)) {
                         state.defaultTags.push(t);
                         addedTags++;
                     }
@@ -634,7 +660,7 @@ export function updateSplitTypeUI(options = {}) {
         calculateRemainingPercentage();
     } else {
         const cur = document.getElementById('exp-currency').value;
-        const sym = CURRENCY_SYMBOLS[cur] ? CURRENCY_SYMBOLS[cur] : cur;
+        const sym = safeHasOwn(CURRENCY_SYMBOLS, cur) ? CURRENCY_SYMBOLS[cur] : cur;
         helper.innerHTML = `<em>Use <strong>+ Extra</strong> to add to their base share, or <strong>= Exact</strong> to override it completely.</em> <strong id="equal-split-remaining" style="display: none; margin-left: 5px; padding: 2px 8px; border-radius: 6px; font-style: normal;"></strong>`;
         extraInputs.forEach(input => { 
             input.placeholder = `+ Extra ${sym}`; 
@@ -699,7 +725,7 @@ export function calculateRemainingPercentage() {
     if (!eqRemEl) return;
 
     const cur = document.getElementById('exp-currency')?.value || 'USD';
-    const sym = CURRENCY_SYMBOLS[cur] ? CURRENCY_SYMBOLS[cur] : (cur + ' ');
+    const sym = safeHasOwn(CURRENCY_SYMBOLS, cur) ? CURRENCY_SYMBOLS[cur] : (cur + ' ');
     const totalBill = parseFloat(document.getElementById('exp-amount')?.value);
 
     let totalPersonal = 0;
@@ -891,9 +917,7 @@ export function getRecentTags() {
 export function addDefaultTag() {
     const input = document.getElementById('new-default-tag');
     if (!input) return;
-    let val = input.value.trim().toLowerCase();
-    if (val.startsWith('#') || val.startsWith('＃')) val = val.substring(1).trim();
-    val = val.replace(/[^\p{L}\p{N}_-]/gu, '');
+    const val = sanitizeTag(input.value);
     if (!val) return;
     
     if (!state.defaultTags) state.defaultTags = [];
@@ -917,9 +941,7 @@ export function handleDefaultTagKeyPress(event) {
 export function renameDefaultTag(oldTag) {
     const newTagInput = prompt(`Rename tag #${oldTag} to:`, oldTag);
     if (!newTagInput) return;
-    let newTag = newTagInput.trim().toLowerCase();
-    if (newTag.startsWith('#') || newTag.startsWith('＃')) newTag = newTag.substring(1).trim();
-    newTag = newTag.replace(/[^\p{L}\p{N}_-]/gu, '');
+    const newTag = sanitizeTag(newTagInput);
     if (newTag === oldTag || newTag === "") return;
     
     const isDefault = state.defaultTags && state.defaultTags.includes(oldTag);
@@ -1030,8 +1052,7 @@ export function handleFormTagInput(e) {
         popup.innerHTML = finalMatches.map(t => {
             const isRecent = recentTags.includes(t.toLowerCase());
             const label = isRecent ? `🕒 #${escapeHTML(t)}` : `#${escapeHTML(t)}`;
-            const safeT = encodeURIComponent(t);
-            return `<div class="suggestion-item" onclick="selectTagForForm(decodeURIComponent('${safeT}'))"><span class="tag-pill" style="${getTagStyle(t)}">${label}</span></div>`;
+            return `<div class="suggestion-item" data-action="select-form-tag" data-tag="${escapeHTML(t)}"><span class="tag-pill" style="${getTagStyle(t)}">${label}</span></div>`;
         }).join('');
         popup.style.display = 'block';
         popup.style.top = (input.offsetTop + input.offsetHeight) + 'px';
@@ -1076,8 +1097,7 @@ export function handleSearchInput(e) {
         const allTags = getTagsFromShownExpenses('');
         if (allTags.length > 0) {
             popup.innerHTML = allTags.map(t => {
-                const safeT = encodeURIComponent(t);
-                return `<div class="suggestion-item" onclick="selectTagForSearch(decodeURIComponent('${safeT}'), false)"><span class="tag-pill" style="${getTagStyle(t)}">#${escapeHTML(t)}</span></div>`;
+                return `<div class="suggestion-item" data-action="select-search-tag" data-tag="${escapeHTML(t)}" data-negative="false"><span class="tag-pill" style="${getTagStyle(t)}">#${escapeHTML(t)}</span></div>`;
             }).join('');
             popup.style.display = 'block';
         } else {
@@ -1106,8 +1126,7 @@ export function handleSearchInput(e) {
 
         if (matches.length > 0) {
             popup.innerHTML = matches.map(t => {
-                const safeT = encodeURIComponent(t);
-                return `<div class="suggestion-item" onclick="selectTagForSearch(decodeURIComponent('${safeT}'), ${isNegative})"><span class="tag-pill" style="${getTagStyle(t)}">${prefix}${escapeHTML(t)}</span></div>`;
+                return `<div class="suggestion-item" data-action="select-search-tag" data-tag="${escapeHTML(t)}" data-negative="${isNegative ? 'true' : 'false'}"><span class="tag-pill" style="${getTagStyle(t)}">${prefix}${escapeHTML(t)}</span></div>`;
             }).join('');
             popup.style.display = 'block';
         } else {
@@ -1246,11 +1265,12 @@ export function clearInsightFilter() {
 
 // --- EXPENSES OPERATIONS ---
 export function saveExpense() {
-    const category = document.getElementById('exp-category').value;
+    const rawCategory = document.getElementById('exp-category').value;
+    const category = safeHasOwn(CATEGORIES, rawCategory) ? rawCategory : 'Other';
     const desc = document.getElementById('exp-desc').value.trim();
     
     const rawTags = document.getElementById('exp-tags').value;
-    const tags = [...new Set((rawTags.match(/[#＃]([\p{L}\p{N}_-]+)/gu) || []).map(t => t.replace(/^[#＃]/, '').toLowerCase()))].sort((a, b) => a.localeCompare(b));
+    const tags = [...new Set((rawTags.match(/[#＃]([\p{L}\p{N}_-]+)/gu) || []).map(t => sanitizeTag(t)).filter(Boolean))].sort((a, b) => a.localeCompare(b));
     
     const notes = document.getElementById('exp-notes').value.trim();
     const date = document.getElementById('exp-date').value;
@@ -1272,6 +1292,7 @@ export function saveExpense() {
         const cb = row.querySelector('.part-checkbox');
         if (cb && cb.checked) {
             const name = cb.value;
+            if (!name || isForbiddenKey(name)) return;
             selected.push(name);
             
             const extraInput = row.querySelector('.part-personal').value.trim();
@@ -1281,15 +1302,15 @@ export function saveExpense() {
             const fixedAmt = parseFloat(fixedInput);
             
             if (splitType === 'equal') {
-                if (fixedInput !== '' && !isNaN(fixedAmt) && fixedAmt >= 0) {
+                if (fixedInput !== '' && Number.isFinite(fixedAmt) && fixedAmt >= 0 && fixedAmt <= 1e12) {
                     fixedSharesLocal[name] = fixedAmt;
                     totalFixedAmtLocal += fixedAmt;
-                } else if (extraInput !== '' && !isNaN(extraAmt) && extraAmt > 0) {
+                } else if (extraInput !== '' && Number.isFinite(extraAmt) && extraAmt > 0 && extraAmt <= 1e12) {
                     personalExpensesLocal[name] = extraAmt; 
                     totalPersonalAmtLocal += extraAmt;
                 }
             } else {
-                if (extraInput !== '' && !isNaN(extraAmt) && extraAmt >= 0) {
+                if (extraInput !== '' && Number.isFinite(extraAmt) && extraAmt >= 0 && extraAmt <= 100) {
                     percentageShares[name] = extraAmt; 
                     totalPercentageEntered += extraAmt;
                 }
@@ -1297,7 +1318,7 @@ export function saveExpense() {
         }
     });
 
-    if (!desc || isNaN(localAmount) || localAmount <= 0 || !payer || selected.length === 0) {
+    if (!desc || !Number.isFinite(localAmount) || localAmount <= 0 || localAmount > 1e12 || !payer || isForbiddenKey(payer) || selected.length === 0) {
         alert("Please fill all fields, enter a valid amount, and select at least one participant."); 
         return;
     }
@@ -1378,7 +1399,7 @@ export function saveExpense() {
         showToast("Activity updated!", 'edit'); 
     } else {
         state.expenses.push({ 
-            id: Math.random().toString(36).substr(2, 9), category, desc, tags, notes, date, amount: amountUsd, localAmount, localCurrency, 
+            id: generateSecureId(), category, desc, tags, notes, date, amount: amountUsd, localAmount, localCurrency, 
             payer, splitType, involved: selected, personalExpenses: personalExpensesUsd, fixedShares: fixedSharesUsd,
             percentageShares, ignored: false, timestamp: Date.now(),
             exchangeRate: rateToUse
@@ -1534,7 +1555,7 @@ export function duplicateExpense(id) {
     const exp = state.expenses.find(e => e.id === id);
     if (exp) {
         const newExp = JSON.parse(JSON.stringify(exp));
-        newExp.id = Math.random().toString(36).substr(2, 9); 
+        newExp.id = generateSecureId(); 
         newExp.timestamp = Date.now(); 
         
         let baseDesc = exp.desc.replace(/ #\d+$/, ''); 
@@ -1669,7 +1690,7 @@ export function renderCategoryFilters() {
         const bg = isActive ? info.bg : '#ffffff';
         const border = isActive ? info.color : '#cbd5e1'; 
         const textCol = isActive ? info.color : '#64748b';
-        html += `<button class="cat-filter-btn" style="opacity: ${opacity}; background: ${bg}; border: 1px solid ${border}; color: ${textCol};" onclick="toggleCategoryFilter(decodeURIComponent('${encodeURIComponent(cat)}'))" title="Toggle ${escapeHTML(cat)}">${info.icon} ${escapeHTML(cat)}</button>`;
+        html += `<button class="cat-filter-btn" style="opacity: ${opacity}; background: ${bg}; border: 1px solid ${border}; color: ${textCol};" data-action="toggle-category" data-category="${escapeHTML(cat)}" title="Toggle ${escapeHTML(cat)}">${info.icon} ${escapeHTML(cat)}</button>`;
     });
     container.innerHTML = html;
 }
@@ -1678,11 +1699,11 @@ export function renderParticipantInputs(preserveExisting = false) {
     const pListInputs = document.getElementById('participant-list-inputs');
     if (!pListInputs) return;
 
-    const prevValues = {};
+    const prevValues = createNullMap();
     if (preserveExisting) {
         pListInputs.querySelectorAll('.participant-row').forEach(row => {
             const cb = row.querySelector('.part-checkbox');
-            if (cb) {
+            if (cb && !isForbiddenKey(cb.value)) {
                 prevValues[cb.value] = {
                     checked: cb.checked,
                     extra: row.querySelector('.part-personal')?.value || '',
@@ -1696,12 +1717,12 @@ export function renderParticipantInputs(preserveExisting = false) {
     pListInputs.innerHTML = state.participants.map(p => `
         <div class="participant-row">
             <label class="checkbox-item" style="color: ${getColor(p)}" title="${escapeHTML(p)}">
-                <input type="checkbox" value="${escapeHTML(p)}" class="part-checkbox" checked onchange="checkMasterCheckboxState()"> 
+                <input type="checkbox" value="${escapeHTML(p)}" class="part-checkbox" checked> 
                 <span>${escapeHTML(shortName(p))}</span>
             </label>
             <div class="inputs-group">
-                <input type="number" class="part-personal tabular-nums" data-name="${escapeHTML(p)}" placeholder="+ Extra $" step="0.01" min="0" oninput="handleEqualSplitInput(this, 'extra')">
-                <input type="number" class="part-fixed tabular-nums" data-name="${escapeHTML(p)}" placeholder="= Exact $" step="0.01" min="0" oninput="handleEqualSplitInput(this, 'fixed')">
+                <input type="number" class="part-personal tabular-nums" data-name="${escapeHTML(p)}" placeholder="+ Extra $" step="0.01" min="0">
+                <input type="number" class="part-fixed tabular-nums" data-name="${escapeHTML(p)}" placeholder="= Exact $" step="0.01" min="0">
             </div>
         </div>
     `).join('');
@@ -1709,7 +1730,7 @@ export function renderParticipantInputs(preserveExisting = false) {
     if (hasPrevValues) {
         pListInputs.querySelectorAll('.participant-row').forEach(row => {
             const cb = row.querySelector('.part-checkbox');
-            if (cb && Object.prototype.hasOwnProperty.call(prevValues, cb.value)) {
+            if (cb && safeHasOwn(prevValues, cb.value)) {
                 const saved = prevValues[cb.value];
                 cb.checked = saved.checked;
                 const extraEl = row.querySelector('.part-personal');
@@ -1788,16 +1809,15 @@ export function updateUI() {
     if (pList) {
         pList.innerHTML = state.participants.length ? state.participants.map(p => {
             const c = getColor(p);
-            const gName = state.participantGroups[p];
+            const gName = safeHasOwn(state.participantGroups, p) ? state.participantGroups[p] : p;
             const hasGroup = gName && gName !== p;
             const groupText = hasGroup ? `👥 ${gName}` : '👤 Edit Group';
             const groupColor = hasGroup ? getGroupColor(gName) : '#64748b';
-            const safeP = encodeURIComponent(p);
             return `
             <div class="tag" style="color: ${c}; border-color: ${c}40;" title="${escapeHTML(p)}">
-                <span class="tag-name" onclick="renameParticipant(decodeURIComponent('${safeP}'))">${escapeHTML(p)}</span>
-                <span class="tag-group-btn" style="color: ${groupColor}; font-weight: ${hasGroup ? '700' : '500'};" onclick="changeGroup(decodeURIComponent('${safeP}'))" title="Assign to a group">${escapeHTML(groupText)}</span>
-                <span class="tag-del" onclick="deleteParticipant(decodeURIComponent('${safeP}'))">&times;</span>
+                <span class="tag-name" data-action="rename-participant" data-name="${escapeHTML(p)}">${escapeHTML(p)}</span>
+                <span class="tag-group-btn" style="color: ${groupColor}; font-weight: ${hasGroup ? '700' : '500'};" data-action="change-group" data-name="${escapeHTML(p)}" title="Assign to a group">${escapeHTML(groupText)}</span>
+                <span class="tag-del" data-action="delete-participant" data-name="${escapeHTML(p)}">&times;</span>
             </div>`
         }).join('') : '<em style="color:var(--secondary); font-size:0.9rem;">No participants added yet.</em>';
     }
@@ -1806,11 +1826,10 @@ export function updateUI() {
     if (tList) {
         const allTags = getAllUniqueTags();
         tList.innerHTML = allTags.length ? allTags.map(t => {
-            const safeT = encodeURIComponent(t);
             return `
             <div class="tag" style="${getTagStyle(t)}; margin-top: 4px;" title="${escapeHTML(t)}">
-                <span class="tag-name" onclick="renameDefaultTag(decodeURIComponent('${safeT}'))">#${escapeHTML(t)}</span>
-                <span class="tag-del" onclick="deleteDefaultTag(decodeURIComponent('${safeT}'))">&times;</span>
+                <span class="tag-name" data-action="rename-tag" data-tag="${escapeHTML(t)}">#${escapeHTML(t)}</span>
+                <span class="tag-del" data-action="delete-tag" data-tag="${escapeHTML(t)}">&times;</span>
             </div>`
         }).join('') : '<em style="color:var(--secondary); font-size:0.9rem;">No tags added yet.</em>';
     }
@@ -1833,22 +1852,25 @@ export function updateUI() {
         updateSplitTypeUI({ preserveValues: true });
     }
 
-    const groupsMap = {};
+    const groupsMap = createNullMap();
     state.participants.forEach(p => {
-        const gName = state.participantGroups[p] || p;
+        if (isForbiddenKey(p)) return;
+        const gName = (safeHasOwn(state.participantGroups, p) && !isForbiddenKey(state.participantGroups[p]))
+            ? state.participantGroups[p]
+            : p;
         if (!groupsMap[gName]) groupsMap[gName] = [];
         groupsMap[gName].push(p);
     });
 
-    const categoryTotals = {};
-    const categoryParticipations = {}; 
-    const categoryActivityCounts = {}; 
+    const categoryTotals = createNullMap();
+    const categoryParticipations = createNullMap(); 
+    const categoryActivityCounts = createNullMap(); 
     
-    const groupStats = {};
+    const groupStats = createNullMap();
     Object.keys(groupsMap).forEach(g => {
-        groupStats[g] = { paid: 0, owed: 0, members: groupsMap[g], catShares: {}, catPaid: {}, catActivitySets: {}, memberStats: {} };
+        groupStats[g] = { paid: 0, owed: 0, members: groupsMap[g], catShares: createNullMap(), catPaid: createNullMap(), catActivitySets: createNullMap(), memberStats: createNullMap() };
         groupsMap[g].forEach(m => {
-            groupStats[g].memberStats[m] = { paid: 0, frontedPaid: 0, owed: 0, catShares: {}, catPaid: {} };
+            groupStats[g].memberStats[m] = { paid: 0, frontedPaid: 0, owed: 0, catShares: createNullMap(), catPaid: createNullMap() };
             Object.keys(CATEGORIES).forEach(c => { 
                 groupStats[g].memberStats[m].catShares[c] = 0; 
                 groupStats[g].memberStats[m].catPaid[c] = 0; 
@@ -1872,22 +1894,27 @@ export function updateUI() {
     let validActiveCount = 0;
     const activeInvolvedParticipants = new Set();
     
-    let dateTotals = {};
-    let payerCounts = {};
+    let dateTotals = createNullMap();
+    let payerCounts = createNullMap();
 
     state.expenses.forEach(e => {
         if (e.ignored || !doesExpenseMatchFilters(e, groupsMap)) return; 
         
         validActiveCount++;
-        const payerGroup = state.participantGroups[e.payer] || e.payer;
-        const cat = CATEGORIES[e.category] ? e.category : 'Other';
+        const payerName = (typeof e.payer === 'string' && !isForbiddenKey(e.payer)) ? e.payer : '';
+        const payerGroup = (safeHasOwn(state.participantGroups, payerName) && !isForbiddenKey(state.participantGroups[payerName]))
+            ? state.participantGroups[payerName]
+            : payerName;
+        const cat = safeHasOwn(CATEGORIES, e.category) ? e.category : 'Other';
         
         if (cat !== 'Transfer') {
             totalSpent += e.amount;
             if (e.amount > biggestSplurge.amount) {
                 biggestSplurge = { desc: e.desc, amount: e.amount, category: cat };
             }
-            dateTotals[e.date] = (dateTotals[e.date] || 0) + e.amount;
+            if (e.date && !isForbiddenKey(e.date)) {
+                dateTotals[e.date] = (dateTotals[e.date] || 0) + e.amount;
+            }
             (e.involved || []).forEach(p => activeInvolvedParticipants.add(p));
         }
         
@@ -1895,34 +1922,34 @@ export function updateUI() {
         categoryActivityCounts[cat] += 1;
 
         if (!groupStats[payerGroup]) {
-            groupStats[payerGroup] = { paid: 0, owed: 0, members: [e.payer], catShares: {}, catPaid: {}, catActivitySets: {}, memberStats: {} };
-            groupStats[payerGroup].memberStats[e.payer] = { paid: 0, frontedPaid: 0, owed: 0, catShares: {}, catPaid: {} };
+            groupStats[payerGroup] = { paid: 0, owed: 0, members: [payerName], catShares: createNullMap(), catPaid: createNullMap(), catActivitySets: createNullMap(), memberStats: createNullMap() };
+            groupStats[payerGroup].memberStats[payerName] = { paid: 0, frontedPaid: 0, owed: 0, catShares: createNullMap(), catPaid: createNullMap() };
             Object.keys(CATEGORIES).forEach(c => { 
                 groupStats[payerGroup].catShares[c] = 0; 
                 groupStats[payerGroup].catPaid[c] = 0; 
                 groupStats[payerGroup].catActivitySets[c] = new Set();
-                groupStats[payerGroup].memberStats[e.payer].catShares[c] = 0;
-                groupStats[payerGroup].memberStats[e.payer].catPaid[c] = 0;
+                groupStats[payerGroup].memberStats[payerName].catShares[c] = 0;
+                groupStats[payerGroup].memberStats[payerName].catPaid[c] = 0;
             });
-        } else if (!groupStats[payerGroup].memberStats[e.payer]) {
-            if (!groupStats[payerGroup].members.includes(e.payer)) {
-                groupStats[payerGroup].members.push(e.payer);
+        } else if (!groupStats[payerGroup].memberStats[payerName]) {
+            if (!groupStats[payerGroup].members.includes(payerName)) {
+                groupStats[payerGroup].members.push(payerName);
             }
-            groupStats[payerGroup].memberStats[e.payer] = { paid: 0, frontedPaid: 0, owed: 0, catShares: {}, catPaid: {} };
+            groupStats[payerGroup].memberStats[payerName] = { paid: 0, frontedPaid: 0, owed: 0, catShares: createNullMap(), catPaid: createNullMap() };
             Object.keys(CATEGORIES).forEach(c => { 
-                groupStats[payerGroup].memberStats[e.payer].catShares[c] = 0; 
-                groupStats[payerGroup].memberStats[e.payer].catPaid[c] = 0; 
+                groupStats[payerGroup].memberStats[payerName].catShares[c] = 0; 
+                groupStats[payerGroup].memberStats[payerName].catPaid[c] = 0; 
             });
         }
 
         groupStats[payerGroup].paid += e.amount;
-        groupStats[payerGroup].memberStats[e.payer].paid += e.amount;
+        groupStats[payerGroup].memberStats[payerName].paid += e.amount;
         
         groupStats[payerGroup].catPaid[cat] += e.amount;
-        groupStats[payerGroup].memberStats[e.payer].catPaid[cat] += e.amount;
+        groupStats[payerGroup].memberStats[payerName].catPaid[cat] += e.amount;
         if (cat !== 'Transfer') {
-            groupStats[payerGroup].memberStats[e.payer].frontedPaid += e.amount;
-            payerCounts[e.payer] = (payerCounts[e.payer] || 0) + 1;
+            groupStats[payerGroup].memberStats[payerName].frontedPaid += e.amount;
+            payerCounts[payerName] = (payerCounts[payerName] || 0) + 1;
         }
         
         let activeShareCountForExp = 0;
@@ -1931,16 +1958,19 @@ export function updateUI() {
             let totalEnteredPerc = 0; 
             let unenteredCount = 0;
             e.involved.forEach(inv => {
-                if (e.percentageShares && e.percentageShares[inv] !== undefined) totalEnteredPerc += e.percentageShares[inv];
+                if (safeHasOwn(e.percentageShares, inv)) totalEnteredPerc += e.percentageShares[inv];
                 else unenteredCount++;
             });
             let defaultPerc = unenteredCount > 0 ? Math.max(0, 100 - totalEnteredPerc) / unenteredCount : 0;
             
             e.involved.forEach(p => {
-                const involvedGroup = state.participantGroups[p] || p;
+                if (isForbiddenKey(p)) return;
+                const involvedGroup = (safeHasOwn(state.participantGroups, p) && !isForbiddenKey(state.participantGroups[p]))
+                    ? state.participantGroups[p]
+                    : p;
                 if (!groupStats[involvedGroup]) {
-                    groupStats[involvedGroup] = { paid: 0, owed: 0, members: [p], catShares: {}, catPaid: {}, catActivitySets: {}, memberStats: {} };
-                    groupStats[involvedGroup].memberStats[p] = { paid: 0, frontedPaid: 0, owed: 0, catShares: {}, catPaid: {} };
+                    groupStats[involvedGroup] = { paid: 0, owed: 0, members: [p], catShares: createNullMap(), catPaid: createNullMap(), catActivitySets: createNullMap(), memberStats: createNullMap() };
+                    groupStats[involvedGroup].memberStats[p] = { paid: 0, frontedPaid: 0, owed: 0, catShares: createNullMap(), catPaid: createNullMap() };
                     Object.keys(CATEGORIES).forEach(c => { 
                         groupStats[involvedGroup].catShares[c] = 0; 
                         groupStats[involvedGroup].catPaid[c] = 0; 
@@ -1952,13 +1982,13 @@ export function updateUI() {
                     if (!groupStats[involvedGroup].members.includes(p)) {
                         groupStats[involvedGroup].members.push(p);
                     }
-                    groupStats[involvedGroup].memberStats[p] = { paid: 0, frontedPaid: 0, owed: 0, catShares: {}, catPaid: {} };
+                    groupStats[involvedGroup].memberStats[p] = { paid: 0, frontedPaid: 0, owed: 0, catShares: createNullMap(), catPaid: createNullMap() };
                     Object.keys(CATEGORIES).forEach(c => { 
                         groupStats[involvedGroup].memberStats[p].catShares[c] = 0; 
                         groupStats[involvedGroup].memberStats[p].catPaid[c] = 0; 
                     });
                 }
-                const pPerc = (e.percentageShares && e.percentageShares[p] !== undefined) ? e.percentageShares[p] : defaultPerc;
+                const pPerc = safeHasOwn(e.percentageShares, p) ? e.percentageShares[p] : defaultPerc;
                 const finalShare = e.amount * (pPerc / 100);
                 
                 if (finalShare > 0.0001) {
@@ -1984,11 +2014,11 @@ export function updateUI() {
             let unfixedCount = 0;
 
             e.involved.forEach(p => {
-                if (e.fixedShares && e.fixedShares[p] !== undefined) {
+                if (safeHasOwn(e.fixedShares, p)) {
                     totalFixedForExp += e.fixedShares[p];
                 } else {
                     unfixedCount++;
-                    if (e.personalExpenses && e.personalExpenses[p]) {
+                    if (safeHasOwn(e.personalExpenses, p)) {
                         totalPersonalForExp += e.personalExpenses[p];
                     }
                 }
@@ -2001,10 +2031,13 @@ export function updateUI() {
                 : 0;
 
             e.involved.forEach((p, idx) => {
-                const involvedGroup = state.participantGroups[p] || p;
+                if (isForbiddenKey(p)) return;
+                const involvedGroup = (safeHasOwn(state.participantGroups, p) && !isForbiddenKey(state.participantGroups[p]))
+                    ? state.participantGroups[p]
+                    : p;
                 if (!groupStats[involvedGroup]) {
-                    groupStats[involvedGroup] = { paid: 0, owed: 0, members: [p], catShares: {}, catPaid: {}, catActivitySets: {}, memberStats: {} };
-                    groupStats[involvedGroup].memberStats[p] = { paid: 0, frontedPaid: 0, owed: 0, catShares: {}, catPaid: {} };
+                    groupStats[involvedGroup] = { paid: 0, owed: 0, members: [p], catShares: createNullMap(), catPaid: createNullMap(), catActivitySets: createNullMap(), memberStats: createNullMap() };
+                    groupStats[involvedGroup].memberStats[p] = { paid: 0, frontedPaid: 0, owed: 0, catShares: createNullMap(), catPaid: createNullMap() };
                     Object.keys(CATEGORIES).forEach(c => { 
                         groupStats[involvedGroup].catShares[c] = 0; 
                         groupStats[involvedGroup].catPaid[c] = 0; 
@@ -2016,7 +2049,7 @@ export function updateUI() {
                     if (!groupStats[involvedGroup].members.includes(p)) {
                         groupStats[involvedGroup].members.push(p);
                     }
-                    groupStats[involvedGroup].memberStats[p] = { paid: 0, frontedPaid: 0, owed: 0, catShares: {}, catPaid: {} };
+                    groupStats[involvedGroup].memberStats[p] = { paid: 0, frontedPaid: 0, owed: 0, catShares: createNullMap(), catPaid: createNullMap() };
                     Object.keys(CATEGORIES).forEach(c => { 
                         groupStats[involvedGroup].memberStats[p].catShares[c] = 0; 
                         groupStats[involvedGroup].memberStats[p].catPaid[c] = 0; 
@@ -2024,13 +2057,13 @@ export function updateUI() {
                 }
                 let finalShare = 0;
                 
-                if (e.fixedShares && e.fixedShares[p] !== undefined) {
+                if (safeHasOwn(e.fixedShares, p)) {
                     finalShare = e.fixedShares[p];
                     if (idx === 0 && Math.abs(fixedRoundingDiff) > 0 && Math.abs(fixedRoundingDiff) <= 0.05) {
                         finalShare = Math.max(0, finalShare + fixedRoundingDiff);
                     }
                 } else {
-                    const personal = (e.personalExpenses && e.personalExpenses[p]) ? e.personalExpenses[p] : 0;
+                    const personal = safeHasOwn(e.personalExpenses, p) ? e.personalExpenses[p] : 0;
                     finalShare = baseShare + personal;
                 }
                 
@@ -2117,7 +2150,7 @@ export function updateUI() {
             badgesHtml += `
             <div class="tag" style="background: rgba(187, 247, 208, 0.4); color: var(--primary); border: 1px solid rgba(187, 247, 208, 0.8); font-size: 0.8rem; font-weight: 700; padding: 2px 6px; display: inline-flex; align-items: center; gap: 4px; border-radius: var(--radius-sm);">
                 <span>📅 Calendar (${count} day${count > 1 ? 's' : ''})</span>
-                <span style="cursor: pointer; font-weight: 800; font-size: 0.95rem; margin-left: 2px;" onclick="clearCalendarFilter()">&times;</span>
+                <span style="cursor: pointer; font-weight: 800; font-size: 0.95rem; margin-left: 2px;" data-action="clear-calendar-filter">&times;</span>
             </div>`;
         }
         
@@ -2125,7 +2158,7 @@ export function updateUI() {
             badgesHtml += `
             <div class="tag" style="background: rgba(199, 210, 254, 0.4); color: #4f46e5; border: 1px solid rgba(199, 210, 254, 0.8); font-size: 0.8rem; font-weight: 700; padding: 2px 6px; display: inline-flex; align-items: center; gap: 4px; border-radius: var(--radius-sm);">
                 <span>👤 Filter: ${escapeHTML(state.insightFilter.name)} (${escapeHTML(state.insightFilter.cat)})</span>
-                <span style="cursor: pointer; font-weight: 800; font-size: 0.95rem; margin-left: 2px;" onclick="clearInsightFilter()">&times;</span>
+                <span style="cursor: pointer; font-weight: 800; font-size: 0.95rem; margin-left: 2px;" data-action="clear-insight-filter">&times;</span>
             </div>`;
         }
         
@@ -2152,33 +2185,35 @@ export function updateUI() {
         const currentViewCur = document.getElementById('view-currency')?.value || 'USD';
         eList.innerHTML = filteredExpenses.length ? filteredExpenses.map(e => {
             const payerColor = getColor(e.payer); 
-            const catInfo = CATEGORIES[e.category] || CATEGORIES['Other'];
-            const formattedDate = formatDateDisplay(e.date);
+            const catKey = safeHasOwn(CATEGORIES, e.category) ? e.category : 'Other';
+            const catInfo = CATEGORIES[catKey];
+            const formattedDate = escapeHTML(formatDateDisplay(e.date));
             let breakdownHtml = '';
-            const localSym = CURRENCY_SYMBOLS[e.localCurrency] ? CURRENCY_SYMBOLS[e.localCurrency] : (e.localCurrency ? e.localCurrency + ' ' : '$');
-            const localAmtNum = (e.localAmount !== undefined && e.localAmount !== null && !isNaN(Number(e.localAmount))) ? Number(e.localAmount) : Number(e.amount || 0);
-            const amtNum = Number(e.amount || 0);
+            const rawLocalSym = safeHasOwn(CURRENCY_SYMBOLS, e.localCurrency) ? CURRENCY_SYMBOLS[e.localCurrency] : (e.localCurrency ? e.localCurrency + ' ' : '$');
+            const localSym = escapeHTML(rawLocalSym);
+            const localAmtNum = (e.localAmount !== undefined && e.localAmount !== null && Number.isFinite(Number(e.localAmount))) ? Number(e.localAmount) : Number(e.amount || 0);
+            const amtNum = Number.isFinite(Number(e.amount)) ? Number(e.amount) : 0;
             const hasCurrencyMismatch = (e.localCurrency === 'FX') || (e.localCurrency === 'USD' && Math.abs(localAmtNum - amtNum) > 0.05);
-            const breakdownRate = (currentViewCur !== 'USD' && currentViewCur === e.localCurrency && isFinite(e.exchangeRate) && e.exchangeRate > 0) ? e.exchangeRate : null;
+            const breakdownRate = (currentViewCur !== 'USD' && currentViewCur === e.localCurrency && Number.isFinite(e.exchangeRate) && e.exchangeRate > 0) ? e.exchangeRate : null;
             let displayMainAmount = `${localSym}${localAmtNum.toFixed(2)}`;
             let displaySubAmount = '';
             
             if (e.localCurrency !== 'USD' || hasCurrencyMismatch) {
-                displaySubAmount = `<br><span style="font-size: 0.85rem; color: var(--secondary);">($${amtNum.toFixed(2)} USD @ ${(e.exchangeRate||1).toFixed(4)})</span>`;
+                displaySubAmount = `<br><span style="font-size: 0.85rem; color: var(--secondary);">($${amtNum.toFixed(2)} USD @ ${(Number(e.exchangeRate)||1).toFixed(4)})</span>`;
             }
 
             if (e.splitType === 'percentage') {
                 let totalEnteredPerc = 0; 
                 let unenteredCount = 0;
                 e.involved.forEach(inv => {
-                    if (e.percentageShares && e.percentageShares[inv] !== undefined) totalEnteredPerc += e.percentageShares[inv];
+                    if (safeHasOwn(e.percentageShares, inv)) totalEnteredPerc += e.percentageShares[inv];
                     else unenteredCount++;
                 });
                 let defaultPerc = unenteredCount > 0 ? Math.max(0, 100 - totalEnteredPerc) / unenteredCount : 0;
                 breakdownHtml = e.involved.map(p => {
-                    const pPerc = (e.percentageShares && e.percentageShares[p] !== undefined) ? e.percentageShares[p] : defaultPerc;
+                    const pPerc = safeHasOwn(e.percentageShares, p) ? e.percentageShares[p] : defaultPerc;
                     const finalShare = e.amount * (pPerc / 100);
-                    return `<span style="white-space: nowrap;" title="${escapeHTML(p)}"><span style="color: ${getColor(p)}; font-weight: 700;">${escapeHTML(shortName(p))}</span> <span class="tabular-nums" style="font-size: 0.85rem; color: var(--secondary);">(${formatMoney(finalShare, currentViewCur, breakdownRate)} / ${pPerc.toFixed(1)}%)</span></span>`;
+                    return `<span style="white-space: nowrap;" title="${escapeHTML(p)}"><span style="color: ${getColor(p)}; font-weight: 700;">${escapeHTML(shortName(p))}</span> <span class="tabular-nums" style="font-size: 0.85rem; color: var(--secondary);">(${escapeHTML(formatMoney(finalShare, currentViewCur, breakdownRate))} / ${pPerc.toFixed(1)}%)</span></span>`;
                 }).join(', ');
             } else {
                 let totalPersonalForExp = 0;
@@ -2186,11 +2221,11 @@ export function updateUI() {
                 let unfixedCount = 0;
 
                 e.involved.forEach(p => {
-                    if (e.fixedShares && e.fixedShares[p] !== undefined) {
+                    if (safeHasOwn(e.fixedShares, p)) {
                         totalFixedForExp += e.fixedShares[p];
                     } else {
                         unfixedCount++;
-                        if (e.personalExpenses && e.personalExpenses[p]) {
+                        if (safeHasOwn(e.personalExpenses, p)) {
                             totalPersonalForExp += e.personalExpenses[p];
                         }
                     }
@@ -2203,30 +2238,32 @@ export function updateUI() {
                     : 0;
                 
                 breakdownHtml = e.involved.map((p, idx) => {
-                    if (e.fixedShares && e.fixedShares[p] !== undefined) {
+                    if (safeHasOwn(e.fixedShares, p)) {
                         let fixedShare = e.fixedShares[p];
                         if (idx === 0 && Math.abs(fixedRoundingDiff) > 0 && Math.abs(fixedRoundingDiff) <= 0.05) {
                             fixedShare = Math.max(0, fixedShare + fixedRoundingDiff);
                         }
-                        return `<span style="white-space: nowrap;" title="${escapeHTML(p)}"><span style="color: ${getColor(p)}; font-weight: 700;">${escapeHTML(shortName(p))}</span> <span class="tabular-nums" style="font-size: 0.85rem; color: var(--secondary);">(${formatMoney(fixedShare, currentViewCur, breakdownRate)} <span style="color:#d97706;">exact</span>)</span></span>`;
+                        return `<span style="white-space: nowrap;" title="${escapeHTML(p)}"><span style="color: ${getColor(p)}; font-weight: 700;">${escapeHTML(shortName(p))}</span> <span class="tabular-nums" style="font-size: 0.85rem; color: var(--secondary);">(${escapeHTML(formatMoney(fixedShare, currentViewCur, breakdownRate))} <span style="color:#d97706;">exact</span>)</span></span>`;
                     } else {
-                        const personal = (e.personalExpenses && e.personalExpenses[p]) ? e.personalExpenses[p] : 0;
+                        const personal = safeHasOwn(e.personalExpenses, p) ? e.personalExpenses[p] : 0;
                         const finalShare = baseShare + personal;
-                        let personalNote = personal > 0 ? ` <span style="font-size:0.75rem; color: var(--primary);">(+ ${formatMoney(personal, currentViewCur, breakdownRate)} extra)</span>` : '';
-                        return `<span style="white-space: nowrap;" title="${escapeHTML(p)}"><span style="color: ${getColor(p)}; font-weight: 700;">${escapeHTML(shortName(p))}</span> <span class="tabular-nums" style="font-size: 0.85rem; color: var(--secondary);">(${formatMoney(finalShare, currentViewCur, breakdownRate)}${personalNote})</span></span>`;
+                        let personalNote = personal > 0 ? ` <span style="font-size:0.75rem; color: var(--primary);">(+ ${escapeHTML(formatMoney(personal, currentViewCur, breakdownRate))} extra)</span>` : '';
+                        return `<span style="white-space: nowrap;" title="${escapeHTML(p)}"><span style="color: ${getColor(p)}; font-weight: 700;">${escapeHTML(shortName(p))}</span> <span class="tabular-nums" style="font-size: 0.85rem; color: var(--secondary);">(${escapeHTML(formatMoney(finalShare, currentViewCur, breakdownRate))}${personalNote})</span></span>`;
                     }
                 }).join(', ');
             }
 
-            const tagsHtml = (e.tags || []).length > 0 ? `<div style="margin-top: 6px;">` + [...e.tags].sort((a, b) => a.localeCompare(b)).map(t => `<span class="tag-pill" style="${getTagStyle(t)}" onclick="selectTagForSearch(decodeURIComponent('${encodeURIComponent(t)}'))" title="Filter by #${escapeHTML(t)}">#${escapeHTML(t)}</span>`).join('') + `</div>` : '';
+            const tagsHtml = (e.tags || []).length > 0 ? `<div style="margin-top: 6px;">` + [...e.tags].sort((a, b) => a.localeCompare(b)).map(t => `<span class="tag-pill" style="${getTagStyle(t)}" data-action="filter-tag" data-tag="${escapeHTML(t)}" title="Filter by #${escapeHTML(t)}">#${escapeHTML(t)}</span>`).join('') + `</div>` : '';
 
             let notesHtml = '';
             if (e.notes && e.notes.trim() !== '') {
-                const isUrl = e.notes.startsWith('http://') || e.notes.startsWith('https://');
-                const noteContent = isUrl ? `<a href="${escapeHTML(e.notes)}" target="_blank" rel="noopener noreferrer" style="color: var(--primary); text-decoration: underline; word-break: break-all;">${escapeHTML(e.notes)}</a>` : `<span style="word-break: break-word;">${escapeHTML(e.notes)}</span>`;
+                const safeNoteUrl = sanitizeSafeUrl(e.notes);
+                const isUrl = Boolean(safeNoteUrl && (e.notes.startsWith('http://') || e.notes.startsWith('https://')));
+                const noteContent = isUrl ? `<a href="${escapeHTML(safeNoteUrl)}" target="_blank" rel="noopener noreferrer" style="color: var(--primary); text-decoration: underline; word-break: break-all;">${escapeHTML(e.notes)}</a>` : `<span style="word-break: break-word;">${escapeHTML(e.notes)}</span>`;
                 notesHtml = `<div style="margin-top: 10px; padding: 8px 12px; background: rgba(255, 255, 255, 0.5); border-radius: var(--radius-sm); font-size: 0.85rem; color: var(--secondary); border: 1px solid rgba(226, 232, 240, 0.6); border-left: 4px solid ${catInfo.color};">${noteContent}</div>`;
             }
 
+            const safeId = escapeHTML(e.id);
             const isEditing = state.editingExpenseId === e.id; 
             const editingClass = isEditing ? 'is-editing' : '';
             let cardStyle = `background: linear-gradient(135deg, ${catInfo.bg}, rgba(255, 255, 255, 0.45)); border: 1px solid ${catInfo.color}30; border-left: 6px solid ${catInfo.color};`; 
@@ -2236,9 +2273,9 @@ export function updateUI() {
                 : `<span style="color: var(--danger); font-weight: 800;">⚠️ Missing</span>`;
 
             return `
-            <div id="exp-row-${e.id}" class="expense-item ${ignoredClass} ${editingClass}" style="${cardStyle}">
+            <div id="exp-row-${safeId}" class="expense-item ${ignoredClass} ${editingClass}" style="${cardStyle}">
                 <div class="expense-details">
-                    <span style="color:${catInfo.color}; font-weight: 800; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;">${catInfo.icon} ${e.category}</span><br>
+                    <span style="color:${catInfo.color}; font-weight: 800; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;">${catInfo.icon} ${escapeHTML(catKey)}</span><br>
                     <strong style="font-size: 1.15rem; color: #0f172a; letter-spacing: -0.01em;">${escapeHTML(e.desc)}</strong>
                     ${e.ignored ? '<span style="color: var(--danger); font-size: 0.75rem; font-weight: 800; margin-left: 6px; background: #fee2e2; padding: 2px 4px; border-radius: 4px;">IGNORED</span>' : ''}
                     ${hasCurrencyMismatch ? '<span style="color: var(--danger); font-size: 0.75rem; font-weight: 800; margin-left: 6px; background: #fee2e2; padding: 2px 5px; border-radius: 4px;">⚠️ CHECK CURRENCY</span>' : ''}<br>
@@ -2254,11 +2291,11 @@ export function updateUI() {
                 <div class="expense-amount-actions">
                     <div class="expense-amount">${displayMainAmount}${displaySubAmount}</div>
                     <div class="expense-actions">
-                        <button class="outline small" style="background: white;" onclick="duplicateExpense('${e.id}')" title="Duplicate Activity">📋</button>
-                        <button class="outline small" style="background: white;" onclick="toggleIgnore('${e.id}')" title="Toggle Ignore">${e.ignored ? '✅' : '🚫'}</button>
-                        <button class="outline small" style="background: white;" onclick="openMultipleEditTags()" title="Multiple Edit">🏷️</button>
-                        <button class="outline small" style="background: white;" onclick="editExpense('${e.id}')" title="Edit">✏️</button>
-                        <button class="outline small" style="background: white; color: var(--danger);" onclick="deleteExpense('${e.id}')" title="Delete">🗑️</button>
+                        <button class="outline small" style="background: white;" data-action="duplicate-expense" data-id="${safeId}" title="Duplicate Activity">📋</button>
+                        <button class="outline small" style="background: white;" data-action="toggle-ignore" data-id="${safeId}" title="Toggle Ignore">${e.ignored ? '✅' : '🚫'}</button>
+                        <button class="outline small" style="background: white;" data-action="open-bulk-edit" title="Multiple Edit">🏷️</button>
+                        <button class="outline small" style="background: white;" data-action="edit-expense" data-id="${safeId}" title="Edit">✏️</button>
+                        <button class="outline small" style="background: white; color: var(--danger);" data-action="delete-expense" data-id="${safeId}" title="Delete">🗑️</button>
                     </div>
                 </div>
             </div>`
@@ -2278,7 +2315,7 @@ export function updateUI() {
                 }
             });
             if (topDebtor && groupStats[topDebtor] && groupStats[topDebtor].members.length > 0) {
-                badgeContainer.innerHTML = `<div class="next-payer-badge">🚨 Pay Next? <strong style="color: ${getColor(groupStats[topDebtor].members[0])};" title="${escapeHTML(topDebtor)}">${escapeHTML(shortName(topDebtor))}</strong> <span class="tabular-nums">(Owes ${formatMoney(maxDebt)})</span></div>`;
+                badgeContainer.innerHTML = `<div class="next-payer-badge">🚨 Pay Next? <strong style="color: ${getColor(groupStats[topDebtor].members[0])};" title="${escapeHTML(topDebtor)}">${escapeHTML(shortName(topDebtor))}</strong> <span class="tabular-nums">(Owes ${escapeHTML(formatMoney(maxDebt))})</span></div>`;
             } else {
                 badgeContainer.innerHTML = `<div class="next-payer-badge" style="color: var(--green); border-color: #bbf7d0; background: #f0fdf4;">🎉 Everyone perfectly settled!</div>`;
             }
@@ -2294,15 +2331,16 @@ export function updateUI() {
             const activeParticipantCount = activeInvolvedParticipants.size > 0 ? activeInvolvedParticipants.size : state.participants.length;
             if (state.showPerDay && state.tripDays > 0 && activeParticipantCount > 0) {
                 const burnRate = totalSpent / state.tripDays / activeParticipantCount;
-                burnRateHtml = `<div style="font-size: 0.85rem; color: var(--secondary); margin-top: 6px;">🔥 Burn Rate: <strong class="tabular-nums" style="color: var(--danger);">${formatMoney(burnRate)}</strong> / pers / day</div>`;
+                burnRateHtml = `<div style="font-size: 0.85rem; color: var(--secondary); margin-top: 6px;">🔥 Burn Rate: <strong class="tabular-nums" style="color: var(--danger);">${escapeHTML(formatMoney(burnRate))}</strong> / pers / day</div>`;
             }
 
+            const splurgeIcon = safeHasOwn(CATEGORIES, biggestSplurge.category) ? CATEGORIES[biggestSplurge.category].icon : '📝';
             let statsHtml = `
             <div class="global-stats-grid">
                 <div class="global-stat-box">
                     <span class="global-stat-label">Filtered Trip Cost</span>
                     <div style="display: flex; align-items: center; flex-wrap: wrap;">
-                        <span class="global-stat-value tabular-nums" style="color: var(--primary);">${formatMoney(totalSpent)}</span>
+                        <span class="global-stat-value tabular-nums" style="color: var(--primary);">${escapeHTML(formatMoney(totalSpent))}</span>
                         ${getPerDayText(totalSpent)}
                     </div>
                     ${burnRateHtml}
@@ -2310,19 +2348,19 @@ export function updateUI() {
                 <div class="global-stat-box" style="background: #fff1f2; border-color: #fecdd3;">
                     <span class="global-stat-label" style="color: #be123c;">Biggest Splurge</span>
                     <span class="global-stat-value" style="font-size: 1.1rem; color: #be123c;">
-                        ${CATEGORIES[biggestSplurge.category]?.icon || '📝'} ${escapeHTML(biggestSplurge.desc)} <strong class="tabular-nums" style="font-size: 1.15rem;">(${formatMoney(biggestSplurge.amount)})</strong>
+                        ${splurgeIcon} ${escapeHTML(biggestSplurge.desc)} <strong class="tabular-nums" style="font-size: 1.15rem;">(${escapeHTML(formatMoney(biggestSplurge.amount))})</strong>
                     </span>
                 </div>
                 <div class="global-stat-box">
                     <span class="global-stat-label">📅 Most Exp. Day</span>
                     <span class="global-stat-value" style="font-size: 1.1rem;">
-                        ${mostExpensiveDay.date ? formatDateDisplay(mostExpensiveDay.date) : 'N/A'} <strong class="tabular-nums">(${formatMoney(mostExpensiveDay.amount)})</strong>
+                        ${mostExpensiveDay.date ? escapeHTML(formatDateDisplay(mostExpensiveDay.date)) : 'N/A'} <strong class="tabular-nums">(${escapeHTML(formatMoney(mostExpensiveDay.amount))})</strong>
                     </span>
                 </div>
                 <div class="global-stat-box">
                     <span class="global-stat-label">🏆 Trip Banker</span>
                     <span class="global-stat-value" style="font-size: 1.1rem; color: ${getColor(tripBanker.name)}" title="${escapeHTML(tripBanker.name)}">
-                        ${escapeHTML(shortName(tripBanker.name))} <strong class="tabular-nums" style="color: var(--text);">(${formatMoney(tripBanker.paid)})</strong>
+                        ${escapeHTML(shortName(tripBanker.name))} <strong class="tabular-nums" style="color: var(--text);">(${escapeHTML(formatMoney(tripBanker.paid))})</strong>
                     </span>
                     <div style="font-size: 0.8rem; color: var(--secondary); margin-top: 2px;">Fronted money for ${tripBanker.count} acts</div>
                 </div>
@@ -2341,11 +2379,11 @@ export function updateUI() {
                         <div style="font-size: 0.9rem; font-weight: 800; color: ${info.color};">${info.icon} ${cat}</div>
                         <div style="font-size: 0.75rem; color: var(--secondary); font-weight: 600; margin-bottom: 6px;">${categoryActivityCounts[cat]} Acts • ${catPerc}% of total</div>
                         <div style="display: flex; align-items: center; justify-content: center; flex-direction: column;">
-                            <div class="tabular-nums" style="font-size: 1.2rem; color: var(--text); font-weight: 900;">${formatMoney(categoryTotals[cat])}</div>
-                            ${state.showPerDay && state.tripDays > 0 ? `<div class="tabular-nums" style="font-size: 0.75rem; color: var(--primary); font-weight: 700; margin-top: 2px;">${formatMoney(categoryTotals[cat] / state.tripDays)} / day</div>` : ''}
+                            <div class="tabular-nums" style="font-size: 1.2rem; color: var(--text); font-weight: 900;">${escapeHTML(formatMoney(categoryTotals[cat]))}</div>
+                            ${state.showPerDay && state.tripDays > 0 ? `<div class="tabular-nums" style="font-size: 0.75rem; color: var(--primary); font-weight: 700; margin-top: 2px;">${escapeHTML(formatMoney(categoryTotals[cat] / state.tripDays))} / day</div>` : ''}
                         </div>
                         <div style="font-size: 0.8rem; color: var(--secondary); margin-top: 8px; border-top: 1px solid ${info.color}30; padding-top: 6px; width: 100%; text-align: center;">
-                            <strong class="tabular-nums">Avg Act: ${formatMoney(avgPerPerson)}</strong> / person
+                            <strong class="tabular-nums">Avg Act: ${escapeHTML(formatMoney(avgPerPerson))}</strong> / person
                         </div>
                     </div>`;
                 }
@@ -2381,25 +2419,25 @@ export function updateUI() {
                             const catAvg = catActCount > 0 ? formatMoney(amt / catActCount) : '0.00';
                             
                             catBreakdownHtml += `
-                                <div onclick="filterByInsight(decodeURIComponent('${encodeURIComponent(gName)}'), decodeURIComponent('${encodeURIComponent(cat)}'))" title="📊 ${cat} Insights:&#10;• Total Activities: ${catActCount}&#10;• Total Spent: ${formatMoney(amt)}&#10;• Avg / Activity: ${catAvg}" style="cursor: pointer; display:flex; justify-content:space-between; align-items: center; background: ${catBg}; border: 1px solid ${catColor}40; padding: 8px 10px; border-radius: var(--radius-sm); transition: transform 0.2s;">
-                                    <span style="color: ${catColor}; font-weight: 800; font-size: 0.85rem;">${icon} ${cat}</span> 
+                                <div data-action="filter-insight" data-name="${escapeHTML(gName)}" data-cat="${escapeHTML(cat)}" title="📊 ${escapeHTML(cat)} Insights:&#10;• Total Activities: ${catActCount}&#10;• Total Spent: ${escapeHTML(formatMoney(amt))}&#10;• Avg / Activity: ${escapeHTML(catAvg)}" style="cursor: pointer; display:flex; justify-content:space-between; align-items: center; background: ${catBg}; border: 1px solid ${catColor}40; padding: 8px 10px; border-radius: var(--radius-sm); transition: transform 0.2s;">
+                                    <span style="color: ${catColor}; font-weight: 800; font-size: 0.85rem;">${icon} ${escapeHTML(cat)}</span> 
                                     <div style="text-align: right; line-height: 1.3; display: flex; flex-direction: column; align-items: flex-end;">
                                         <div style="display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap;">
-                                            <span class="tabular-nums" style="color: var(--text); font-weight: 800; font-size: 0.95rem;">${formatMoney(amt)}</span>
+                                            <span class="tabular-nums" style="color: var(--text); font-weight: 800; font-size: 0.95rem;">${escapeHTML(formatMoney(amt))}</span>
                                             ${getPerDayTextSmall(amt)}
                                         </div>
-                                        <span class="tabular-nums" style="font-size: 0.75rem; color: var(--secondary); font-weight: 600;">Avg: ${catAvg}/act</span>
+                                        <span class="tabular-nums" style="font-size: 0.75rem; color: var(--secondary); font-weight: 600;">Avg: ${escapeHTML(catAvg)}/act</span>
                                     </div>
                                 </div>`;
                         }
                     } else {
                         if (paidAmt > 0) {
                             catBreakdownHtml += `
-                                <div onclick="filterByInsight(decodeURIComponent('${encodeURIComponent(gName)}'), decodeURIComponent('${encodeURIComponent(cat)}'))" style="cursor: pointer; display:flex; justify-content:space-between; align-items: center; background: ${catBg}; border: 1px solid ${catColor}40; padding: 8px 10px; border-radius: var(--radius-sm);">
-                                    <span style="color: ${catColor}; font-weight: 800; font-size: 0.85rem;">${icon} ${cat} (Paid)</span> 
+                                <div data-action="filter-insight" data-name="${escapeHTML(gName)}" data-cat="${escapeHTML(cat)}" style="cursor: pointer; display:flex; justify-content:space-between; align-items: center; background: ${catBg}; border: 1px solid ${catColor}40; padding: 8px 10px; border-radius: var(--radius-sm);">
+                                    <span style="color: ${catColor}; font-weight: 800; font-size: 0.85rem;">${icon} ${escapeHTML(cat)} (Paid)</span> 
                                     <div style="text-align: right; line-height: 1.3;">
                                         <div style="display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap;">
-                                            <span class="tabular-nums" style="color: var(--text); font-weight: 800; font-size: 0.95rem;">${formatMoney(paidAmt)}</span>
+                                            <span class="tabular-nums" style="color: var(--text); font-weight: 800; font-size: 0.95rem;">${escapeHTML(formatMoney(paidAmt))}</span>
                                             ${getPerDayTextSmall(paidAmt)}
                                         </div>
                                     </div>
@@ -2407,11 +2445,11 @@ export function updateUI() {
                         }
                         if (amt > 0) {
                             catBreakdownHtml += `
-                                <div onclick="filterByInsight(decodeURIComponent('${encodeURIComponent(gName)}'), decodeURIComponent('${encodeURIComponent(cat)}'))" style="cursor: pointer; display:flex; justify-content:space-between; align-items: center; background: #fef2f2; border: 1px solid #fecdd3; padding: 8px 10px; border-radius: var(--radius-sm);">
-                                    <span style="color: var(--danger); font-weight: 800; font-size: 0.85rem;">${icon} ${cat} (Received)</span> 
+                                <div data-action="filter-insight" data-name="${escapeHTML(gName)}" data-cat="${escapeHTML(cat)}" style="cursor: pointer; display:flex; justify-content:space-between; align-items: center; background: #fef2f2; border: 1px solid #fecdd3; padding: 8px 10px; border-radius: var(--radius-sm);">
+                                    <span style="color: var(--danger); font-weight: 800; font-size: 0.85rem;">${icon} ${escapeHTML(cat)} (Received)</span> 
                                     <div style="text-align: right; line-height: 1.3;">
                                         <div style="display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap;">
-                                            <span class="tabular-nums" style="color: var(--danger); font-weight: 800; font-size: 0.95rem;">+${formatMoney(amt)}</span>
+                                            <span class="tabular-nums" style="color: var(--danger); font-weight: 800; font-size: 0.95rem;">+${escapeHTML(formatMoney(amt))}</span>
                                             ${getPerDayTextSmall(amt)}
                                         </div>
                                     </div>
@@ -2437,14 +2475,14 @@ export function updateUI() {
                                 
                                 if (cat !== 'Transfer') {
                                     if (amt > 0) {
-                                        mCatHtml += `<span onclick="filterByInsight(decodeURIComponent('${encodeURIComponent(m)}'), decodeURIComponent('${encodeURIComponent(cat)}'))" style="cursor: pointer; display: inline-flex; align-items: center; background: ${catBg}; padding: 4px 8px; border-radius: 6px; border: 1px solid ${catColor}40; font-size: 0.75rem; color: ${catColor}; font-weight: 700;">${icon} <span class="tabular-nums" style="margin-left: 4px;">${formatMoney(amt)}</span>${getPerDayTextSmall(amt)}</span>`;
+                                        mCatHtml += `<span data-action="filter-insight" data-name="${escapeHTML(m)}" data-cat="${escapeHTML(cat)}" style="cursor: pointer; display: inline-flex; align-items: center; background: ${catBg}; padding: 4px 8px; border-radius: 6px; border: 1px solid ${catColor}40; font-size: 0.75rem; color: ${catColor}; font-weight: 700;">${icon} <span class="tabular-nums" style="margin-left: 4px;">${escapeHTML(formatMoney(amt))}</span>${getPerDayTextSmall(amt)}</span>`;
                                     }
                                 } else {
                                     if (paidAmt > 0) {
-                                        mCatHtml += `<span onclick="filterByInsight(decodeURIComponent('${encodeURIComponent(m)}'), decodeURIComponent('${encodeURIComponent(cat)}'))" style="cursor: pointer; display: inline-flex; align-items: center; background: ${catBg}; padding: 4px 8px; border-radius: 6px; border: 1px solid ${catColor}40; font-size: 0.75rem; color: ${catColor}; font-weight: 700;">${icon} <span class="tabular-nums" style="margin-left: 4px;">${formatMoney(paidAmt)}</span>${getPerDayTextSmall(paidAmt)}</span>`;
+                                        mCatHtml += `<span data-action="filter-insight" data-name="${escapeHTML(m)}" data-cat="${escapeHTML(cat)}" style="cursor: pointer; display: inline-flex; align-items: center; background: ${catBg}; padding: 4px 8px; border-radius: 6px; border: 1px solid ${catColor}40; font-size: 0.75rem; color: ${catColor}; font-weight: 700;">${icon} <span class="tabular-nums" style="margin-left: 4px;">${escapeHTML(formatMoney(paidAmt))}</span>${getPerDayTextSmall(paidAmt)}</span>`;
                                     }
                                     if (amt > 0) {
-                                        mCatHtml += `<span onclick="filterByInsight(decodeURIComponent('${encodeURIComponent(m)}'), decodeURIComponent('${encodeURIComponent(cat)}'))" style="cursor: pointer; display: inline-flex; align-items: center; background: #fef2f2; padding: 4px 8px; border-radius: 6px; border: 1px solid #fecdd3; font-size: 0.75rem; color: var(--danger); font-weight: 700;">${icon} <span class="tabular-nums" style="margin-left: 4px;">+${formatMoney(amt)}</span>${getPerDayTextSmall(amt)}</span>`;
+                                        mCatHtml += `<span data-action="filter-insight" data-name="${escapeHTML(m)}" data-cat="${escapeHTML(cat)}" style="cursor: pointer; display: inline-flex; align-items: center; background: #fef2f2; padding: 4px 8px; border-radius: 6px; border: 1px solid #fecdd3; font-size: 0.75rem; color: var(--danger); font-weight: 700;">${icon} <span class="tabular-nums" style="margin-left: 4px;">+${escapeHTML(formatMoney(amt))}</span>${getPerDayTextSmall(amt)}</span>`;
                                     }
                                 }
                             });
@@ -2453,8 +2491,8 @@ export function updateUI() {
                                     <div style="display:flex; justify-content:space-between; align-items: center; font-size: 0.85rem; margin-bottom: 6px;">
                                         <span style="color: ${getColor(m)}; font-weight: 800; font-size: 0.95rem;" title="${escapeHTML(m)}">${escapeHTML(shortName(m))}</span>
                                         <div style="text-align: right; line-height: 1.4; display: flex; flex-direction: column; align-items: flex-end;">
-                                            <div style="display:flex; align-items: center; flex-wrap: wrap; justify-content: flex-end;"><span style="color: var(--secondary); font-size: 0.75rem; margin-right: 4px;">Share:</span><strong class="tabular-nums" style="color: var(--text);">${formatMoney(mStats.owed)}</strong>${getPerDayTextSmall(mStats.owed)}</div>
-                                            <div style="display:flex; align-items: center; flex-wrap: wrap; justify-content: flex-end;"><span style="color: var(--secondary); font-size: 0.75rem; margin-right: 4px;">Paid:</span><strong class="tabular-nums" style="color: var(--text);">${formatMoney(mStats.paid)}</strong>${getPerDayTextSmall(mStats.paid)}</div>
+                                            <div style="display:flex; align-items: center; flex-wrap: wrap; justify-content: flex-end;"><span style="color: var(--secondary); font-size: 0.75rem; margin-right: 4px;">Share:</span><strong class="tabular-nums" style="color: var(--text);">${escapeHTML(formatMoney(mStats.owed))}</strong>${getPerDayTextSmall(mStats.owed)}</div>
+                                            <div style="display:flex; align-items: center; flex-wrap: wrap; justify-content: flex-end;"><span style="color: var(--secondary); font-size: 0.75rem; margin-right: 4px;">Paid:</span><strong class="tabular-nums" style="color: var(--text);">${escapeHTML(formatMoney(mStats.paid))}</strong>${getPerDayTextSmall(mStats.paid)}</div>
                                         </div>
                                     </div>
                                     <div style="display:flex; flex-wrap: wrap; gap: 4px;">${mCatHtml}</div>
@@ -2480,7 +2518,7 @@ export function updateUI() {
                         ${memberSubtext}
                         <div style="background: #f8fafc; padding: 10px 14px; border-radius: var(--radius-sm); margin-bottom: 12px; font-size: 0.85rem; border: 1px solid var(--border);">
                             <div style="display:flex; justify-content:space-between; margin-bottom: 6px; align-items: center;">
-                                <span style="color: var(--secondary); font-weight: 600;">Avg/Activity:</span> <strong class="tabular-nums" style="color: var(--text); font-size: 0.95rem;">${avgPerActivity}</strong>
+                                <span style="color: var(--secondary); font-weight: 600;">Avg/Activity:</span> <strong class="tabular-nums" style="color: var(--text); font-size: 0.95rem;">${escapeHTML(avgPerActivity)}</strong>
                             </div>
                             <div style="display:flex; justify-content:space-between; align-items: center;">
                                 <span style="color: var(--secondary); font-weight: 600;">Top Spend:</span> ${topCatDisplay}
@@ -2489,7 +2527,7 @@ export function updateUI() {
                         <div style="display:flex; justify-content:space-between; margin-bottom: 12px; font-size: 1rem; align-items: center;">
                             <span style="font-weight: 600; color: var(--secondary);">Net Paid:</span> 
                             <div style="display: flex; align-items: center; flex-wrap: wrap;">
-                                <strong class="tabular-nums" style="color: var(--text); font-size: 1.1rem;">${formatMoney(stats.paid)}</strong>
+                                <strong class="tabular-nums" style="color: var(--text); font-size: 1.1rem;">${escapeHTML(formatMoney(stats.paid))}</strong>
                                 ${getPerDayText(stats.paid)}
                             </div>
                         </div>
@@ -2497,7 +2535,7 @@ export function updateUI() {
                             <div style="display:flex; justify-content:space-between; font-weight: 900; font-size: 1.1rem; margin-bottom: 6px; align-items: center;">
                                 <span>Total Share:</span> 
                                 <div style="display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end;">
-                                    <span class="tabular-nums">${formatMoney(stats.owed)}</span>
+                                    <span class="tabular-nums">${escapeHTML(formatMoney(stats.owed))}</span>
                                     ${getPerDayText(stats.owed)}
                                 </div>
                             </div>
@@ -2541,7 +2579,7 @@ export function renderGroupBalances(groupStats, activeCount) {
         const isGroup = groupStats[gName].members.length > 1 || groupStats[gName].members[0] !== gName;
         const gColor = isGroup ? getGroupColor(gName) : getColor(groupStats[gName].members[0]);
         groupBalances.push({ name: gName, net: diff, color: gColor }); 
-        let txt = diff > 0.01 ? `is owed ${formatMoney(diff)}` : (diff < -0.01 ? `owes ${formatMoney(Math.abs(diff))}` : 'is settled');
+        let txt = diff > 0.01 ? `is owed ${escapeHTML(formatMoney(diff))}` : (diff < -0.01 ? `owes ${escapeHTML(formatMoney(Math.abs(diff)))}` : 'is settled');
         let cls = diff > 0.01 ? 'owed' : (diff < -0.01 ? 'owes' : '');
         const memberText = groupStats[gName].members.length > 1 ? `<div style="font-size: 0.8rem; color: var(--secondary); margin-top: 4px; font-weight: 500;">Members: ${groupStats[gName].members.map(escapeHTML).join(', ')}</div>` : '';
         html += `<div class="balance-item" style="flex-direction: column; align-items: flex-start; padding: 12px 0;">
@@ -2582,8 +2620,8 @@ export function renderGroupBalances(groupStats, activeCount) {
             html += `<div class="settlement-item" style="align-items: center; gap: 8px;">
                         <span><strong style="color:${s.from.color}; font-size: 1.05rem;">${escapeHTML(s.from.name)}</strong> pays <strong style="color:${s.to.color}; font-size: 1.05rem;">${escapeHTML(s.to.name)}</strong></span>
                         <div style="display: flex; align-items: center; gap: 8px;">
-                            <span class="tabular-nums" style="font-weight: 900; color: var(--text); font-size: 1.1rem;">Out: ${formatMoney(s.amount)}</span>
-                            <button class="outline small settle-up-btn" onclick="settleUpDebt(decodeURIComponent('${encodeURIComponent(s.from.name)}'), decodeURIComponent('${encodeURIComponent(s.to.name)}'), ${s.amount})" title="Record this settlement as a Transfer activity">✓ Settle</button>
+                            <span class="tabular-nums" style="font-weight: 900; color: var(--text); font-size: 1.1rem;">Out: ${escapeHTML(formatMoney(s.amount))}</span>
+                            <button class="outline small settle-up-btn" data-action="settle-debt" data-from="${escapeHTML(s.from.name)}" data-to="${escapeHTML(s.to.name)}" data-amount="${escapeHTML(String(s.amount))}" title="Record this settlement as a Transfer activity">✓ Settle</button>
                         </div>
                      </div>`;
         });
@@ -2612,7 +2650,7 @@ export function settleUpDebt(fromGroupName, toGroupName, amountInUsd) {
     const todayStr = getLocalDateString();
 
     const newTransfer = {
-        id: Date.now().toString(36) + Math.random().toString(36).substr(2),
+        id: generateSecureId(),
         timestamp: Date.now(),
         date: todayStr,
         category: 'Transfer',
@@ -2665,51 +2703,177 @@ document.addEventListener('click', function(e) {
     }
 });
 
-// Bind to window for HTML event handlers compatibility
-window.addParticipant = addParticipant;
-window.renameParticipant = renameParticipant;
-window.changeGroup = changeGroup;
-window.deleteParticipant = deleteParticipant;
-window.saveGroupTemplate = saveGroupTemplate;
-window.loadGroupTemplate = loadGroupTemplate;
-window.resetTrip = resetTrip;
-window.updateTripName = updateTripName;
-window.updateTripComment = updateTripComment;
-window.toggleHeader = toggleHeader;
-window.toggleLedger = toggleLedger;
-window.toggleActivityCard = toggleActivityCard;
-window.togglePerDay = togglePerDay;
-window.updateTripDays = updateTripDays;
-window.handleCategoryChange = handleCategoryChange;
-window.updatePayerColor = updatePayerColor;
-window.toggleAllCheckboxes = toggleAllCheckboxes;
-window.checkMasterCheckboxState = checkMasterCheckboxState;
-window.updateSplitTypeUI = updateSplitTypeUI;
-window.handleEqualSplitInput = handleEqualSplitInput;
-window.calculateRemainingPercentage = calculateRemainingPercentage;
-window.updateFormCurrencyUI = updateFormCurrencyUI;
-window.handleFormCurrencyChange = handleFormCurrencyChange;
-window.refreshFormRate = refreshFormRate;
-window.handleFormTagInput = handleFormTagInput;
-window.selectTagForForm = selectTagForForm;
-window.handleSearchInput = handleSearchInput;
-window.selectTagForSearch = selectTagForSearch;
-window.toggleCategoryFilter = toggleCategoryFilter;
-window.filterByInsight = filterByInsight;
-window.handleSortChange = handleSortChange;
-window.handleSearchChange = handleSearchChange;
-window.clearSearch = clearSearch;
-window.saveExpense = saveExpense;
-window.editExpense = editExpense;
-window.duplicateExpense = duplicateExpense;
-window.deleteExpense = deleteExpense;
-window.toggleIgnore = toggleIgnore;
-window.toggleAllExpenses = toggleAllExpenses;
-window.cancelEdit = cancelEdit;
-window.updateUI = updateUI;
-window.settleUpDebt = settleUpDebt;
-window.handleParticipantKeyPress = handleParticipantKeyPress;
-window.syncStateToDOM = syncStateToDOM;
+let uiDelegationInitialized = false;
+export function initUIEventDelegation() {
+    if (uiDelegationInitialized || typeof document === 'undefined') return;
+    uiDelegationInitialized = true;
+
+    const pList = document.getElementById('participant-list');
+    if (pList) {
+        pList.addEventListener('click', (e) => {
+            const target = e.target.closest('[data-action]');
+            if (!target) return;
+            const action = target.dataset.action;
+            const name = target.dataset.name;
+            if (!name) return;
+            if (action === 'rename-participant') renameParticipant(name);
+            else if (action === 'change-group') changeGroup(name);
+            else if (action === 'delete-participant') deleteParticipant(name);
+        });
+    }
+
+    const tList = document.getElementById('default-tags-list');
+    if (tList) {
+        tList.addEventListener('click', (e) => {
+            const target = e.target.closest('[data-action]');
+            if (!target) return;
+            const action = target.dataset.action;
+            const tag = target.dataset.tag;
+            if (!tag) return;
+            if (action === 'rename-tag') renameDefaultTag(tag);
+            else if (action === 'delete-tag') deleteDefaultTag(tag);
+        });
+    }
+
+    const pInputs = document.getElementById('participant-list-inputs');
+    if (pInputs) {
+        pInputs.addEventListener('change', (e) => {
+            if (e.target.classList.contains('part-checkbox')) {
+                checkMasterCheckboxState();
+            }
+        });
+        pInputs.addEventListener('input', (e) => {
+            if (e.target.classList.contains('part-personal')) {
+                handleEqualSplitInput(e.target, 'extra');
+            } else if (e.target.classList.contains('part-fixed')) {
+                handleEqualSplitInput(e.target, 'fixed');
+            }
+        });
+    }
+
+    const catFilters = document.getElementById('category-filters');
+    if (catFilters) {
+        catFilters.addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-action="toggle-category"]');
+            if (btn && btn.dataset.category) {
+                toggleCategoryFilter(btn.dataset.category);
+            }
+        });
+    }
+
+    const formSug = document.getElementById('form-tag-suggestions');
+    if (formSug) {
+        formSug.addEventListener('click', (e) => {
+            const item = e.target.closest('[data-action="select-form-tag"]');
+            if (item && item.dataset.tag) {
+                selectTagForForm(item.dataset.tag);
+            }
+        });
+    }
+
+    const searchSug = document.getElementById('search-tag-suggestions');
+    if (searchSug) {
+        searchSug.addEventListener('click', (e) => {
+            const item = e.target.closest('[data-action="select-search-tag"]');
+            if (item && item.dataset.tag) {
+                selectTagForSearch(item.dataset.tag, item.dataset.negative === 'true');
+            }
+        });
+    }
+
+    const activeFilters = document.getElementById('active-filters-bar');
+    if (activeFilters) {
+        activeFilters.addEventListener('click', (e) => {
+            const target = e.target.closest('[data-action]');
+            if (!target) return;
+            if (target.dataset.action === 'clear-calendar-filter') clearCalendarFilter();
+            else if (target.dataset.action === 'clear-insight-filter') clearInsightFilter();
+        });
+    }
+
+    const eList = document.getElementById('expense-list');
+    if (eList) {
+        eList.addEventListener('click', (e) => {
+            const target = e.target.closest('[data-action]');
+            if (!target) return;
+            const action = target.dataset.action;
+            if (action === 'filter-tag' && target.dataset.tag) {
+                selectTagForSearch(target.dataset.tag, false);
+            } else if (action === 'duplicate-expense' && target.dataset.id) {
+                duplicateExpense(target.dataset.id);
+            } else if (action === 'toggle-ignore' && target.dataset.id) {
+                toggleIgnore(target.dataset.id);
+            } else if (action === 'open-bulk-edit') {
+                openMultipleEditTags();
+            } else if (action === 'edit-expense' && target.dataset.id) {
+                editExpense(target.dataset.id);
+            } else if (action === 'delete-expense' && target.dataset.id) {
+                deleteExpense(target.dataset.id);
+            }
+        });
+    }
+
+    const statsDiv = document.getElementById('ledger-stats');
+    if (statsDiv) {
+        statsDiv.addEventListener('click', (e) => {
+            const target = e.target.closest('[data-action="filter-insight"]');
+            if (target && target.dataset.name && target.dataset.cat) {
+                filterByInsight(target.dataset.name, target.dataset.cat);
+            }
+        });
+    }
+
+    const balancesList = document.getElementById('balances-list');
+    if (balancesList) {
+        balancesList.addEventListener('click', (e) => {
+            const target = e.target.closest('[data-action="settle-debt"]');
+            if (target && target.dataset.from && target.dataset.to) {
+                settleUpDebt(target.dataset.from, target.dataset.to, Number(target.dataset.amount));
+            }
+        });
+    }
+
+    const bulkCommon = document.getElementById('bulk-common-tags');
+    if (bulkCommon) {
+        bulkCommon.addEventListener('click', (e) => {
+            const target = e.target.closest('[data-action="remove-bulk-common-tag"]');
+            if (target && target.dataset.tag) {
+                removeCommonTagFromBulk(target.dataset.tag);
+            }
+        });
+    }
+
+    const bulkAdded = document.getElementById('bulk-added-tags');
+    if (bulkAdded) {
+        bulkAdded.addEventListener('click', (e) => {
+            const target = e.target.closest('[data-action="remove-bulk-added-tag"]');
+            if (target && target.dataset.tag) {
+                removeAddedTagFromBulk(target.dataset.tag);
+            }
+        });
+    }
+
+    const bulkSug = document.getElementById('bulk-tag-suggestions');
+    if (bulkSug) {
+        bulkSug.addEventListener('click', (e) => {
+            const target = e.target.closest('[data-action="select-bulk-tag"]');
+            if (target && target.dataset.tag) {
+                selectTagForBulk(target.dataset.tag);
+            }
+        });
+    }
+
+    const histContainer = document.getElementById('history-list-container');
+    if (histContainer) {
+        histContainer.addEventListener('click', (e) => {
+            const target = e.target.closest('[data-action="restore-history"]');
+            if (target && target.dataset.index !== undefined) {
+                const idx = parseInt(target.dataset.index, 10);
+                import('./history.js').then(H => H.restoreHistoryState(idx));
+            }
+        });
+    }
+}
 
 export function toggleHelpModal() {
     const help = document.getElementById('help-overlay');
@@ -2724,18 +2888,14 @@ export function closeHelpModalOnOverlay(e) {
     }
 }
 
-window.toggleHelpModal = toggleHelpModal;
-window.closeHelpModalOnOverlay = closeHelpModalOnOverlay;
-window.addDefaultTag = addDefaultTag;
-window.handleDefaultTagKeyPress = handleDefaultTagKeyPress;
-window.renameDefaultTag = renameDefaultTag;
-window.deleteDefaultTag = deleteDefaultTag;
-
 export function openMultipleEditTags() {
     try {
-        const groupsMap = {};
+        const groupsMap = createNullMap();
         state.participants.forEach(p => {
-            const gName = state.participantGroups[p] || p;
+            if (isForbiddenKey(p)) return;
+            const gName = (safeHasOwn(state.participantGroups, p) && !isForbiddenKey(state.participantGroups[p]))
+                ? state.participantGroups[p]
+                : p;
             if (!groupsMap[gName]) groupsMap[gName] = [];
             groupsMap[gName].push(p);
         });
@@ -2794,7 +2954,7 @@ export function renderBulkEditTagsList() {
             return `
             <div class="tag" style="${getTagStyle(t)}" title="${escapeHTML(t)}">
                 <span class="tag-name">#${escapeHTML(t)}</span>
-                <span class="tag-del" onclick="removeCommonTagFromBulk(decodeURIComponent('${encodeURIComponent(t)}'))">&times;</span>
+                <span class="tag-del" data-action="remove-bulk-common-tag" data-tag="${escapeHTML(t)}">&times;</span>
             </div>`;
         }).join('') : '<span style="font-size:0.8rem; color:var(--secondary); font-style:italic;">No common tags found.</span>';
     }
@@ -2805,7 +2965,7 @@ export function renderBulkEditTagsList() {
             return `
             <div class="tag" style="${getTagStyle(t)}" title="${escapeHTML(t)}">
                 <span class="tag-name">#${escapeHTML(t)}</span>
-                <span class="tag-del" onclick="removeAddedTagFromBulk(decodeURIComponent('${encodeURIComponent(t)}'))">&times;</span>
+                <span class="tag-del" data-action="remove-bulk-added-tag" data-tag="${escapeHTML(t)}">&times;</span>
             </div>`;
         }).join('');
     }
@@ -2819,9 +2979,7 @@ export function removeCommonTagFromBulk(tag) {
 export function addTagToBulkList() {
     const input = document.getElementById('bulk-new-tag');
     if (!input) return;
-    let val = input.value.trim().toLowerCase();
-    if (val.startsWith('#')) val = val.substring(1).trim();
-    val = val.replace(/[^\p{L}\p{N}_-]/gu, '');
+    const val = sanitizeTag(input.value);
     if (!val) return;
     
     if (state.bulkRemovedTags.has(val)) {
@@ -2900,7 +3058,7 @@ export function handleBulkTagAutocomplete(e) {
     });
     
     if (matches.length > 0) {
-        popup.innerHTML = matches.map(t => `<div class="suggestion-item" onclick="selectTagForBulk(decodeURIComponent('${encodeURIComponent(t)}'))"><span class="tag-pill" style="${getTagStyle(t)}">#${escapeHTML(t)}</span></div>`).join('');
+        popup.innerHTML = matches.map(t => `<div class="suggestion-item" data-action="select-bulk-tag" data-tag="${escapeHTML(t)}"><span class="tag-pill" style="${getTagStyle(t)}">#${escapeHTML(t)}</span></div>`).join('');
         popup.style.display = 'block';
         popup.style.top = (input.offsetTop + input.offsetHeight) + 'px';
     } else {
@@ -2955,24 +3113,11 @@ export function renderHistoryUI() {
     for (let i = state.historyStack.length - 1; i >= 0; i--) {
         const snap = state.historyStack[i];
         html += `<div style="display:flex; justify-content:space-between; align-items:center; padding:4px 8px; background:var(--bg); border:1px solid var(--border); border-radius:4px; margin-bottom:4px;">
-            <span style="font-size:0.8rem;">🕒 ${snap.label}</span>
-            <button class="outline small" onclick="restoreHistoryState(${i})" style="padding:2px 8px; font-size:0.75rem;">Restore</button>
+            <span style="font-size:0.8rem;">🕒 ${escapeHTML(snap.label)}</span>
+            <button class="outline small" data-action="restore-history" data-index="${i}" style="padding:2px 8px; font-size:0.75rem;">Restore</button>
         </div>`;
     }
     container.innerHTML = html;
 }
-
-window.openMultipleEditTags = openMultipleEditTags;
-window.removeCommonTagFromBulk = removeCommonTagFromBulk;
-window.addTagToBulkList = addTagToBulkList;
-window.removeAddedTagFromBulk = removeAddedTagFromBulk;
-window.closeBulkEditTagsModal = closeBulkEditTagsModal;
-window.applyBulkEditTags = applyBulkEditTags;
-window.handleBulkTagAutocomplete = handleBulkTagAutocomplete;
-window.selectTagForBulk = selectTagForBulk;
-window.handleBulkNewTagKeyPress = handleBulkNewTagKeyPress;
-window.clearCalendarFilter = clearCalendarFilter;
-window.clearInsightFilter = clearInsightFilter;
-window.toggleHistoryEnabled = toggleHistoryEnabled;
 
 

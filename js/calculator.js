@@ -45,7 +45,13 @@ export function calcClear() {
     if (display) display.innerText = "0"; 
 }
 
-function evaluateMathExpr(expr) {
+const MAX_EXPR_LENGTH = 200;
+const MAX_PAREN_DEPTH = 32;
+
+export function evaluateMathExpr(expr) {
+    if (typeof expr !== 'string' || expr.length > MAX_EXPR_LENGTH) {
+        throw new Error('Expression too long');
+    }
     const tokens = [];
     const tokenRegex = /\s*([+\-*/()]|\d+(?:\.\d+)?|\.\d+)\s*/y;
     let idx = 0;
@@ -61,21 +67,23 @@ function evaluateMathExpr(expr) {
     const peek = () => tokens[pos];
     const consume = () => tokens[pos++];
 
-    function parseExpr() {
-        let left = parseTerm();
+    function parseExpr(depth = 0) {
+        if (depth > MAX_PAREN_DEPTH) throw new Error('Too deeply nested');
+        let left = parseTerm(depth);
         while (peek() === '+' || peek() === '-') {
             const op = consume();
-            const right = parseTerm();
+            const right = parseTerm(depth);
             left = op === '+' ? left + right : left - right;
         }
         return left;
     }
 
-    function parseTerm() {
-        let left = parseFactor();
+    function parseTerm(depth = 0) {
+        if (depth > MAX_PAREN_DEPTH) throw new Error('Too deeply nested');
+        let left = parseFactor(depth);
         while (peek() === '*' || peek() === '/') {
             const op = consume();
-            const right = parseFactor();
+            const right = parseFactor(depth);
             if (op === '/') {
                 if (right === 0) throw new Error('Division by zero');
                 left = left / right;
@@ -86,19 +94,20 @@ function evaluateMathExpr(expr) {
         return left;
     }
 
-    function parseFactor() {
+    function parseFactor(depth = 0) {
+        if (depth > MAX_PAREN_DEPTH) throw new Error('Too deeply nested');
         const tok = peek();
         if (tok === '+') {
             consume();
-            return parseFactor();
+            return parseFactor(depth + 1);
         }
         if (tok === '-') {
             consume();
-            return -parseFactor();
+            return -parseFactor(depth + 1);
         }
         if (tok === '(') {
             consume();
-            const val = parseExpr();
+            const val = parseExpr(depth + 1);
             if (consume() !== ')') throw new Error('Mismatched parenthesis');
             return val;
         }
@@ -109,8 +118,8 @@ function evaluateMathExpr(expr) {
         throw new Error('Unexpected token');
     }
 
-    const result = parseExpr();
-    if (pos !== tokens.length || !isFinite(result)) {
+    const result = parseExpr(0);
+    if (pos !== tokens.length || !Number.isFinite(result)) {
         throw new Error('Invalid expression');
     }
     return result;
@@ -309,11 +318,3 @@ document.addEventListener('keydown', (e) => {
         calcSolve();
     }
 });
-
-// Bind to window for HTML event handlers compatibility
-window.toggleCalculator = toggleCalculator;
-window.calcInput = calcInput;
-window.calcDelete = calcDelete;
-window.calcClear = calcClear;
-window.calcSolve = calcSolve;
-window.calcCopy = calcCopy;

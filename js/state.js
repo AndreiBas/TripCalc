@@ -1,4 +1,12 @@
 import { CATEGORIES } from './config.js';
+import {
+    safeHasOwn,
+    isForbiddenKey,
+    sanitizeExpenseId,
+    sanitizeDateString,
+    validateAndSanitizeTripPayload,
+    generateSecureId
+} from './security.js';
 
 export const state = {
     tripId: "",
@@ -72,10 +80,7 @@ export const state = {
 };
 
 export function generateTripId() {
-    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-        return crypto.randomUUID();
-    }
-    return 'trip_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
+    return generateSecureId();
 }
 
 export function getLocalDateString(date = new Date()) {
@@ -176,41 +181,51 @@ export function buildTripPayload(includeLastModified = true) {
 export function repairLegacyData() {
     if (!Array.isArray(state.participants)) {
         state.participants = [];
+    } else {
+        state.participants = state.participants.filter(p => typeof p === 'string' && p.trim() !== '' && !isForbiddenKey(p));
     }
-    if (typeof state.participantGroups === 'undefined' || state.participantGroups === null) {
+    if (!state.participantGroups || typeof state.participantGroups !== 'object' || Array.isArray(state.participantGroups)) {
         state.participantGroups = {};
     }
     if (!state.currencyRates || typeof state.currencyRates !== 'object' || Array.isArray(state.currencyRates)) {
         state.currencyRates = {};
     }
-    if (state.secondaryCurrency && isFinite(state.currentExchangeRate) && state.currentExchangeRate > 0 && !state.currencyRates[state.secondaryCurrency]) {
+    if (state.secondaryCurrency && Number.isFinite(state.currentExchangeRate) && state.currentExchangeRate > 0 && !safeHasOwn(state.currencyRates, state.secondaryCurrency)) {
         state.currencyRates[state.secondaryCurrency] = state.currentExchangeRate;
     }
     state.participants.forEach(p => { 
-        if (!state.participantGroups[p]) state.participantGroups[p] = p; 
+        if (!safeHasOwn(state.participantGroups, p) || isForbiddenKey(state.participantGroups[p])) {
+            state.participantGroups[p] = p; 
+        }
     });
 
+    if (!Array.isArray(state.expenses)) {
+        state.expenses = [];
+    }
     state.expenses.forEach((e, i) => {
         if (!e.involved) e.involved = [...state.participants];
-        if (!e.id) e.id = Math.random().toString(36).substr(2, 9); 
+        e.id = sanitizeExpenseId(e.id);
         if (typeof e.ignored === 'undefined') e.ignored = false;
-        if (!e.category || !CATEGORIES[e.category]) e.category = 'Other';
-        if (!e.personalExpenses) e.personalExpenses = {}; 
-        if (!e.fixedShares) e.fixedShares = {}; 
+        if (!safeHasOwn(CATEGORIES, e.category)) e.category = 'Other';
+        if (!e.personalExpenses || typeof e.personalExpenses !== 'object' || Array.isArray(e.personalExpenses)) e.personalExpenses = {}; 
+        if (!e.fixedShares || typeof e.fixedShares !== 'object' || Array.isArray(e.fixedShares)) e.fixedShares = {}; 
         if (!e.splitType) e.splitType = 'equal'; 
-        if (!e.percentageShares) e.percentageShares = {}; 
+        if (!e.percentageShares || typeof e.percentageShares !== 'object' || Array.isArray(e.percentageShares)) e.percentageShares = {}; 
         if (typeof e.notes === 'undefined') e.notes = ''; 
-        if (!e.timestamp) e.timestamp = Date.now() + i; 
-        if (e.localAmount === undefined || e.localAmount === null || isNaN(Number(e.localAmount))) {
+        if (!e.timestamp || !Number.isFinite(Number(e.timestamp))) e.timestamp = Date.now() + i; 
+        if (!Number.isFinite(Number(e.amount)) || Number(e.amount) < 0) {
+            e.amount = 0;
+        }
+        if (e.localAmount === undefined || e.localAmount === null || !Number.isFinite(Number(e.localAmount))) {
             e.localAmount = e.amount;
         }
-        const hasForeignMath = isFinite(e.exchangeRate) && e.exchangeRate > 0 && Math.abs(e.exchangeRate - 1) > 0.0001 &&
-            isFinite(e.localAmount) && isFinite(e.amount) && Math.abs(e.localAmount - e.amount) > 0.05 &&
+        const hasForeignMath = Number.isFinite(e.exchangeRate) && e.exchangeRate > 0 && Math.abs(e.exchangeRate - 1) > 0.0001 &&
+            Number.isFinite(e.localAmount) && Number.isFinite(e.amount) && Math.abs(e.localAmount - e.amount) > 0.05 &&
             Math.abs((e.localAmount / e.exchangeRate) - e.amount) <= Math.max(0.05, Math.abs(e.amount) * 0.01);
         if (!e.localCurrency) {
             if (hasForeignMath) {
-                const secRate = state.secondaryCurrency ? (state.currencyRates[state.secondaryCurrency] || state.currentExchangeRate) : 0;
-                if (state.secondaryCurrency && isFinite(secRate) && secRate > 0 && Math.abs(e.exchangeRate - secRate) / secRate <= 0.15) {
+                const secRate = state.secondaryCurrency ? (safeHasOwn(state.currencyRates, state.secondaryCurrency) ? state.currencyRates[state.secondaryCurrency] : state.currentExchangeRate) : 0;
+                if (state.secondaryCurrency && Number.isFinite(secRate) && secRate > 0 && Math.abs(e.exchangeRate - secRate) / secRate <= 0.15) {
                     e.localCurrency = state.secondaryCurrency;
                 } else {
                     e.localCurrency = 'FX';
@@ -220,29 +235,29 @@ export function repairLegacyData() {
             }
         }
         if (!e.tags) e.tags = [];
-        if (!e.date) e.date = getLocalDateString();
+        e.date = sanitizeDateString(e.date, '') || getLocalDateString();
         
         // Fair currency lock repair for old data
-        if ((!e.exchangeRate || !isFinite(e.exchangeRate) || e.exchangeRate <= 0) && e.localCurrency !== 'USD') {
+        if ((!e.exchangeRate || !Number.isFinite(e.exchangeRate) || e.exchangeRate <= 0) && e.localCurrency !== 'USD') {
             e.exchangeRate = (e.amount && e.amount !== 0) ? (e.localAmount / e.amount) : 1;
         }
-        if (!isFinite(e.exchangeRate) || e.exchangeRate <= 0) {
+        if (!Number.isFinite(e.exchangeRate) || e.exchangeRate <= 0) {
             e.exchangeRate = 1;
         }
 
         // Recover unknown/ghost payer to prevent undefined groupStats crashes
-        if (e.payer && !state.participants.includes(e.payer)) {
+        if (e.payer && typeof e.payer === 'string' && !isForbiddenKey(e.payer) && !state.participants.includes(e.payer)) {
             state.participants.push(e.payer);
-            if (!state.participantGroups[e.payer]) {
+            if (!safeHasOwn(state.participantGroups, e.payer)) {
                 state.participantGroups[e.payer] = e.payer;
             }
         }
         // Recover unknown/ghost involved participants
         if (Array.isArray(e.involved)) {
             e.involved.forEach(inv => {
-                if (inv && !state.participants.includes(inv)) {
+                if (inv && typeof inv === 'string' && !isForbiddenKey(inv) && !state.participants.includes(inv)) {
                     state.participants.push(inv);
-                    if (!state.participantGroups[inv]) {
+                    if (!safeHasOwn(state.participantGroups, inv)) {
                         state.participantGroups[inv] = inv;
                     }
                 }
@@ -252,8 +267,8 @@ export function repairLegacyData() {
 
     const expensesByRecency = [...state.expenses].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
     expensesByRecency.forEach(e => {
-        if (e.localCurrency && e.localCurrency !== 'USD' && e.localCurrency !== 'FX' && isFinite(e.exchangeRate) && e.exchangeRate > 0) {
-            if (!state.currencyRates[e.localCurrency]) {
+        if (e.localCurrency && e.localCurrency !== 'USD' && e.localCurrency !== 'FX' && !isForbiddenKey(e.localCurrency) && Number.isFinite(e.exchangeRate) && e.exchangeRate > 0) {
+            if (!safeHasOwn(state.currencyRates, e.localCurrency)) {
                 state.currencyRates[e.localCurrency] = e.exchangeRate;
             }
         }
@@ -287,6 +302,13 @@ export function saveState(skipAutoSync = false, skipHistorySnapshot = false, pre
         localStorage.setItem('tripSplitterLatest', JSON.stringify(payload));
     } catch (err) {
         console.error("Failed to persist state to localStorage:", err);
+        if (typeof document !== 'undefined') {
+            import('./ui.js').then(UI => {
+                if (typeof UI.showToast === 'function') {
+                    UI.showToast('⚠️ Local storage full! Export a backup and trim notes/history.', 'warning');
+                }
+            }).catch(() => {});
+        }
     }
 
     if (preserveLastModified) {
@@ -319,32 +341,30 @@ export function loadState() {
     const saved = localStorage.getItem('tripSplitterLatest');
     if (saved) {
         try {
-            const data = JSON.parse(saved);
-            state.tripId = data.tripId || "";
-            state.tripName = data.tripName || "My Trip";
-            state.tripComment = data.tripComment || ""; 
-            state.participants = data.participants || [];
-            state.participantGroups = data.participantGroups || {};
-            state.expenses = data.expenses || [];
-            state.secondaryCurrency = data.secondaryCurrency || "";
-            state.currentExchangeRate = (data.currentExchangeRate !== undefined && data.currentExchangeRate !== null && !isNaN(data.currentExchangeRate))
-                ? Number(data.currentExchangeRate)
-                : (state.secondaryCurrency ? 0 : 1);
-            state.currencyRates = (data.currencyRates && typeof data.currencyRates === 'object' && !Array.isArray(data.currencyRates))
-                ? data.currencyRates
-                : {};
-            state.currentSort = data.currentSort || 'date-desc';
-            state.tripDays = data.tripDays || 1;
-            state.showPerDay = data.showPerDay || false;
-            state.tripNotes = data.tripNotes || "";
-            state.tripNotesDelta = data.tripNotesDelta || null;
-            state.autoColorNotes = data.autoColorNotes || false;
-            state.isHeaderCollapsed = data.isHeaderCollapsed || false;
-            state.recentCurrencies = data.recentCurrencies || [];
-            state.localLastModified = Number.isFinite(Number(data.lastModified)) ? Number(data.lastModified) : 0;
-            state.dataRevision = Number.isFinite(Number(data.dataRevision)) ? Number(data.dataRevision) : 0;
-            state.defaultTags = data.defaultTags || ['car', 'gas', 'flight', 'stay', 'grocery', 'restaurant'];
-            state.historyEnabled = data.historyEnabled || false;
+            const raw = JSON.parse(saved);
+            const data = validateAndSanitizeTripPayload(raw, { defaultTripName: 'My Trip' });
+            if (!data) return false;
+            state.tripId = data.tripId;
+            state.tripName = data.tripName;
+            state.tripComment = data.tripComment; 
+            state.participants = data.participants;
+            state.participantGroups = data.participantGroups;
+            state.expenses = data.expenses;
+            state.secondaryCurrency = data.secondaryCurrency;
+            state.currentExchangeRate = data.currentExchangeRate;
+            state.currencyRates = data.currencyRates;
+            state.currentSort = data.currentSort;
+            state.tripDays = data.tripDays;
+            state.showPerDay = data.showPerDay;
+            state.tripNotes = data.tripNotes;
+            state.tripNotesDelta = data.tripNotesDelta;
+            state.autoColorNotes = data.autoColorNotes;
+            state.isHeaderCollapsed = data.isHeaderCollapsed;
+            state.recentCurrencies = data.recentCurrencies;
+            state.localLastModified = data.lastModified;
+            state.dataRevision = data.dataRevision;
+            state.defaultTags = data.defaultTags;
+            state.historyEnabled = data.historyEnabled;
 
             repairLegacyData();
             return true;

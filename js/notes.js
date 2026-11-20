@@ -1,14 +1,15 @@
 import { state, saveState } from './state.js';
 import { AUTO_COLORS, AUTO_COLOR_VALUES } from './config.js';
+import {
+    escapeHTML,
+    sanitizeQuillHTML,
+    sanitizeQuillDelta,
+    ALLOWED_QUILL_FORMATS,
+    MAX_NOTES_LENGTH
+} from './security.js';
 
 export function sanitizeHTML(html) {
-    if (!html) return "";
-    let clean = html.replace(/\r?\n|\r/g, '').replace(/>\s+</g, '><');
-    while (clean !== '<p><br></p>' && clean.endsWith('<p><br></p>')) { 
-        clean = clean.slice(0, -11); 
-    }
-    if (clean === '<p><br></p>') return "";
-    return clean;
+    return sanitizeQuillHTML(html);
 }
 
 export function copyTripNotes() {
@@ -27,6 +28,22 @@ export function copyTripNotes() {
     });
 }
 
+function loadNotesContentIntoEditor() {
+    if (!state.quill) return;
+    const safeDelta = (state.tripNotesDelta && Object.keys(state.tripNotesDelta).length > 0)
+        ? sanitizeQuillDelta(state.tripNotesDelta)
+        : null;
+    if (safeDelta) {
+        state.quill.setContents(safeDelta, 'silent');
+    } else {
+        const targetHTML = sanitizeQuillHTML(state.tripNotes || "");
+        state.quill.setText('', 'silent');
+        if (targetHTML) {
+            state.quill.clipboard.dangerouslyPasteHTML(targetHTML, 'silent');
+        }
+    }
+}
+
 export function openNotesModal() {
     const overlay = document.getElementById('notes-overlay');
     if (overlay) overlay.classList.add('active');
@@ -35,15 +52,7 @@ export function openNotesModal() {
     if (autoToggle) autoToggle.checked = state.autoColorNotes;
     
     if (state.quill) {
-        if (state.tripNotesDelta && Object.keys(state.tripNotesDelta).length > 0) {
-            state.quill.setContents(state.tripNotesDelta);
-        } else {
-            const targetHTML = sanitizeHTML(state.tripNotes || "");
-            state.quill.setText('');
-            if (targetHTML) {
-                state.quill.clipboard.dangerouslyPasteHTML(targetHTML);
-            }
-        }
+        loadNotesContentIntoEditor();
         state.isNotesDirty = false;
     }
 }
@@ -82,6 +91,8 @@ export function clearAutoColors() {
                 state.quill.formatText(currIndex, op.insert.length, { color: false, bold: false }, 'silent');
             }
             currIndex += op.insert.length;
+        } else {
+            currIndex += 1;
         }
     });
 }
@@ -118,10 +129,18 @@ export function applyAutoColor() {
             color: AUTO_COLORS.number 
         } 
     ];
-    rules.forEach(rule => {
+    const MAX_AUTO_COLOR_MATCHES = 1500;
+    let totalApplied = 0;
+    for (const rule of rules) {
+        if (totalApplied >= MAX_AUTO_COLOR_MATCHES) break;
         let match;
         rule.regex.lastIndex = 0;
         while ((match = rule.regex.exec(text)) !== null) {
+            if (totalApplied >= MAX_AUTO_COLOR_MATCHES) break;
+            if (!match[0]) {
+                rule.regex.lastIndex++;
+                continue;
+            }
             let overlap = false;
             for (let i = match.index; i < match.index + match[0].length; i++) {
                 if (formattedIndices.has(i)) { overlap = true; break; }
@@ -130,11 +149,12 @@ export function applyAutoColor() {
                 const format = state.quill.getFormat(match.index, match[0].length);
                 if (!format.link && (!format.color || AUTO_COLOR_VALUES.includes(format.color.toLowerCase()))) {
                     state.quill.formatText(match.index, match[0].length, { 'color': rule.color, 'bold': true }, 'silent');
+                    totalApplied++;
                 }
                 for (let i = match.index; i < match.index + match[0].length; i++) formattedIndices.add(i);
             }
         }
-    });
+    }
     if (currentSelection) {
         state.quill.setSelection(currentSelection.index, currentSelection.length, 'silent');
         const cursorFormat = state.quill.getFormat(currentSelection.index, 0);
@@ -173,27 +193,10 @@ export function searchNotes() {
     if (countEl) countEl.innerText = count > 0 ? `${count}` : "0";
 }
 
-function escapeNotesHtml(str) {
-    return String(str ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-}
-
 export function refreshNotesEditorFromState() {
     const overlay = typeof document !== 'undefined' ? document.getElementById('notes-overlay') : null;
     if (!overlay || !overlay.classList.contains('active') || !state.quill) return;
-    if (state.tripNotesDelta && Object.keys(state.tripNotesDelta).length > 0) {
-        state.quill.setContents(state.tripNotesDelta);
-    } else {
-        const targetHTML = sanitizeHTML(state.tripNotes || "");
-        state.quill.setText('');
-        if (targetHTML) {
-            state.quill.clipboard.dangerouslyPasteHTML(targetHTML);
-        }
-    }
+    loadNotesContentIntoEditor();
     state.isNotesDirty = false;
 }
 
@@ -214,10 +217,11 @@ export function showNotesToC() {
     } else {
         let html = '';
         headers.forEach((h2, index) => {
-            h2.id = 'note-header-' + index;
+            const headerId = 'note-header-' + index;
+            h2.id = headerId;
             const text = h2.innerText || 'Header';
-            const safeText = escapeNotesHtml(text);
-            html += `<div class="toc-item" onclick="jumpToNoteHeader('${h2.id}')" title="${safeText}">${safeText}</div>`;
+            const safeText = escapeHTML(text);
+            html += `<div class="toc-item" data-target-id="${escapeHTML(headerId)}" title="${safeText}">${safeText}</div>`;
         });
         popup.innerHTML = html;
     }
@@ -273,6 +277,7 @@ export function initNotesEditor() {
         theme: 'snow',
         bounds: '.notes-body',
         placeholder: 'Jot down trip ideas, itineraries, packing lists, or links here...',
+        formats: [...ALLOWED_QUILL_FORMATS],
         modules: {
             history: { delay: 500, maxStack: 100, userOnly: true },
             toolbar: [
@@ -300,7 +305,6 @@ export function initNotesEditor() {
         });
     }
 
-    const MAX_NOTES_LENGTH = 50000;
     state.quill.on('selection-change', function(range, oldRange, source) {
         if (range) state.lastQuillRange = range;
         if (range && source === 'user') {
@@ -345,6 +349,16 @@ export function initNotesEditor() {
         }
     });
 
+    const tocPopup = document.getElementById('notes-toc-popup');
+    if (tocPopup) {
+        tocPopup.addEventListener('click', (e) => {
+            const item = e.target.closest('.toc-item');
+            if (item && item.dataset.targetId) {
+                jumpToNoteHeader(item.dataset.targetId);
+            }
+        });
+    }
+
     // Bind document level click listeners for suggestions popups clear
     document.addEventListener('click', function(e) {
         const popup = document.getElementById('notes-toc-popup');
@@ -357,13 +371,3 @@ export function initNotesEditor() {
         }
     });
 }
-
-// Bind to window for HTML event handlers compatibility
-window.openNotesModal = openNotesModal;
-window.closeNotesModal = closeNotesModal;
-window.copyTripNotes = copyTripNotes;
-window.toggleAutoColor = toggleAutoColor;
-window.searchNotes = searchNotes;
-window.showNotesToC = showNotesToC;
-window.jumpToNoteHeader = jumpToNoteHeader;
-window.clearNotesSearchField = clearNotesSearchField;
